@@ -1,0 +1,13 @@
+{% if workspace_show_notification %}
+<div class="alert alert-primary border-0 shadow-sm rounded-3 d-flex align-items-center justify-content-between gap-3 mb-3"
+     role="status">
+    <span>Sync your vasto account to vasto Workspace.</span>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <a href="{% url 'workspace:sync' %}" class="btn btn-primary btn-sm">Sync now</a>
+        <form method="post" action="{% url 'workspace:dismiss' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-link btn-sm">Dismiss</button>
+        </form>
+    </div>
+</div>
+{% endif %}

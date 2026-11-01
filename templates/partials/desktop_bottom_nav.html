@@ -1,0 +1,7 @@
+{% if request.user.is_authenticated %}
+<nav class="workspace-desktop-bottom-nav d-none d-lg-flex" aria-label="Desktop bottom navigation">
+    <a href="{% url 'workspace:sync' %}" class="btn btn-outline-secondary rounded-pill px-4 py-2">
+        <i class="bi bi-cloud-arrow-up me-2" aria-hidden="true"></i>vasto Workspace
+    </a>
+</nav>
+{% endif %}

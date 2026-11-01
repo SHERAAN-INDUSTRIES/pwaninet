@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}vasto Workspace{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card border-0 shadow-sm mx-auto" style="max-width: 720px;">
+        <div class="card-body p-4 p-md-5">
+            <h1 class="h3 mb-3">Connect to vasto Workspace</h1>
+            <p class="lead">Do you want to sync your vasto account to vasto Workspace?</p>
+            <p class="text-secondary">
+                vasto Workspace is a separate system reached through its own REST API.
+                This page is only the entry point; no account data is synced yet.
+            </p>
+
+            <div class="small text-secondary bg-body-tertiary rounded p-3 mb-4">
+                <div>User ID: <code>{{ user_id }}</code></div>
+                <div>Session key: <code>{{ session_key }}</code></div>
+            </div>
+
+            {% if is_synced %}
+                <div class="alert alert-success" role="status">Your account is already synced.</div>
+            {% else %}
+                <button type="button" id="vasto-workspace-sync-btn" class="btn btn-primary">
+                    Sync
+                </button>
+                <script>
+                    // TODO: integrate with vasto Workspace REST API (handled manually by maintainer).
+                </script>
+            {% endif %}
+
+            <form method="post" action="{% url 'workspace:dismiss' %}" class="mt-3">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary">Dismiss / Not now</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

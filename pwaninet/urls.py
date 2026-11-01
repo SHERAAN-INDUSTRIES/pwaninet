@@ -382,6 +382,7 @@ urlpatterns = [
     path('', include(('posts.urls', 'posts'), namespace='posts')),
     path('users/', include(('users.urls', 'users'), namespace='users')),
     path('groups/', include(('groups.urls', 'groups'), namespace='groups')),
+    path('workspace/', include('workspace.urls')),
     path('notifications/', include(('notifications.urls', 'notifications'), namespace='notifications')),
     path('courses/', include('courses.urls')),
     path('documents/', include(('documents.urls', 'documents'), namespace='documents')),
