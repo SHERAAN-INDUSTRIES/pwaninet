@@ -3,6 +3,7 @@ Context processors for vasto.
 Provides global template variables.
 """
 from pwaninet import version
+from pwaninet.static_storage import static_fingerprint
 from releases.services import ReleaseService
 
 
@@ -107,6 +108,10 @@ def release_metadata(request):
         'current_release': current_release,
         'app_release_channel': current_release.get_release_channel_display() if current_release else None,
         'app_mandatory_update': current_release.mandatory_update if current_release else False,
+        # Fingerprint of the deployed static tree. Templates use it to evict
+        # stale HTMX snapshots (which embed old asset URLs) whenever the
+        # stylesheets or scripts change.
+        'static_fingerprint': static_fingerprint(),
     }
 
     # Universal encrypted invite tokens & URLs (never expose readable links)

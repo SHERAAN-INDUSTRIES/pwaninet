@@ -456,6 +456,77 @@ class ProgrammeTimetableManager:
         return timetable
 
     @staticmethod
+    def save_timetable_image_from_storage(
+        user,
+        storage_path: str,
+        institution: Institution,
+        programme: Programme,
+        academic_level: AcademicLevel,
+        semester: Optional[Semester] = None,
+        academic_year: Optional[AcademicYear] = None,
+        timetable_type: str = TimetableType.LECTURE,
+        change_summary: str = "",
+    ) -> ProgrammeTimetable:
+        """Same as ``save_timetable_image`` but for an image that is already
+        in object storage (uploaded straight to the bucket by the browser).
+
+        The record is created in PROCESSING state and the AI extraction runs
+        in the background, exactly like the classic upload path.
+        """
+        from documents.tasks.timetable import process_timetable_image_task
+
+        existing_rev = ProgrammeTimetable.objects.filter(
+            institution=institution,
+            programme=programme,
+            academic_level=academic_level,
+            timetable_type=timetable_type,
+        ).order_by('-revision_number').first()
+
+        new_rev_number = (existing_rev.revision_number + 1) if existing_rev else 1
+
+        ProgrammeTimetable.objects.filter(
+            institution=institution,
+            programme=programme,
+            academic_level=academic_level,
+            timetable_type=timetable_type,
+            is_active=True,
+        ).update(is_active=False, status=TimetableStatus.SUPERSEDED)
+
+        title = f"{programme.code} {academic_level.name} Timetable (Rev {new_rev_number})"
+
+        timetable = ProgrammeTimetable.objects.create(
+            institution=institution,
+            programme=programme,
+            academic_level=academic_level,
+            academic_year=academic_year or getattr(user, 'academic_year', None),
+            semester=semester or getattr(user, 'semester', None),
+            timetable_type=timetable_type,
+            status=TimetableStatus.PROCESSING,
+            revision_number=new_rev_number,
+            title=title,
+            change_summary=change_summary,
+            schedule_data={},           # populated by Celery task
+            is_active=False,            # goes True once task completes
+            uploaded_by=user,
+        )
+        # Point the image field at the object that is already in the bucket.
+        timetable.source_image.name = storage_path
+        timetable.save(update_fields=['source_image'])
+
+        logger.info(
+            '[TIMETABLE] Record created (id=%s, rev=%s) from direct upload — dispatching Celery task.',
+            timetable.id, new_rev_number,
+        )
+
+        process_timetable_image_task.apply_async(
+            args=[timetable.id],
+            countdown=2,
+            queue='docs_queue',
+        )
+
+        return timetable
+
+    @staticmethod
     def mutate_timetable_slot(
         timetable: ProgrammeTimetable,
         action: str,  # 'add', 'update', 'delete'

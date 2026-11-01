@@ -139,7 +139,20 @@
                     reject(err);
                 }
             };
-            xhr.onerror = () => reject(new Error('Network error during part upload'));
+            xhr.onerror = () => {
+                // Almost always the bucket's CORS allow-list missing this
+                // origin (e.g. browsing via 0.0.0.0 instead of localhost).
+                const origin = (typeof location !== 'undefined' && location.origin) || 'this origin';
+                console.error(
+                    `[ResumableUpload] storage PUT was blocked. If the browser console shows a ` +
+                    `CORS error, add "${origin}" to the bucket's CORS allowed origins.`,
+                    { origin, url }
+                );
+                const err = new Error('The upload to storage was blocked by the browser');
+                err.corsSuspect = true;
+                err.origin = origin;
+                reject(err);
+            };
             xhr.onabort = () => reject(new Error('Part upload cancelled'));
             xhr.send(blob);
             putPart._active = putPart._active || new Map();
@@ -155,22 +168,37 @@
             const opts = options || {};
             const clientUploadId = uuid();
             await storePut('blobs', { client_upload_id: clientUploadId, blob: file });
+            const kind = ['document', 'timetable'].indexOf(opts.kind) !== -1 ? opts.kind : 'post';
             const createBody = {
                 client_upload_id: clientUploadId,
                 filename: file.name || 'upload',
                 mime_type: file.type || '',
                 file_size: file.size,
+                kind: kind,
             };
             if (opts.postGroup) createBody.post_group = opts.postGroup;
+            if (kind === 'document') createBody.document = opts.document || {};
+            if (kind === 'timetable') createBody.timetable = opts.timetable || {};
             const record = await api('', 'POST', createBody);
+            let payload;
+            if (kind === 'document') {
+                payload = { document: opts.document || {} };
+            } else if (kind === 'timetable') {
+                payload = { timetable: opts.timetable || {} };
+            } else {
+                payload = {
+                    post: opts.post || {
+                        content: opts.content || '',
+                        visibility: opts.visibility || 'AUTHENTICATED',
+                    },
+                };
+            }
             await storePut('sessions', {
                 client_upload_id: clientUploadId,
                 server_id: record.id,
                 filename: record.filename,
-                post: opts.post || {
-                    content: opts.content || '',
-                    visibility: opts.visibility || 'AUTHENTICATED',
-                },
+                kind: kind,
+                payload: payload,
             });
             return this.resume(clientUploadId);
         }
@@ -185,7 +213,9 @@
                 err.clientUploadId = clientUploadId;
                 throw err;
             }
-            return this._run(clientUploadId, saved.server_id, stored.blob, saved.post || {});
+            // Sessions stored before the payload refactor kept `post`.
+            const payload = saved.payload || (saved.post ? { post: saved.post } : {});
+            return this._run(clientUploadId, saved.server_id, stored.blob, payload);
         }
 
         /** Re-attach a re-selected file to an existing session (no re-upload of verified bytes). */
@@ -200,7 +230,7 @@
             return sessions;
         }
 
-        async _run(clientUploadId, serverId, blob, post) {
+        async _run(clientUploadId, serverId, blob, payload) {
             let status;
             try {
                 status = await api(`${serverId}/`, 'GET');
@@ -235,7 +265,8 @@
                     client_upload_id: clientUploadId,
                     server_id: serverId,
                     filename: status.filename,
-                    post,
+                    kind: status.kind,
+                    payload: payload,
                     done: true,
                 });
                 return status;
@@ -278,13 +309,14 @@
                 part_number: Number(n),
                 etag: String(etags[n]).replace(/"/g, ''),
             }));
-            const finalized = await api(`${serverId}/complete/`, 'POST', { parts, post });
+            const finalized = await api(`${serverId}/complete/`, 'POST', Object.assign({ parts }, payload || {}));
             await storeDelete('blobs', clientUploadId);
             await storePut('sessions', {
                 client_upload_id: clientUploadId,
                 server_id: serverId,
                 filename: status.filename,
-                post,
+                kind: status.kind,
+                payload: payload,
                 done: true,
             });
             return finalized;

@@ -7,8 +7,9 @@ and citation generation.
 """
 
 import logging
+import re
 import uuid
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from django.db.models import Q
 from pgvector.django import CosineDistance
 
@@ -16,6 +17,15 @@ from pwanimate.models import DocumentChunk
 from pwanimate.retrieval.types import RetrievalRequest, RetrievalResult, SourceType
 from pwanimate.ai.embeddings.base import BaseEmbeddingProvider, EmbeddingProviderError
 from pwanimate.ai.embeddings.factory import get_embedding_provider
+
+# Title words too generic to count as "the student named this document".
+_GENERIC_TITLE_TOKENS = {
+    'document', 'documents', 'notes', 'note', 'summary', 'assignment', 'homework',
+    'uploaded', 'upload', 'final', 'copy', 'file', 'files', 'page', 'pages',
+    'part', 'chapter', 'untitled', 'document1', 'document2', 'scan', 'scan1',
+    'image', 'images', 'photo', 'photos', 'book', 'books', 'pdf', 'docx', 'text',
+    'question', 'questions', 'answers', 'answer', 'lecture', 'slides', 'paper',
+}
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +236,35 @@ class DocumentSemanticRetrievalService:
         enrolled_unit_ids, programme_level_unit_ids, programme_unit_ids = self._resolve_student_academic_sets(request.user)
         has_student_academic_scope = bool(enrolled_unit_ids or programme_unit_ids)
 
+        # An explicitly named document must not be buried by the academic
+        # boost, so work out which title tokens are distinctive first.
+        query_tokens = set(re.findall(r"[a-z0-9]{4,}", query.lower()))
+        token_frequency, tokens_by_document = self._title_token_frequency(candidate_qs)
+        candidate_document_count = len(tokens_by_document)
+        mentioned_document_ids = {
+            document_id
+            for document_id, tokens in tokens_by_document.items()
+            if any(
+                token in query_tokens
+                and self._is_distinctive(token, token_frequency, candidate_document_count)
+                for token in tokens
+            )
+        }
+
         # Fetch a wider candidate pool when applying student-native soft re-ranking
         candidate_pool_size = max(limit * 3, 20) if has_student_academic_scope else limit
         chunks = list(ranked_qs[:candidate_pool_size])
+
+        # A named document is always in the pool, even if its raw similarity
+        # sits below the cut: the student asked for it by name.
+        if mentioned_document_ids:
+            seen_ids = {chunk.id for chunk in chunks}
+            for chunk in (
+                ranked_qs.filter(document_id__in=mentioned_document_ids)[:12]
+            ):
+                if chunk.id not in seen_ids:
+                    seen_ids.add(chunk.id)
+                    chunks.append(chunk)
 
         results = []
         for chunk in chunks:
@@ -268,11 +304,20 @@ class DocumentSemanticRetrievalService:
             res.metadata['academic_match_tier'] = academic_match_tier
             res.metadata['matches_student_unit'] = (academic_match_tier == 'enrolled_unit')
             res.metadata['matches_student_programme'] = academic_match_tier in ('enrolled_unit', 'programme_level', 'programme')
-            res.score = round(min(1.0, similarity + academic_boost), 4)
+
+            mention_boost = self._explicit_mention_boost(
+                chunk, query_tokens, token_frequency, candidate_document_count
+            )
+            if mention_boost:
+                res.metadata['explicit_mention'] = True
+            res.score = round(min(1.0, similarity + academic_boost + mention_boost), 4)
             results.append(res)
 
-        if has_student_academic_scope:
-            results.sort(key=lambda r: (-r.score, -r.metadata.get('raw_similarity', 0.0)))
+        # Always re-rank by score: the mention boost (and the academic boost)
+        # are meaningless unless the order follows the score. Previously the
+        # sort only ran for students with an academic scope, so a named
+        # document could be boosted and still sit below the pool order.
+        results.sort(key=lambda r: (-r.score, -r.metadata.get('raw_similarity', 0.0)))
 
         return results[:limit]
 
@@ -452,6 +497,89 @@ class DocumentSemanticRetrievalService:
             results.append(res)
 
         return results
+
+    def _title_token_frequency(self, queryset) -> Tuple[Dict[str, int], Dict[int, set]]:
+        """
+        Distinctive title tokens per candidate document, plus how many distinct
+        titles carry each token.
+
+        Both are counted per TITLE, not per chunk: the queryset carries a
+        per-chunk distance annotation, so DISTINCT on it does not dedupe (and
+        the same file uploaded twice is one name, not many).
+        """
+        from documents.models import Document
+
+        document_ids = set(queryset.values_list('document_id', flat=True))
+        tokens_by_document: Dict[int, set] = {}
+        counts: Dict[str, int] = {}
+        for document_id, title in Document.objects.filter(
+            id__in=document_ids
+        ).values_list('id', 'title'):
+            tokens = self._distinctive_tokens(title or "")
+            tokens_by_document[document_id] = tokens
+        for title in set(
+            Document.objects.filter(id__in=document_ids).values_list('title', flat=True)
+        ):
+            for token in self._distinctive_tokens(title or ""):
+                counts[token] = counts.get(token, 0) + 1
+        return counts, tokens_by_document
+
+    @staticmethod
+    def _distinctive_tokens(text: str) -> set:
+        """Tokens worth matching on: long enough, not generic document words."""
+        tokens = re.findall(r"[a-z0-9]{4,}", (text or "").lower())
+        return {token for token in tokens if token not in _GENERIC_TITLE_TOKENS}
+
+    def _is_distinctive(self, token: str, frequency: Dict[str, int], document_count: int) -> bool:
+        """
+        Is this title token rare enough to mean "the student named this"?
+
+        Relative, not absolute: a word carried by a quarter of the library is
+        a topic, not a name. (An absolute cap also broke the obvious case —
+        re-uploading the same file a few times made its own name common.)
+        """
+        if document_count <= 0:
+            return True
+        return frequency.get(token, 99) <= max(3, 0.25 * document_count)
+
+    def _explicit_mention_boost(
+        self,
+        chunk: DocumentChunk,
+        query_tokens: set,
+        token_frequency: Dict[str, int],
+        document_count: int = 0,
+    ) -> float:
+        """
+        Boost a document the student explicitly named.
+
+        Without this, "what does the <their file> say" can be buried by
+        programme-aligned material that has nothing to do with the question:
+        the academic boost favours enrolled units, but a personal upload (a
+        resume, their own notes) has no academic unit at all.
+        """
+        if not query_tokens:
+            return 0.0
+        titles = [chunk.document.title or ""]
+        try:
+            for file_obj in chunk.document_version.files.all():
+                titles.append(file_obj.original_filename or "")
+        except Exception:  # noqa: BLE001
+            pass
+        for title in titles:
+            tokens = self._distinctive_tokens(title)
+            if not tokens:
+                continue
+            hits = {
+                token
+                for token in tokens & query_tokens
+                if self._is_distinctive(token, token_frequency, document_count)
+            }
+            if not hits:
+                continue
+            # Naming most of the title is an explicit request; naming one
+            # distinctive word (e.g. a surname) still deserves a lift.
+            return 0.30 if len(hits) / len(tokens) >= 0.5 else 0.18
+        return 0.0
 
     def _format_chunk_result(self, chunk: DocumentChunk, similarity: float) -> RetrievalResult:
         """Format DocumentChunk into a normalized RetrievalResult."""

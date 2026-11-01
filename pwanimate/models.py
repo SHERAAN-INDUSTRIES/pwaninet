@@ -11,6 +11,7 @@ from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
+from django.utils import timezone
 from pgvector.django import VectorField
 
 
@@ -274,6 +275,33 @@ class PwanimateMessage(models.Model):
         default=list,
         blank=True,
     )
+    # Which model actually served this turn, and what it cost.
+    #
+    # `UsageRecord` holds the billing ledger, but the answer itself did not
+    # record who produced it, so answers could not be joined to models for
+    # evaluation. Without this there is no way to answer "is the new model
+    # better?" -- which is the question every fine-tune has to answer first.
+    provider = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    model_id = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    task = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    prompt_tokens = models.PositiveIntegerField(default=0)
+    completion_tokens = models.PositiveIntegerField(default=0)
+    total_tokens = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
@@ -316,6 +344,148 @@ class PwanimateMessage(models.Model):
         return people_list
 
 
+class PwanimateMessageEmbedding(models.Model):
+    """Search vector for one persisted conversation message."""
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("processing", "Processing"),
+        ("completed", "Completed"),
+        ("failed", "Failed"),
+    ]
+
+    message = models.OneToOneField(
+        PwanimateMessage,
+        on_delete=models.CASCADE,
+        related_name="embedding_record",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pwanimate_message_embeddings",
+        db_index=True,
+    )
+    embedding = VectorField(dimensions=768, null=True, blank=True)
+    embedding_model = models.CharField(max_length=100, blank=True, default="")
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="pending",
+        db_index=True,
+    )
+    error = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["user", "embedding_model"]),
+        ]
+
+
+class PwanimateTurnTrace(models.Model):
+    """Durable, privacy-scoped trace for replaying and evaluating one turn."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pwanimate_turn_traces",
+        db_index=True,
+    )
+    conversation = models.ForeignKey(
+        PwanimateConversation,
+        on_delete=models.CASCADE,
+        related_name="turn_traces",
+    )
+    user_message = models.ForeignKey(
+        PwanimateMessage,
+        on_delete=models.CASCADE,
+        related_name="user_turn_traces",
+    )
+    assistant_message = models.ForeignKey(
+        PwanimateMessage,
+        on_delete=models.CASCADE,
+        related_name="assistant_turn_traces",
+        null=True,
+        blank=True,
+    )
+    request_id = models.CharField(max_length=128, db_index=True)
+    prompt_version = models.CharField(max_length=64, blank=True, default="")
+    context_version = models.CharField(max_length=64, blank=True, default="")
+    retrieval_trace = models.JSONField(default=list, blank=True)
+    memory_trace = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["conversation", "created_at"]),
+        ]
+
+
+class PwanimateMessageFeedback(models.Model):
+    """
+    A student's verdict on one Spark answer.
+
+    This is the outcome signal. Right now the platform records what was
+    served and what it cost, but nothing records whether the answer was
+    *right* -- so there is no label to fine-tune on and no way to prove that
+    a new model is better than the one it replaces.
+
+    One row per student per answer. A student may change their mind; the
+    last verdict wins.
+    """
+
+    REASON_CHOICES = [
+        ("wrong_answer", "The answer is wrong"),
+        ("not_my_document", "It ignored my document"),
+        ("too_slow", "It took too long"),
+        ("wrong_language", "Wrong language or register"),
+        ("too_long", "Too long or too short"),
+        ("other", "Something else"),
+    ]
+
+    message = models.ForeignKey(
+        PwanimateMessage,
+        on_delete=models.CASCADE,
+        related_name="feedback",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pwanimate_feedback",
+    )
+    helpful = models.BooleanField()
+    reason = models.CharField(
+        max_length=32,
+        choices=REASON_CHOICES,
+        blank=True,
+        default="",
+    )
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["message", "user"],
+                name="uniq_pwanimate_feedback_per_user_per_message",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["message"]),
+            models.Index(fields=["user", "created_at"]),
+        ]
+
+    def __str__(self):
+        verdict = "helpful" if self.helpful else "not helpful"
+        return f"{verdict} on message {self.message_id}"
+
+
 class PwanimateTone(models.TextChoices):
     """Controlled tone choices for Pwanimate assistant interactions."""
     NEUTRAL = "neutral", "Neutral"
@@ -329,6 +499,20 @@ class PwanimateResponseStyle(models.TextChoices):
     CONCISE = "concise", "Concise"
     BALANCED = "balanced", "Balanced"
     DETAILED = "detailed", "Detailed"
+
+
+class PwanimateVoiceStyle(models.TextChoices):
+    """Voice presentation styles available for Spark speech."""
+
+    WARM = "warm", "Warm Guide"
+    ACADEMIC = "academic", "Focused Academic"
+
+
+class PwanimateVoiceGender(models.TextChoices):
+    """Voice gender preferences available for Spark speech."""
+
+    FEMALE = "female", "Female"
+    MALE = "male", "Male"
 
 
 class PwanimatePreferences(models.Model):
@@ -370,6 +554,22 @@ class PwanimatePreferences(models.Model):
         default="",
         help_text="User-authored stylistic guidance for Pwanimate (maximum 500 characters)",
     )
+    voice_style = models.CharField(
+        max_length=20,
+        choices=PwanimateVoiceStyle.choices,
+        default=PwanimateVoiceStyle.WARM,
+        help_text="Preferred Spark speech style",
+    )
+    voice_gender = models.CharField(
+        max_length=20,
+        choices=PwanimateVoiceGender.choices,
+        default=PwanimateVoiceGender.FEMALE,
+        help_text="Preferred Spark speech voice gender",
+    )
+    auto_tts_enabled = models.BooleanField(
+        default=False,
+        help_text="Automatically read new Spark replies aloud",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -400,6 +600,11 @@ class PwanimatePreferences(models.Model):
                 raise ValidationError({"personal_instructions": "Personal instructions cannot exceed 500 characters."})
         else:
             self.personal_instructions = ""
+
+        if self.voice_style not in dict(PwanimateVoiceStyle.choices):
+            raise ValidationError({"voice_style": "Invalid voice style."})
+        if self.voice_gender not in dict(PwanimateVoiceGender.choices):
+            raise ValidationError({"voice_gender": "Invalid voice gender."})
 
     def save(self, *args, **kwargs):
         self.clean()
@@ -501,6 +706,18 @@ class PwanimateAttachment(models.Model):
     )
     processing_error = models.TextField(blank=True, default="")
     processed_at = models.DateTimeField(null=True, blank=True)
+    # The one-time vision analysis of an uploaded image. Captured once at
+    # upload and reused by every later turn, so a photo is analysed ONCE
+    # instead of once per question.
+    vision_summary = models.TextField(blank=True, default="")
+    vision_model = models.CharField(max_length=120, blank=True, default="")
+    # Set when the analysis failed. The image is then dropped from the
+    # context (never re-sent) and later turns just carry the note.
+    vision_error = models.TextField(blank=True, default="")
+    # What to do with an image whose analysis failed: 'ask' (the default —
+    # the student is offered the choice once), 'keep' (they want to reuse
+    # it, so it stays in the context), 'drop' (never send it again).
+    vision_context_policy = models.CharField(max_length=16, default="ask")
     created_at = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
@@ -765,3 +982,94 @@ class PwanimateStudyCheckpoint(models.Model):
 
     def __str__(self):
         return f"Checkpoint for {self.session_id} (up_to_msg={self.up_to_message_id})"
+
+
+class PendingAction(models.Model):
+    """
+    An action Spark proposes and the student has not yet approved.
+
+    Every action Spark takes on the student's behalf goes through here
+    first. The tool layer only ever *proposes*; nothing is sent, followed or
+    posted until the student confirms. That is the difference between an
+    assistant and an agent that can embarrass you.
+
+    The five rules this design implements:
+
+    1. **Confirmation.** The tool creates a pending action and returns it.
+       Nothing else happens until the student confirms.
+    2. **Idempotency.** One action per (student, action, content). A retry
+       returns the existing action instead of sending twice.
+    3. **A real dry run.** The proposal carries the exact message that
+       would be sent, so the student sees the real thing.
+    4. **Rate limits.** Both the number of proposals and the number of
+       executed actions are capped per student per hour.
+    5. **Undo.** A confirmed action can be undone inside a short window --
+       a sent message is soft-deleted, a follow is released.
+    """
+
+    ACTION_SEND_MESSAGE = "send_message"
+    ACTION_FOLLOW_USER = "follow_user"
+    ACTION_CHOICES = [
+        (ACTION_SEND_MESSAGE, "Send a message"),
+        (ACTION_FOLLOW_USER, "Follow a user"),
+    ]
+
+    STATUS_PENDING = "pending"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_EXPIRED = "expired"
+    STATUS_FAILED = "failed"
+    STATUS_UNDONE = "undone"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_CONFIRMED, "Confirmed"),
+        (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_UNDONE, "Undone"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pending_actions",
+    )
+    conversation = models.ForeignKey(
+        "PwanimateConversation",
+        on_delete=models.CASCADE,
+        related_name="pending_actions",
+        null=True,
+        blank=True,
+    )
+    action_type = models.CharField(max_length=32, choices=ACTION_CHOICES, db_index=True)
+    params = models.JSONField(default=dict, blank=True)
+    # What the student is being asked to approve, in plain words.
+    summary = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    idempotency_key = models.CharField(max_length=64, unique=True)
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    undone_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "status"]),
+            models.Index(fields=["user", "action_type", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.action_type} for user {self.user_id} ({self.status})"
+
+    @property
+    def is_actionable(self) -> bool:
+        return self.status == self.STATUS_PENDING and self.expires_at > timezone.now()

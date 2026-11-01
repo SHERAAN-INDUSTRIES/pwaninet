@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from pwanimate.ai.gateway import AIGateway, ChatMessage, LLMRequest
 from pwanimate.ai.gateway.types import AttachmentData
+from pwanimate.orchestrator.service import SPARK_VISION_UNAVAILABLE_NOTICE
 from pwanimate.ingestion.chunker import chunk_document
 from pwanimate.ingestion.exceptions import EmptyDocumentError
 from pwanimate.ingestion.extractors.factory import extract_document
@@ -87,13 +88,167 @@ def _transcribe_pdf_page(page, attachment: PwanimateAttachment, page_number: int
     return result.content.strip(), result.provider, result.model
 
 
+class VisionBudgetExhausted(RuntimeError):
+    """The account-wide image budget (or the student's own allowance) is gone.
+
+    This is a *degradation*, not a failure: the image is marked as
+    unavailable, the turn continues on the text-only path, and the student is
+    told plainly that Spark Vision could not look at the image.
+    """
+
+
+def _analyze_image(attachment: PwanimateAttachment) -> tuple[str, str, str]:
+    """
+    One vision pass over an uploaded image.
+
+    The result is stored on the attachment and reused by every later turn —
+    an image is analysed ONCE, not once per question.
+
+    Two budgets guard this call:
+
+    * the student's own daily image allowance, and
+    * the account-wide daily image budget, which exists because the shared
+      inference capacity (the Workers AI free allocation) is finite even when
+      every individual student is within their own limit.
+
+    Both are checked *before* the provider is called, so a refused analysis
+    costs nothing.
+    """
+    from django.conf import settings
+
+    from pwanimate.billing.global_budget import image_budget
+    from pwanimate.billing.models import UsageKind
+    from pwanimate.billing.services import QuotaService, UsageService
+
+    user = getattr(attachment, "user", None)
+
+    # 1. The student's own allowance.
+    if user is not None and getattr(user, "is_authenticated", False):
+        decision = QuotaService.check(user, kind=UsageKind.IMAGE)
+        if not decision.allowed:
+            raise VisionBudgetExhausted(
+                "You have used today's image analyses. Upgrade for more, or try again tomorrow."
+            )
+
+    # 2. The account-wide budget. Claimed atomically so two concurrent
+    #    uploads cannot both take the last unit.
+    budget = image_budget()
+    if not budget.consume(1):
+        raise VisionBudgetExhausted(
+            "Spark Vision is busy right now. Try again shortly."
+        )
+
+    model = getattr(settings, "PWANIMATE_VISION_MODEL", "gemini-3.8-flash")
+    result = AIGateway().generate(LLMRequest(
+        task="attachment_vision_analysis",
+        messages=[ChatMessage(
+            role="user",
+            content=(
+                "Describe this image for a study assistant. Transcribe any text, "
+                "equations, labels or tables faithfully. Explain any diagram, chart, "
+                "graph or code shown, and note the key ideas a student might ask about. "
+                "Be concrete and complete: this description is what later questions "
+                "will be answered from. If something is unreadable, say so plainly."
+            ),
+            attachments=[attachment],
+        )],
+        provider="gemini",
+        model=model,
+        temperature=0.1,
+        max_tokens=1600,
+        attachments=[attachment],
+        metadata={"required_capability": "image"},
+    ))
+
+    # 3. Meter the analysis: it spends an image from the student's
+    #    allowance, not a chat from their conversation allowance.
+    try:
+        UsageService.record_image_analysis(
+            user=user,
+            provider=result.provider,
+            model_id=result.model,
+            prompt_tokens=int(getattr(result, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(result, "completion_tokens", 0) or 0),
+            source="vision_analysis",
+        )
+    except Exception:  # noqa: BLE001 - accounting must never break analysis
+        logger.warning("[BILLING] image analysis usage recording failed", exc_info=True)
+
+    return result.content.strip(), result.provider, result.model
+
+
 @shared_task(name="pwanimate.tasks.attachments.process_pwanimate_attachment")
 def process_pwanimate_attachment(attachment_id: str) -> Dict[str, Any]:
-    """Extract, OCR when needed, chunk, and persist a private chat upload."""
+    """Extract, OCR when needed, analyse images once, chunk, and persist a private chat upload."""
     attachment = PwanimateAttachment.objects.filter(id=attachment_id).first()
     if attachment is None:
         return {"status": "missing", "attachment_id": str(attachment_id)}
     if attachment.attachment_type != "document":
+        # Images: one vision pass, stored for reuse. Later turns read the
+        # stored description instead of paying for the image again.
+        if attachment.attachment_type == "image" and (attachment.vision_summary or "").strip():
+            return {
+                "status": "ready",
+                "attachment_id": str(attachment.id),
+                "vision_summary": True,
+            }
+        if attachment.attachment_type == "image":
+            # Claim the image atomically. Two workers must never analyse the
+            # same image: the vision pass is the single most expensive thing
+            # this task does, and a double analysis is a double bill.
+            claimed = PwanimateAttachment.objects.filter(
+                id=attachment.id,
+                processing_status__in=["pending", "not_required", ""],
+            ).update(processing_status="processing")
+            if not claimed:
+                # Someone else has it (or it is already done).
+                attachment.refresh_from_db()
+                return {
+                    "status": attachment.processing_status or "processing",
+                    "attachment_id": str(attachment.id),
+                    "vision_summary": bool((attachment.vision_summary or "").strip()),
+                }
+            try:
+                summary, provider, model = _analyze_image(attachment)
+            except VisionBudgetExhausted as exc:
+                # The image was not analysed, and no capacity was spent on
+                # it. Say so plainly: the turn continues on the text-only
+                # path with the vision notice, and the image is never
+                # re-sent (so it is never paid for twice).
+                logger.info("Image analysis not performed for %s: %s", attachment.id, exc)
+                attachment.processing_status = "failed"
+                attachment.processing_error = str(exc)[:2000]
+                attachment.vision_error = SPARK_VISION_UNAVAILABLE_NOTICE
+                attachment.save(update_fields=[
+                    "processing_status", "processing_error", "vision_error",
+                ])
+                return {"status": "failed", "attachment_id": str(attachment.id)}
+            except Exception as exc:
+                logger.warning("Image analysis failed for %s: %s", attachment.id, exc)
+                attachment.processing_status = "failed"
+                attachment.processing_error = f"Image analysis failed: {exc}"[:2000]
+                # Remember the failure so the image is never re-sent: later
+                # turns carry the note instead of paying for another look.
+                attachment.vision_error = SPARK_VISION_UNAVAILABLE_NOTICE
+                attachment.save(update_fields=[
+                    "processing_status", "processing_error", "vision_error",
+                ])
+                return {"status": "failed", "attachment_id": str(attachment.id)}
+            attachment.vision_summary = summary
+            attachment.vision_model = f"{provider}:{model}"
+            attachment.processing_status = "ready"
+            attachment.processing_error = ""
+            attachment.processed_at = timezone.now()
+            attachment.save(update_fields=[
+                "vision_summary", "vision_model", "processing_status",
+                "processing_error", "processed_at",
+            ])
+            return {
+                "status": "ready",
+                "attachment_id": str(attachment.id),
+                "vision_summary": True,
+                "vision_model": attachment.vision_model,
+            }
         attachment.processing_status = "not_required"
         attachment.save(update_fields=["processing_status"])
         return {"status": "not_required", "attachment_id": str(attachment.id)}

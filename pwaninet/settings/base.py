@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'search',
     'recommendations',
     'pwanimate',
+    'pwanimate.billing',
     'admin_dashboard',
     'uploads',
     'workspace',
@@ -383,6 +384,7 @@ CELERY_IMPORTS = (
     # Keep Pwanimate's task package explicit so workers register attachment
     # processing as well as the existing ingestion and reconciliation tasks.
     'pwanimate.tasks',
+    'pwanimate.tasks.conversation_memory',
     'messaging.tasks',
 )
 
@@ -613,8 +615,12 @@ if USE_S3:
             },
         },
         'staticfiles': {
-            # Static files stay local for WhiteNoise / Nginx unless USE_S3_STATIC=1
-            'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage' if USE_S3_STATIC else 'django.contrib.staticfiles.storage.StaticFilesStorage',
+            # Static files stay local for WhiteNoise / Nginx unless USE_S3_STATIC=1.
+            # The fingerprinted backends append a content-derived ?v= to every
+            # static URL. Without it the URLs only changed when the release
+            # record in the database was bumped, and Cloudflare's multi-year
+            # cache kept serving months-old CSS/JS. See pwaninet/static_storage.py.
+            'BACKEND': 'pwaninet.static_storage.FingerprintedS3StaticFilesStorage' if USE_S3_STATIC else 'pwaninet.static_storage.FingerprintedStaticFilesStorage',
             **({
                 'OPTIONS': {
                     'bucket_name':       AWS_STORAGE_BUCKET_NAME,
@@ -712,12 +718,57 @@ PWANIMATE_SPEECH_TO_TEXT_MODEL = os.environ.get('PWANIMATE_SPEECH_TO_TEXT_MODEL'
 PWANIMATE_SPEECH_TO_TEXT_TIMEOUT = int(os.environ.get('PWANIMATE_SPEECH_TO_TEXT_TIMEOUT', '60'))
 PWANIMATE_VOICE_MAX_BYTES = int(os.environ.get('PWANIMATE_VOICE_MAX_BYTES', str(25 * 1024 * 1024)))
 PWANIMATE_OPENROUTER_API_KEY = os.environ.get('PWANIMATE_OPENROUTER_API_KEY', '')
+PWANIMATE_TTS_PROVIDER = os.environ.get('PWANIMATE_TTS_PROVIDER', 'azure')
+PWANIMATE_AZURE_SPEECH_KEY = os.environ.get('PWANIMATE_AZURE_SPEECH_KEY', '')
+PWANIMATE_AZURE_SPEECH_REGION = os.environ.get('PWANIMATE_AZURE_SPEECH_REGION', '')
+PWANIMATE_TTS_TIMEOUT = int(os.environ.get('PWANIMATE_TTS_TIMEOUT', '15'))
+PWANIMATE_TTS_MAX_CHARACTERS = int(os.environ.get('PWANIMATE_TTS_MAX_CHARACTERS', '4000'))
 
 # Embedding Subsystem
 PWANIMATE_EMBEDDING_PROVIDER = os.environ.get('PWANIMATE_EMBEDDING_PROVIDER', 'gemini')
 PWANIMATE_EMBEDDING_MODEL = os.environ.get('PWANIMATE_EMBEDDING_MODEL', 'gemini-embedding-2')
 PWANIMATE_EMBEDDING_DIMENSIONS = int(os.environ.get('PWANIMATE_EMBEDDING_DIMENSIONS', '768'))
 PWANIMATE_EMBEDDING_BATCH_SIZE = int(os.environ.get('PWANIMATE_EMBEDDING_BATCH_SIZE', '32'))
+
+# Self-hosted spark-vector embedding worker (docs/local-models-design.md §4-§5).
+# Set PWANIMATE_EMBEDDING_PROVIDER=selfhosted to cut docs + queries over to it.
+PWANIMATE_SELFHOSTED_EMBEDDINGS_URL = os.environ.get('PWANIMATE_SELFHOSTED_EMBEDDINGS_URL', 'http://spark_vector:8100/v1/embeddings')
+PWANIMATE_SELFHOSTED_EMBEDDINGS_MODEL = os.environ.get('PWANIMATE_SELFHOSTED_EMBEDDINGS_MODEL', 'multilingual-e5-base')
+PWANIMATE_SELFHOSTED_EMBEDDINGS_TIMEOUT = int(os.environ.get('PWANIMATE_SELFHOSTED_EMBEDDINGS_TIMEOUT', '10'))
+PWANIMATE_SELFHOSTED_EMBEDDINGS_TOKEN = os.environ.get('PWANIMATE_SELFHOSTED_EMBEDDINGS_TOKEN', '')
+# Sub-batch size per HTTP request. One big request would hold the worker's
+# single inference slot (and exceed its per-request token budget), starving
+# interactive chat queries — ingestion is split into small batches instead.
+# 4 chunks ≈ 1.7 s of inference: the worst-case wait an interactive query
+# can face while ingestion runs.
+PWANIMATE_SELFHOSTED_EMBEDDING_BATCH_SIZE = int(os.environ.get('PWANIMATE_SELFHOSTED_EMBEDDING_BATCH_SIZE', '4'))
+
+# --- M-Pesa Daraja (payments) ---------------------------------------------
+# Sandbox by default: with no credentials configured the payment flow runs in
+# DEMO mode (no network, synthetic checkout id, simulated callback). Adding
+# the sandbox credentials and flipping DARAJA_ENV=production is the only
+# difference between the demo and the real thing.
+DARAJA_ENV = os.environ.get('DARAJA_ENV', 'sandbox').strip().lower()  # sandbox|production
+DARAJA_BASE_URL = os.environ.get(
+    'DARAJA_BASE_URL',
+    'https://sandbox.safaricom.co.ke/mpesa/' if DARAJA_ENV != 'production'
+    else 'https://api.safaricom.co.ke/mpesa/',
+).rstrip('/') + '/'
+DARAJA_CONSUMER_KEY = os.environ.get('DARAJA_CONSUMER_KEY', '')
+DARAJA_CONSUMER_SECRET = os.environ.get('DARAJA_CONSUMER_SECRET', '')
+DARAJA_SHORTCODE = os.environ.get('DARAJA_SHORTCODE', '')      # paybill or till number
+DARAJA_PASSKEY = os.environ.get('DARAJA_PASSKEY', '')          # used to build the request password
+DARAJA_INITIATOR = os.environ.get('DARAJA_INITIATOR', '')      # for the reconciliation APIs
+DARAJA_CREDENTIAL = os.environ.get('DARAJA_CREDENTIAL', '')    # initiator security credential
+DARAJA_CALLBACK_URL = os.environ.get(
+    'DARAJA_CALLBACK_URL', 'https://pwaninet.app/api/pwanimate/billing/mpesa/callback/'
+)
+DARAJA_TIMEOUT = int(os.environ.get('DARAJA_TIMEOUT', '30'))
+# Allow the demo endpoints only when no live credentials are configured.
+DARAJA_DEMO_ENABLED = os.environ.get(
+    'DARAJA_DEMO_ENABLED',
+    '1' if not (DARAJA_CONSUMER_KEY and DARAJA_CONSUMER_SECRET and DARAJA_SHORTCODE and DARAJA_PASSKEY) else '0',
+) == '1'
 
 # Multi-Provider Embedding Configuration Placeholders
 PWANIMATE_JINA_API_KEY = os.environ.get('PWANIMATE_JINA_API_KEY', os.environ.get('JINA_API_KEY', ''))
@@ -735,11 +786,42 @@ PWANIMATE_DEFAULT_LLM_PROVIDER = os.environ.get('PWANIMATE_DEFAULT_LLM_PROVIDER'
 PWANIMATE_GEMINI_MODEL = os.environ.get('PWANIMATE_GEMINI_MODEL', 'gemini-3.8-flash')
 PWANIMATE_VISION_MODEL = os.environ.get('PWANIMATE_VISION_MODEL', 'gemini-3.8-flash')
 PWANIMATE_VISION_FALLBACK_CHAIN = [
+    {"provider": "cloudflare", "model": os.environ.get('PWANIMATE_CLOUDFLARE_VISION_MODEL', '@cf/meta/llama-3.2-11b-vision-instruct')},
     {"provider": "groq", "model": os.environ.get('PWANIMATE_GROQ_VISION_MODEL', 'qwen/qwen3.8-27b')},
 ]
 PWANIMATE_ATTACHMENT_VISION_MAX_PAGES = int(os.environ.get('PWANIMATE_ATTACHMENT_VISION_MAX_PAGES', '20'))
+# Account-wide daily cap on image analyses. The Workers AI free allocation
+# (10,000 neurons/day) is shared by every user, so the per-user tier cap is
+# not enough to protect it: 56 Ember students at 5 images/day would exhaust
+# it. 0 disables the budget. See pwanimate/billing/global_budget.py.
+PWANIMATE_GLOBAL_DAILY_IMAGE_BUDGET = int(os.environ.get('PWANIMATE_GLOBAL_DAILY_IMAGE_BUDGET', '200'))
+# Largest edge (px) of an image sent to a vision model. Larger inputs cost
+# more tokens (and therefore more neurons) for no extra OCR accuracy.
+PWANIMATE_VISION_MAX_IMAGE_EDGE = int(os.environ.get('PWANIMATE_VISION_MAX_IMAGE_EDGE', '1024'))
+# Maximum images in a single multimodal turn.
+PWANIMATE_VISION_MAX_IMAGES = int(os.environ.get('PWANIMATE_VISION_MAX_IMAGES', '10'))
+# Cloudflare Workers AI -- the vision inference tier.
+#
+# The token is AI-scoped: it can run inference but cannot read zone
+# settings. Workers AI bills at $0.011 / 1,000 neurons with a free daily
+# allocation of 10,000 neurons, which is the account-wide budget the
+# per-user image caps are sized against.
+PWANIMATE_CLOUDFLARE_VISION_MODEL = os.environ.get(
+    'PWANIMATE_CLOUDFLARE_VISION_MODEL', '@cf/meta/llama-3.2-11b-vision-instruct'
+)
+PWANIMATE_CLOUDFLARE_VISION_BACKUP_MODEL = os.environ.get(
+    'PWANIMATE_CLOUDFLARE_VISION_BACKUP_MODEL', '@cf/meta/llama-4-scout-17b-16e-instruct'
+)
+# Which (provider, model) pairs may receive images. Anything not listed is
+# treated as text-only. See pwanimate/ai/capabilities.py.
+PWANIMATE_VISION_CAPABLE_MODELS = {
+    'cloudflare': [
+        PWANIMATE_CLOUDFLARE_VISION_MODEL,
+        PWANIMATE_CLOUDFLARE_VISION_BACKUP_MODEL,
+    ],
+}
 PWANIMATE_GROQ_MODEL = os.environ.get('PWANIMATE_GROQ_MODEL', 'openai/gpt-oss-120b')
-PWANIMATE_OPENROUTER_MODEL = os.environ.get('PWANIMATE_OPENROUTER_MODEL', 'google/gemini-flash-latest')
+PWANIMATE_OPENROUTER_MODEL = os.environ.get('PWANIMATE_OPENROUTER_MODEL', 'nvidia/nemotron-3-ultra-550b-a55b:free')
 PWANIMATE_LLM_TIMEOUT = float(os.environ.get('PWANIMATE_LLM_TIMEOUT', '30.0'))
 PWANIMATE_LLM_CONNECT_TIMEOUT = float(os.environ.get('PWANIMATE_LLM_CONNECT_TIMEOUT', '2.0'))
 PWANIMATE_PROVIDER_FALLBACK_ORDER = os.environ.get(
@@ -753,15 +835,14 @@ PWANIMATE_LLM_FALLBACK_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.8-flash"},
     {"provider": "groq", "model": "openai/gpt-oss-120b"},
     {"provider": "gemini", "model": "gemini-3.6-flash"},
-    {"provider": "openrouter", "model": "google/gemini-flash-latest"},
+    {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
     {"provider": "groq", "model": "openai/gpt-oss-20b"},
     {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
     {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
     {"provider": "groq", "model": "qwen/qwen3.8-27b"},
     {"provider": "gemini", "model": "gemini-flash-lite-latest"},
-    {"provider": "openrouter", "model": "nex-agi/nex-n2.5-pro:free"},
+    {"provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free"},
     {"provider": "gemini", "model": "gemini-flash-latest"},
-    {"provider": "groq", "model": "groq/compound-mini"},
     {"provider": "gemini", "model": "gemini-pro-latest"},
     {"provider": "openrouter", "model": "liquid/lfm-2.5-2.6b:free"},
     # Final fallback: mock provider returns a friendly error message

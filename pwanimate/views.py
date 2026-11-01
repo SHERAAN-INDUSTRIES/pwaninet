@@ -22,6 +22,8 @@ from pwanimate.models import (
     PwanimatePreferences,
     PwanimateResponseStyle,
     PwanimateTone,
+    PwanimateVoiceGender,
+    PwanimateVoiceStyle,
 )
 from pwanimate.services.preferences import PwanimatePreferenceService
 from pwanimate.version import get_version as get_pwanimate_version
@@ -44,10 +46,105 @@ def _get_settings_context(
     conversations_count = request.user.pwanimate_conversations.count()
     full_name = request.user.get_full_name().strip()
     user_display = full_name if full_name and full_name != "None None" else request.user.username
+
+    # Real usage for the Usage tab: the same counters the quota check
+    # enforces (never estimates), plus the tier catalogue for the upgrade
+    # cards. Defensive: the billing tables may not be migrated yet.
+    usage_snapshot = None
+    tier_catalogue = []
+    usage_bars = []
+    usage_spark = None
+    try:
+        from pwanimate.billing.models import Tier
+        from pwanimate.billing.services import QuotaService
+
+        usage_snapshot = QuotaService.snapshot(request.user)
+        # Human-readable entitlement lines for the upgrade cards.
+        entitlement_labels = {
+            "chats": "Chat turns",
+            "images": "Image analysis",
+            "premium_turns": "Premium model turns",
+        }
+        window_labels = {"day": "per day", "week": "per week", "period": "per month"}
+
+        tier_catalogue = [
+            {
+                "code": tier.code,
+                "name": tier.name,
+                "rank": tier.rank,
+                "price_kes": float(tier.price_kes),
+                "duration_days": tier.duration_days,
+                "description": tier.description,
+                "entitlements": tier.entitlements or {},
+                "includes": [
+                    {
+                        "label": entitlement_labels.get(key, key.replace("_", " ").title()),
+                        "value": " · ".join(
+                            f"{limit} {window_labels.get(window, window)}"
+                            for window, limit in (caps or {}).items()
+                        ),
+                    }
+                    for key, caps in (tier.entitlements or {}).items()
+                ],
+                "is_current": bool(usage_snapshot and usage_snapshot.get("tier", {}).get("code") == tier.code),
+            }
+            for tier in Tier.objects.filter(is_active=True).order_by("rank")
+        ]
+
+        # Quota balance bars: what is used against what is allowed, per window.
+        windows = (usage_snapshot or {}).get("windows", {})
+        for key, label in (
+            ("chats", "Chat turns"),
+            ("images", "Image analysis"),
+            ("premium_turns", "Premium model turns"),
+        ):
+            for window in ("day", "week"):
+                data = (windows.get(window) or {}).get(key) or {}
+                limit = data.get("limit")
+                if limit is None:
+                    continue
+                used = int(data.get("used") or 0)
+                usage_bars.append(
+                    {
+                        "key": f"{key}_{window}",
+                        "label": label,
+                        "window": "Today" if window == "day" else "This week",
+                        "used": used,
+                        "limit": int(limit),
+                        "remaining": max(0, int(limit) - used),
+                        "pct": min(100, round(100 * used / int(limit))) if limit else 0,
+                    }
+                )
+
+        # 14-day sparkline geometry (chats per day).
+        series = (usage_snapshot or {}).get("series") or []
+        if series:
+            peak = max([int(point.get("chats") or 0) for point in series] + [1])
+            width, height, pad = 280, 42, 3
+            step = (width - pad * 2) / max(1, len(series) - 1)
+            points = []
+            for index, point in enumerate(series):
+                chats = int(point.get("chats") or 0)
+                x = pad + index * step
+                y = height - pad - (chats / peak) * (height - pad * 2)
+                points.append(f"{x:.1f},{y:.1f}")
+            usage_spark = {
+                "points": " ".join(points),
+                "peak": peak,
+                "width": width,
+                "height": height,
+                "last": series[-1],
+            }
+    except Exception:  # noqa: BLE001 - the usage tab must never break settings
+        usage_snapshot = None
+        tier_catalogue = []
+
     return {
         "preferences": prefs,
         "tone_choices": PwanimateTone.choices,
         "response_style_choices": PwanimateResponseStyle.choices,
+        "voice_style_choices": PwanimateVoiceStyle.choices,
+        "voice_gender_choices": PwanimateVoiceGender.choices,
         "conversations_count": conversations_count,
         "user_display": user_display,
         "student_username": request.user.get_username(),
@@ -56,6 +153,10 @@ def _get_settings_context(
         "success": success,
         "errors": errors or {},
         "pwanimate_version": get_pwanimate_version(),
+        "usage_snapshot": usage_snapshot,
+        "usage_bars": usage_bars,
+        "usage_spark": usage_spark,
+        "tier_catalogue": tier_catalogue,
     }
 
 
@@ -375,6 +476,9 @@ class PwanimateSettingsPersonalizationView(View):
         tone = request.POST.get("tone")
         response_style = request.POST.get("response_style")
         personal_instructions = request.POST.get("personal_instructions")
+        voice_style = request.POST.get("voice_style")
+        voice_gender = request.POST.get("voice_gender")
+        auto_tts_enabled = request.POST.get("auto_tts_enabled") == "on"
 
         errors = {}
         success = False
@@ -385,6 +489,9 @@ class PwanimateSettingsPersonalizationView(View):
                 tone=tone,
                 response_style=response_style,
                 personal_instructions=personal_instructions,
+                voice_style=voice_style,
+                voice_gender=voice_gender,
+                auto_tts_enabled=auto_tts_enabled,
             )
             success = True
         except ValidationError as exc:
@@ -395,6 +502,9 @@ class PwanimateSettingsPersonalizationView(View):
                 tone=tone if tone in PwanimateTone.values else saved_prefs.tone,
                 response_style=response_style if response_style in PwanimateResponseStyle.values else saved_prefs.response_style,
                 personal_instructions=personal_instructions if personal_instructions is not None else saved_prefs.personal_instructions,
+                voice_style=voice_style if voice_style in PwanimateVoiceStyle.values else saved_prefs.voice_style,
+                voice_gender=voice_gender if voice_gender in PwanimateVoiceGender.values else saved_prefs.voice_gender,
+                auto_tts_enabled=auto_tts_enabled,
             )
             if hasattr(exc, "message_dict"):
                 errors = exc.message_dict

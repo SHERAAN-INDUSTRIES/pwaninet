@@ -7,6 +7,7 @@ chat/completions REST API using direct HTTP requests.
 
 from typing import Any, Dict, List, Optional
 import base64
+import json
 import logging
 import requests
 
@@ -136,6 +137,139 @@ class GroqLLMProvider(BaseLLMProvider):
 
         return self._parse_response(data, request, model)
 
+    def generate_stream(self, request: LLMRequest, on_token) -> LLMResponse:
+        """
+        Streaming variant of generate(): visible text deltas are pushed to
+        `on_token` as Groq's SSE stream arrives. Returns the same normalized
+        LLMResponse shape (usage/finish captured from the stream tail) so
+        callers see identical semantics to the non-streaming path.
+        """
+        if not self.is_available():
+            raise AIProviderConfigurationError(
+                "Groq API key is not configured.",
+                provider=self.provider_name,
+            )
+
+        model = request.model or self.model_name
+
+        # Same image-capability gate as generate(): only Qwen vision models
+        # accept image attachments on Groq.
+        has_images = any(
+            getattr(a, "attachment_type", "") == "image"
+            for a in (getattr(request, "attachments", []) or [])
+        ) or any(
+            any(getattr(a, "attachment_type", "") == "image" for a in (getattr(msg, "attachments", []) or []))
+            for msg in request.messages
+        )
+        if has_images and model.strip().lower() not in GROQ_VISION_MODELS:
+            raise AIProviderConfigurationError(
+                f"Selected AI model '{model}' on provider '{self.provider_name}' does not support image attachments.",
+                provider=self.provider_name,
+            )
+
+        payload = self._build_payload(request, model)
+        payload["stream"] = True
+        payload["stream_options"] = {"include_usage": True}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        try:
+            resp = self.session.post(
+                GROQ_CHAT_URL,
+                json=payload,
+                headers=headers,
+                timeout=(self.connect_timeout, self.timeout),
+                stream=True,
+            )
+        except requests.exceptions.Timeout as exc:
+            raise AIProviderTimeoutError(
+                f"Groq API request timed out after {self.timeout}s: {exc}",
+                provider=self.provider_name,
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise AIProviderAPIError(
+                f"Groq HTTP connection error: {exc}",
+                provider=self.provider_name,
+            ) from exc
+
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise AIProviderAuthenticationError(
+                "Groq API authentication failed (invalid or forbidden key).",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+        elif resp.status_code == 429:
+            raise AIProviderRateLimitError(
+                "Groq API rate limit or quota exceeded.",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+        elif resp.status_code != 200:
+            err_msg = self._extract_error_message(resp)
+            raise AIProviderAPIError(
+                f"Groq API error ({resp.status_code}): {err_msg}",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+
+        content_parts: List[str] = []
+        reasoning_parts: List[str] = []
+        finish_reason = None
+        usage: Dict[str, Any] = {}
+        stream_id = None
+
+        for raw_line in resp.iter_lines():
+            if isinstance(raw_line, bytes):
+                # SSE bytes are UTF-8 by spec; never trust requests' header
+                # guessing (text/event-stream without charset falls back to
+                # Latin-1 and mangles multi-byte characters into 'â' garbage).
+                raw_line = raw_line.decode("utf-8", errors="replace")
+            if not raw_line or not raw_line.startswith("data:"):
+                continue
+            data_str = raw_line[5:].strip()
+            if not data_str or data_str == "[DONE]":
+                continue
+            try:
+                chunk = json.loads(data_str)
+            except ValueError:
+                continue
+            stream_id = stream_id or chunk.get("id")
+            usage_chunk = chunk.get("usage")
+            if usage_chunk:
+                usage = usage_chunk
+            choices = chunk.get("choices") or []
+            if not choices:
+                continue
+            choice = choices[0]
+            delta = choice.get("delta") or {}
+            piece = delta.get("content")
+            if piece:
+                content_parts.append(piece)
+                on_token(piece)
+            reasoning_piece = delta.get("reasoning") or delta.get("reasoning_content")
+            if reasoning_piece:
+                reasoning_parts.append(reasoning_piece)
+            if choice.get("finish_reason"):
+                finish_reason = choice["finish_reason"]
+
+        # Reassemble an OpenAI-shaped payload and reuse _parse_response for
+        # finish normalization, usage extraction and empty-content recovery.
+        synthetic = {
+            "id": stream_id,
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "".join(content_parts),
+                    "reasoning": "".join(reasoning_parts),
+                },
+                "finish_reason": finish_reason or "stop",
+            }],
+            "usage": usage,
+        }
+        return self._parse_response(synthetic, request, model)
+
     def _build_payload(self, request: LLMRequest, model: str) -> Dict[str, Any]:
         """Construct OpenAI-compatible chat completions payload."""
         has_images = any(
@@ -188,6 +322,12 @@ class GroqLLMProvider(BaseLLMProvider):
                             provider=self.provider_name,
                         )
                     mime_type = getattr(attachment, "mime_type", "image/jpeg") or "image/jpeg"
+                    # Strip EXIF and downscale before the image leaves the
+                    # building: it costs less and it does not hand a third
+                    # party the student's location.
+                    from pwanimate.ai.vision_images import prepare_image_for_vision
+
+                    image_bytes, mime_type = prepare_image_for_vision(image_bytes, mime_type)
                     image_data = base64.b64encode(image_bytes).decode("ascii")
                     content.append({
                         "type": "image_url",

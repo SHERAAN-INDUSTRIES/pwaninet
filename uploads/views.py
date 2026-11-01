@@ -44,7 +44,7 @@ class UploadCollectionView(APIView):
     def get(self, request):
         qs = UploadRecord.objects.filter(
             user=request.user, deleted_at__isnull=True,
-        ).select_related("session", "post")
+        ).select_related("session", "post", "document")
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -78,6 +78,7 @@ class UploadCollectionView(APIView):
                         "sha256": data.get("sha256", ""),
                         "total_bytes": data["file_size"],
                         "post_group": data.get("post_group"),
+                        "kind": data.get("kind", UploadRecord.KIND_POST),
                     },
                 )
                 if created:
@@ -268,6 +269,9 @@ class UploadCompleteView(APIView):
             if record.post_id is not None:
                 # Already finalized: second call returns the same post, always.
                 return Response(self._done_payload(record), status=status.HTTP_200_OK)
+            if record.document_id is not None:
+                # Already finalized: second call returns the same document.
+                return Response(self._done_payload(record), status=status.HTTP_200_OK)
             if record.status not in ("uploading", "paused", "failed", "verifying"):
                 return Response(
                     {"error_code": "BAD_STATE",
@@ -319,6 +323,17 @@ class UploadCompleteView(APIView):
                     )
             session.finalized = True
             session.save(update_fields=["finalized", "updated_at"])
+
+            if record.kind == UploadRecord.KIND_DOCUMENT:
+                return self._complete_document(
+                    request, record, session, serializer.validated_data
+                )
+
+            if record.kind == UploadRecord.KIND_TIMETABLE:
+                return self._complete_timetable(
+                    request, record, session, serializer.validated_data
+                )
+
             post = self._publish(record, serializer.validated_data.get("post", {}))
             record.transition_to("processing")
             record.progress_bytes = record.total_bytes
@@ -331,6 +346,260 @@ class UploadCompleteView(APIView):
             transaction.on_commit(
                 lambda: finalize_upload_media.delay(record_id))
             return Response(self._done_payload(record), status=status.HTTP_201_CREATED)
+
+    def _complete_document(self, request, record, session, data):
+        """Turn a verified R2 object into a Document (or a new version of one).
+
+        The bytes already live in the bucket, so this only promotes the object
+        to its public key, writes the document rows, and queues the background
+        pipeline. The caller gets an answer immediately and can carry on.
+        """
+        from documents.services import direct_upload_service as doc_service
+        from documents.services.direct_upload_service import DocumentUploadError
+
+        metadata = data.get("document") or {}
+        bucket = r2.get_bucket()
+        client = r2.get_r2_client()
+
+        # Promote the staging object to the public documents key. This is a
+        # server-side copy inside the bucket - no bytes cross the app server.
+        storage_path = self._available_storage_path(
+            doc_service.storage_path_for(record.filename)
+        )
+        final_key = self._public_object_key(storage_path)
+        try:
+            r2.promote_object(client, bucket, session.r2_key, final_key)
+        except Exception as exc:
+            logger.error("Failed to promote upload %s to %s: %s", record.id, final_key, exc)
+            record.transition_to("failed", error_code="PROMOTE_FAILED", error_message=str(exc))
+            record.save()
+            return Response(
+                {"error_code": "PROMOTE_FAILED",
+                 "detail": "Could not store the uploaded file."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # Create the document rows (fast) - heavy processing happens in Celery.
+        try:
+            if metadata.get("target") == "version":
+                document = self._target_document(request, metadata)
+                doc_service.create_version_from_stored_object(
+                    document=document,
+                    user=request.user,
+                    storage_path=storage_path,
+                    filename=record.filename,
+                    mime_type=record.mime_type,
+                    size_bytes=record.file_size,
+                    checksum=record.sha256,
+                    change_notes=metadata.get("change_notes") or "",
+                )
+            else:
+                document, _version = doc_service.create_document_from_stored_object(
+                    user=request.user,
+                    storage_path=storage_path,
+                    filename=record.filename,
+                    mime_type=record.mime_type,
+                    size_bytes=record.file_size,
+                    checksum=record.sha256,
+                    metadata=metadata,
+                    change_notes=metadata.get("change_notes") or "",
+                )
+        except DocumentUploadError as exc:
+            record.transition_to("failed", error_code="INVALID_DOCUMENT", error_message=str(exc))
+            record.save()
+            UploadEvent.objects.create(
+                record=record, event_type=UploadEvent.EventType.FAILED,
+                detail={"reason": "invalid_document"},
+            )
+            r2.delete_object(client, bucket, session.r2_key)
+            return Response(
+                {"error_code": "INVALID_DOCUMENT", "detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PermissionError as exc:
+            record.transition_to("failed", error_code="FORBIDDEN", error_message=str(exc))
+            record.save()
+            r2.delete_object(client, bucket, session.r2_key)
+            return Response(
+                {"error_code": "FORBIDDEN", "detail": str(exc)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except Exception as exc:
+            logger.error("Failed to create document for upload %s: %s", record.id, exc, exc_info=True)
+            record.transition_to("failed", error_code="DOCUMENT_FAILED", error_message=str(exc))
+            record.save()
+            r2.delete_object(client, bucket, session.r2_key)
+            return Response(
+                {"error_code": "DOCUMENT_FAILED", "detail": "Could not create the document."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        record.document = document
+        record.transition_to("processing")
+        record.progress_bytes = record.total_bytes
+        record.save()
+        UploadEvent.objects.create(
+            record=record, event_type=UploadEvent.EventType.FINALIZED,
+            detail={"r2_key": final_key, "document_id": str(document.id)},
+        )
+        record.transition_to("publishing")
+        record.save()
+        # Background pipeline: preview, thumbnail, OCR, search indexing.
+        doc_service.queue_processing(document)
+        record.transition_to("completed")
+        record.save()
+        UploadEvent.objects.create(
+            record=record, event_type=UploadEvent.EventType.COMPLETED,
+            detail={"document_id": str(document.id)},
+        )
+        # The staging copy has served its purpose.
+        r2.delete_object(client, bucket, session.r2_key)
+        return Response(self._done_payload(record), status=status.HTTP_201_CREATED)
+
+    def _complete_timetable(self, request, record, session, data):
+        """Turn a verified R2 object into a timetable record.
+
+        The image is already in the bucket; the record is created in
+        PROCESSING state and the AI extraction runs in the background.
+        """
+        from documents.academic.services import StudentAcademicEnrollmentService
+        from documents.academic.timetable_service import ProgrammeTimetableManager
+        from documents.academic.models import Institution
+
+        metadata = data.get("timetable") or {}
+        bucket = r2.get_bucket()
+        client = r2.get_r2_client()
+
+        storage_path = self._available_storage_path(
+            f"timetables/images/{timezone.now():%Y/%m}/{record.filename}"
+        )
+        final_key = self._public_object_key(storage_path)
+        try:
+            r2.promote_object(client, bucket, session.r2_key, final_key)
+        except Exception as exc:
+            logger.error("Failed to promote timetable upload %s: %s", record.id, exc)
+            record.transition_to("failed", error_code="PROMOTE_FAILED", error_message=str(exc))
+            record.save()
+            return Response(
+                {"error_code": "PROMOTE_FAILED", "detail": "Could not store the uploaded image."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        user = request.user
+        programme = None
+        raw_programme = (metadata.get("programme") or "").strip()
+        if raw_programme and str(raw_programme).isdigit():
+            from documents.academic.models import Programme
+            programme = Programme.objects.filter(pk=int(raw_programme), is_active=True).first()
+        if not programme:
+            programme = getattr(user, "programme", None)
+        if not programme:
+            record.transition_to("failed", error_code="NO_PROGRAMME", error_message="No programme")
+            record.save()
+            r2.delete_object(client, bucket, session.r2_key)
+            return Response(
+                {"error_code": "NO_PROGRAMME",
+                 "detail": "Please set your academic programme before uploading a timetable."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        academic_level = None
+        raw_level = (metadata.get("academic_level") or "").strip()
+        if raw_level and str(raw_level).isdigit():
+            academic_level = StudentAcademicEnrollmentService.resolve_or_ensure_academic_level(int(raw_level))
+        if not academic_level:
+            academic_level = getattr(user, "academic_level", None) or \
+                StudentAcademicEnrollmentService.resolve_or_ensure_academic_level(1)
+
+        semester = None
+        raw_sem = (metadata.get("semester") or "").strip()
+        if raw_sem and str(raw_sem).isdigit():
+            from documents.academic.models import Semester
+            semester = Semester.objects.filter(pk=int(raw_sem)).first()
+        if not semester:
+            semester = getattr(user, "semester", None)
+
+        institution = getattr(user, "institution", None)
+        if not institution:
+            institution = Institution.objects.filter(is_active=True).first()
+
+        try:
+            timetable = ProgrammeTimetableManager.save_timetable_image_from_storage(
+                user=user,
+                storage_path=storage_path,
+                institution=institution,
+                programme=programme,
+                academic_level=academic_level,
+                semester=semester,
+                academic_year=getattr(user, "academic_year", None),
+                change_summary=(metadata.get("change_summary") or "").strip(),
+            )
+        except Exception as exc:
+            logger.error("Failed to create timetable for upload %s: %s", record.id, exc, exc_info=True)
+            record.transition_to("failed", error_code="TIMETABLE_FAILED", error_message=str(exc))
+            record.save()
+            r2.delete_object(client, bucket, session.r2_key)
+            return Response(
+                {"error_code": "TIMETABLE_FAILED", "detail": "Could not create the timetable."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        record.transition_to("processing")
+        record.progress_bytes = record.total_bytes
+        record.save()
+        UploadEvent.objects.create(
+            record=record, event_type=UploadEvent.EventType.FINALIZED,
+            detail={"r2_key": final_key, "timetable_id": timetable.id},
+        )
+        record.transition_to("publishing")
+        record.save()
+        record.transition_to("completed")
+        record.save()
+        UploadEvent.objects.create(
+            record=record, event_type=UploadEvent.EventType.COMPLETED,
+            detail={"timetable_id": timetable.id},
+        )
+        r2.delete_object(client, bucket, session.r2_key)
+        return Response(
+            dict(self._done_payload(record), timetable_id=timetable.id, success=True),
+            status=status.HTTP_201_CREATED,
+        )
+
+    @staticmethod
+    def _target_document(request, metadata):
+        from documents.models import Document
+
+        share_id = metadata.get("document_share_id")
+        document = Document.objects.filter(
+            share_id=share_id, uploaded_by=request.user,
+        ).first()
+        if not document:
+            raise PermissionError("Document not found or not yours.")
+        return document
+
+    @staticmethod
+    def _public_object_key(storage_path):
+        """Full bucket key for a storage-relative path (honours the R2 prefix)."""
+        from django.core.files.storage import default_storage
+
+        location = (getattr(default_storage, "location", "") or "").strip("/")
+        return f"{location}/{storage_path}" if location else storage_path
+
+    @staticmethod
+    def _available_storage_path(storage_path):
+        """Never overwrite an existing object.
+
+        Two people can upload `notes.pdf` on the same day; the storage picks
+        a free name (same rule the classic upload path used) so the second
+        one does not silently replace the first.
+        """
+        from django.core.files.storage import default_storage
+
+        try:
+            return default_storage.get_available_name(storage_path)
+        except Exception:
+            logger.warning("Could not check name availability for %s", storage_path, exc_info=True)
+            return storage_path
 
     @staticmethod
     def _publish(record, post_data):
@@ -396,12 +665,17 @@ class UploadCompleteView(APIView):
     @staticmethod
     def _done_payload(record):
         post = record.post
+        document = record.document
         return {
             "id": str(record.id),
             "status": record.status,
+            "kind": record.kind,
             "post_id": record.post_id,
             "post_share_id": str(post.share_id) if post else None,
             "is_reel": bool(post.is_reel) if post else False,
+            "document_id": record.document_id,
+            "document_share_id": str(document.share_id) if document else None,
+            "document_status": document.status if document else None,
         }
 
 

@@ -100,6 +100,7 @@ def get_default_tool_registry() -> ToolRegistry:
             LocalTimeTool, ContentSearchTool, SendNotificationTool,
             WebSearchTool,
             SiteInfoTool,
+            SendMessageTool, FollowUserTool,
         )
         registry.register(AcademicLookupTool())
         registry.register(StudentTimetableTool())
@@ -113,5 +114,8 @@ def get_default_tool_registry() -> ToolRegistry:
         registry.register(SendNotificationTool())
         registry.register(WebSearchTool())
         registry.register(SiteInfoTool())
+        # Write actions. These only propose; the student confirms.
+        registry.register(SendMessageTool())
+        registry.register(FollowUserTool())
         _default_registry = registry
     return _default_registry

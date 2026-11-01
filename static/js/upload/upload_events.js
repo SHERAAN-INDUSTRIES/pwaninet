@@ -164,7 +164,19 @@ export const UploadEventNames = {
     ERROR_OCCURRED: 'error:occurred',
 };
 
-// Global event bus instance
-export const uploadEvents = new UploadEvents();
+// Global event bus instance.
+//
+// This module is reached under several different URLs: templates import it
+// through the static template tag (which appends a content fingerprint),
+// while the rest of static/js/upload/ imports it relatively with a pinned
+// version query. A browser evaluates a module once *per URL*, so without a
+// guard the page can end up with two or more buses -- the composer listens
+// on one while uploadManager emits on another and every event silently
+// disappears. Keying the singleton on window makes the bus identity
+// independent of the URL it was first evaluated from.
+const UPLOAD_EVENTS_KEY = '__pwaninetUploadEvents';
+const uploadEventsRoot = typeof window !== 'undefined' ? window : globalThis;
+export const uploadEvents = uploadEventsRoot[UPLOAD_EVENTS_KEY]
+    || (uploadEventsRoot[UPLOAD_EVENTS_KEY] = new UploadEvents());
 
 export default UploadEvents;

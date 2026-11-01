@@ -1168,9 +1168,14 @@
 
 
 <script type="module">
-import { uploadManager } from '{% static "js/upload/upload_manager.js" %}?v=20261016-02';
-import { uploadEvents, UploadEventNames } from '{% static "js/upload/upload_events.js" %}?v=20261016-02';
-import { draftManager } from '{% static "js/upload/indexeddb_manager.js" %}?v=20261016-02';
+// Module URLs must match base.html exactly (no manual "?v=" suffix):
+// the static template tag already appends the content fingerprint, and a
+// browser instantiates a module once per URL. A second upload_manager
+// instance here would never see base.html's initialize() -- every post
+// would sit at "Preparing…" forever without a request reaching Django.
+import { uploadManager } from '{% static "js/upload/upload_manager.js" %}';
+import { uploadEvents, UploadEventNames } from '{% static "js/upload/upload_events.js" %}';
+import { draftManager } from '{% static "js/upload/indexeddb_manager.js" %}';
 
 function initCreatePostComposer() {
     const postForm = document.getElementById('postForm');
@@ -1178,6 +1183,14 @@ function initCreatePostComposer() {
         return;
     }
     postForm.dataset.composerInitialized = 'true';
+    // Idempotent, and deliberately called here: the composer can be
+    // HTMX-swapped into a page whose base.html module script loaded before
+    // a deploy, so the manager instance the composer imports must guarantee
+    // its own UPLOAD_ADDED handler is registered -- otherwise nobody runs
+    // processUpload and the donut never leaves "Preparing…".
+    if (uploadManager && typeof uploadManager.initialize === 'function') {
+        uploadManager.initialize();
+    }
     postForm.addEventListener('submit', function(e) {
       e.preventDefault();
       const deploy = document.getElementById('deployBtn');

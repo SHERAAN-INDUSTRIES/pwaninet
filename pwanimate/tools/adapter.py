@@ -409,6 +409,44 @@ def tool_result_to_context_items(tool_name: str, result: ToolResult) -> List[Con
             )
         ]
 
+    # 8. Write actions (Spark proposes; the student approves)
+    elif tool_name in ("send_message", "follow_user"):
+        action = data.get("action") if isinstance(data, dict) else None
+        summary = ""
+        recipient = ""
+        if isinstance(action, dict):
+            summary = action.get("summary") or ""
+        if isinstance(data, dict):
+            recipient = data.get("recipient") or ""
+        if not summary:
+            return [
+                ContextItem(
+                    source="tool_action",
+                    object_id="tool_action_none",
+                    title="Proposed Action",
+                    content="The action could not be prepared.",
+                    citation=None,
+                    url="",
+                )
+            ]
+        return [
+            ContextItem(
+                source="tool_action",
+                object_id=(action or {}).get("id", "tool_action"),
+                title=f"Proposed action for @{recipient}" if recipient else "Proposed action",
+                content=(
+                    f"{summary}\n\n"
+                    "This action has NOT been performed. The student must approve it "
+                    "in the app before anything happens. Tell them plainly what you "
+                    "proposed and that it needs their approval -- do not claim it was "
+                    "done, and do not repeat the action."
+                ),
+                citation=None,
+                url="",
+                metadata=data,
+            )
+        ]
+
     # Fallback for unknown tool
     return [
         ContextItem(

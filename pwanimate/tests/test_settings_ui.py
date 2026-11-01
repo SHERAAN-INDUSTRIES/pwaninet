@@ -117,7 +117,11 @@ class PwanimateSettingsHTMXNegotiationTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "pwanimate/settings/partials/usage_content.html")
         self.assertContains(resp, "Usage & Activity")
-        self.assertContains(resp, "Detailed Usage Metrics in Preparation")
+        # The real dashboard: the balance, the token counters and the upgrade
+        # path (the "in preparation" placeholder is only the no-data fallback).
+        self.assertContains(resp, "Tokens")
+        self.assertContains(resp, "Prompts today")
+        self.assertContains(resp, "See upgrade options")
 
     def test_desktop_modal_about_swap(self):
         """Desktop modal tab click swaps about partial into modal body."""
@@ -387,8 +391,14 @@ class PwanimateSettingsProductBoundaryTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_usage_tab_does_not_contain_billing_or_fake_pricing(self):
-        """Usage tab should explain product readiness without fabricated tokens, pricing, or subscription tiers."""
+    def test_usage_tab_shows_real_counters_not_fabricated_numbers(self):
+        """The Usage tab renders the REAL counters (tier, balance, tokens).
+
+        The old tab said "in preparation" because there was nothing to show.
+        Now the numbers come from the usage ledger, so the test asserts they
+        are data-driven instead of invented — and that nothing about card
+        billing or dollar prices sneaks in.
+        """
         resp = self.client.get(
             reverse("pwanimate:settings_usage"),
             HTTP_HX_REQUEST="true",
@@ -397,16 +407,32 @@ class PwanimateSettingsProductBoundaryTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         content = resp.content.decode("utf-8").lower()
 
-        # Check expected honest wording
-        self.assertIn("in preparation", content)
+        # The fair-use statement stays.
         self.assertIn("acceptable academic use", content)
 
-        # Ensure no fabricated pricing or billing tokens
-        self.assertNotIn("subscription tier", content)
-        self.assertNotIn("token balance:", content)
-        self.assertNotIn("$", content)
+        # No card-based billing language, no dollar prices.
         self.assertNotIn("credit card", content)
-        self.assertNotIn("upgrade plan", content)
+        self.assertNotIn("$", content)
+
+        # Real usage, taken from the ledger, is on the page.
+        from pwanimate.billing.services import UsageService
+
+        UsageService.record_turn(
+            user=self.user,
+            provider="gemini",
+            model_id="gemini-3.8-flash",
+            prompt_tokens=1234,
+            completion_tokens=56,
+            total_tokens=1290,
+        )
+        resp = self.client.get(
+            reverse("pwanimate:settings_usage"),
+            HTTP_HX_REQUEST="true",
+            HTTP_HX_TARGET="pwanimate-settings-modal-body",
+        )
+        content = resp.content.decode("utf-8")
+        self.assertIn("1234", content)   # prompts
+        self.assertIn("56", content)     # answers
 
     def test_about_tab_describes_pwanimate_capabilities_honestly(self):
         """About tab provides educational, grounded context on Pwanimate capabilities and safety."""

@@ -23,7 +23,7 @@ class UploadItem {
             failed: null,
         };
         this.retryCount = 0;
-        this.maxRetries = 3;
+        this.maxRetries = 5; // Increased to 5 retries for better resilience
     }
 
     updateProgress(value) {
@@ -240,10 +240,44 @@ class UploadQueue {
         while (this.queue.length > 0 && !this.isPaused) {
             const item = this.queue[0];
 
-            // Skip if already completed or cancelled
-            if (item.state === UploadState.PUBLISHED || item.state === UploadState.CANCELLED) {
+            // Skip items that already reached a terminal state without ever
+            // becoming current: completed/cancelled ones, and failed ones --
+            // an upload can fail while it is still waiting its turn (its
+            // processUpload stages run immediately). Picking a FAILED item
+            // back up here would set it to UPLOADING and wait for a
+            // completion event that can never arrive, freezing the queue.
+            if (item.state === UploadState.PUBLISHED ||
+                item.state === UploadState.CANCELLED) {
                 this.queue.shift();
                 continue;
+            }
+
+            // For failed items, auto-retry if possible, otherwise remove
+            if (item.state === UploadState.FAILED) {
+                if (item.canRetry()) {
+                    console.log(`[UploadQueue] Auto-retrying failed upload ${item.id} (attempt ${item.retryCount + 1}/${item.maxRetries})`);
+                    item.incrementRetry();
+                    item.state = UploadState.QUEUED;
+                    item.progress = 0;
+                    item.timestamps.started = null;
+                    item.timestamps.failed = null;
+
+                    // Move to end of queue to give other uploads a chance
+                    this.queue.shift();
+                    this.queue.push(item);
+
+                    // Emit retry event
+                    uploadEvents.emit(UploadEventNames.UPLOAD_RETRIED, {
+                        id: item.id,
+                        retryCount: item.retryCount,
+                    });
+
+                    continue;
+                } else {
+                    console.warn(`[UploadQueue] Removing failed upload ${item.id} - max retries (${item.maxRetries}) exceeded`);
+                    this.queue.shift();
+                    continue;
+                }
             }
 
             // Process the upload
@@ -255,7 +289,7 @@ class UploadQueue {
             // This method just manages the queue state
             // UploadManager will call uploadCompleted or uploadFailed
             // when the upload is done
-            
+
             // Wait for upload to complete (handled by UploadManager callbacks)
             await this.waitForUploadCompletion(item);
 
@@ -273,10 +307,35 @@ class UploadQueue {
      */
     waitForUploadCompletion(item) {
         return new Promise((resolve) => {
+            const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes timeout for actual upload
+            let isTimedOut = false;
+
+            const timeoutHandle = setTimeout(() => {
+                isTimedOut = true;
+                item.state = UploadState.FAILED;
+                item.addError(new Error(`Upload ${item.id} timed out during upload (10 minutes)`));
+                item.markFailed();
+                console.error('[UploadQueue] Upload timeout:', item.id);
+                uploadEvents.emit(UploadEventNames.UPLOAD_FAILED, {
+                    id: item.id,
+                    session: null,
+                    error: 'Upload timed out - please check your connection and retry',
+                    canRetry: true,
+                });
+                resolve();
+            }, TIMEOUT_MS);
+
             const checkCompletion = () => {
-                if (item.state === UploadState.PUBLISHED || 
-                    item.state === UploadState.FAILED || 
+                if (isTimedOut) {
+                    clearTimeout(timeoutHandle);
+                    resolve();
+                    return;
+                }
+
+                if (item.state === UploadState.PUBLISHED ||
+                    item.state === UploadState.FAILED ||
                     item.state === UploadState.CANCELLED) {
+                    clearTimeout(timeoutHandle);
                     resolve();
                 } else {
                     setTimeout(checkCompletion, 100);

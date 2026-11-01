@@ -247,7 +247,11 @@ class AttachmentService:
             file_size=uploaded_file.size,
             mime_type=mime_type,
             attachment_type=att_type or "document",
-            processing_status="pending" if (att_type or "document") == "document" else "not_required",
+            # Images are queued for one vision pass at upload, so they are
+            # "pending" until that pass finishes -- exactly like a document
+            # waiting to be read. While it is pending the chat path refuses
+            # the turn rather than sending the image to a second model.
+            processing_status="pending",
         )
         return attachment
 

@@ -124,7 +124,7 @@ class QuotaTracker:
                 {"provider": "gemini", "model": "gemini-3.8-flash"},
                 {"provider": "groq", "model": "openai/gpt-oss-120b"},
                 {"provider": "gemini", "model": "gemini-3.6-flash"},
-                {"provider": "openrouter", "model": "google/gemini-flash-latest"},
+                {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
             ],
         )
 
@@ -181,14 +181,9 @@ class QuotaTracker:
                 "provider_label": "Groq",
                 "description": "High-throughput multilingual model",
             },
-            ("groq", "groq/compound-mini"): {
-                "display_name": "Groq Compound Mini",
-                "provider_label": "Groq",
-                "description": "Compound reasoning model on Groq",
-            },
             # OpenRouter
-            ("openrouter", "google/gemini-flash-latest"): {
-                "display_name": "Gemini Flash Latest",
+            ("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"): {
+                "display_name": "Gemini 3.8 Flash",
                 "provider_label": "OpenRouter",
                 "description": "Multimodal Flash hosted on OpenRouter",
             },
@@ -207,10 +202,10 @@ class QuotaTracker:
                 "provider_label": "OpenRouter",
                 "description": "Liquid neural architecture (Free Tier)",
             },
-            ("openrouter", "nex-agi/nex-n2.5-pro:free"): {
-                "display_name": "NeX N2.5 Pro",
+            ("openrouter", "nvidia/nemotron-3-super-120b-a12b:free"): {
+                "display_name": "Nemotron 3 Super 120B",
                 "provider_label": "OpenRouter",
-                "description": "General conversational agent (Free Tier)",
+                "description": "NVIDIA 120B reasoning model (Free Tier)",
             },
         }
 

@@ -18,7 +18,7 @@ class UploadSession {
         };
         this.previewUrls = [];
         this.retryCount = 0;
-        this.maxRetries = 3;
+        this.maxRetries = 5; // Increased to 5 retries for better resilience
         this.cancellationToken = { cancelled: false };
         this.createdAt = Date.now();
         this.updatedAt = this.createdAt;

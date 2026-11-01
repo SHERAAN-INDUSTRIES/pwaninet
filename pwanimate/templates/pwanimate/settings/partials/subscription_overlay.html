@@ -1,0 +1,86 @@
+{% load i18n %}
+<div class="pwanimate-subscription-overlay"
+     id="pwanimateSubscriptionOverlay"
+     hidden
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="pwanimateSubscriptionTitle">
+    <div class="pwanimate-subscription-sheet" role="document">
+        <header class="pwanimate-subscription-head">
+            <div>
+                <h3 class="fw-bold mb-1" id="pwanimateSubscriptionTitle">{% trans "Choose your Spark plan" %}</h3>
+                <p class="text-muted small mb-0">
+                    {% trans "Pay with M-Pesa — no card, no subscription trap. Every tier keeps the same four engines and unlimited local retrieval." %}
+                </p>
+            </div>
+            <button type="button"
+                    class="pwanimate-subscription-close"
+                    data-close-subscription
+                    aria-label="{% trans 'Close' %}">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <div class="pwanimate-subscription-cards" id="pwanimateSubscriptionCards">
+            {% for tier in tier_catalogue %}
+            <div class="pwanimate-subscription-card{% if tier.is_current %} is-current{% endif %}"
+                 data-tier-code="{{ tier.code }}">
+                <span class="pwanimate-subscription-current{% if not tier.is_current %} d-none{% endif %}">{% trans "Your plan" %}</span>
+                <h4 class="pwanimate-subscription-name">{{ tier.name }}</h4>
+                <div class="pwanimate-subscription-price">
+                    {% if tier.price_kes > 0 %}
+                        <span class="pwanimate-subscription-amount">KSh {{ tier.price_kes|floatformat:0 }}</span>
+                        <span class="pwanimate-subscription-period">
+                            /{% if tier.duration_days == 1 %}24 hours{% else %}{{ tier.duration_days }} days{% endif %}
+                        </span>
+                    {% else %}
+                        <span class="pwanimate-subscription-amount">{% trans "Free" %}</span>
+                    {% endif %}
+                </div>
+                {% if tier.description %}
+                <p class="pwanimate-subscription-description">{{ tier.description }}</p>
+                {% endif %}
+                <ul class="pwanimate-subscription-includes">
+                    {% for line in tier.includes %}
+                    <li><i class="bi bi-check2" aria-hidden="true"></i>{{ line.label }} <span class="text-muted">— {{ line.value }}</span></li>
+                    {% endfor %}
+                </ul>
+                <button type="button"
+                        class="btn btn-sm w-100 pwanimate-subscription-cta {% if tier.is_current %}btn-outline-secondary{% else %}btn-primary{% endif %}"
+                        data-subscribe-tier="{{ tier.code }}"
+                        data-tier-price="{{ tier.price_kes|floatformat:0 }}"
+                        {% if tier.is_current %}disabled{% endif %}>
+                    {% if tier.is_current %}{% trans "Current plan" %}{% elif tier.price_kes > 0 %}{% trans "Upgrade" %}{% else %}{% trans "Included" %}{% endif %}
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Payment sheet ------------------------------------------------------>
+        <div class="pwanimate-subscription-payment" id="pwanimateSubscriptionPayment" hidden>
+            <h5 class="fw-bold mb-1">{% trans "Pay with M-Pesa" %}</h5>
+            <p class="text-muted small mb-3" id="pwanimatePaymentSummary"></p>
+            <label class="form-label small fw-semibold" for="pwanimatePaymentPhone">{% trans "M-Pesa phone number" %}</label>
+            <input type="tel"
+                   class="form-control form-control-sm mb-3"
+                   id="pwanimatePaymentPhone"
+                   inputmode="tel"
+                   autocomplete="tel"
+                   placeholder="07xx xxx xxx">
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-primary btn-sm" data-submit-payment>
+                    <i class="bi bi-phone me-1" aria-hidden="true"></i>
+                    <span id="pwanimatePaymentButtonLabel">{% trans "Send payment request" %}</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm d-none" data-demo-complete>
+                    {% trans "Complete the demo payment" %}
+                </button>
+                <button type="button" class="btn btn-link btn-sm" data-cancel-payment>{% trans "Cancel" %}</button>
+            </div>
+            <p class="pwanimate-subscription-status mt-3 mb-0"
+               id="pwanimatePaymentStatus"
+               role="status"
+               aria-live="polite"></p>
+        </div>
+    </div>
+</div>

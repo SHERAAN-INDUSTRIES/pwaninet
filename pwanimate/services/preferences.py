@@ -15,6 +15,8 @@ from pwanimate.models import (
     PwanimatePreferences,
     PwanimateResponseStyle,
     PwanimateTone,
+    PwanimateVoiceGender,
+    PwanimateVoiceStyle,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,9 @@ class PwanimatePreferenceService:
                 "tone": PwanimateTone.NEUTRAL,
                 "response_style": PwanimateResponseStyle.BALANCED,
                 "personal_instructions": "",
+                "voice_style": PwanimateVoiceStyle.WARM,
+                "voice_gender": PwanimateVoiceGender.FEMALE,
+                "auto_tts_enabled": False,
             },
         )
         if created:
@@ -91,6 +96,9 @@ class PwanimatePreferenceService:
                 tone=PwanimateTone.NEUTRAL,
                 response_style=PwanimateResponseStyle.BALANCED,
                 personal_instructions="",
+                voice_style=PwanimateVoiceStyle.WARM,
+                voice_gender=PwanimateVoiceGender.FEMALE,
+                auto_tts_enabled=False,
             )
 
         persisted = cls.get_preferences(user)
@@ -103,6 +111,9 @@ class PwanimatePreferenceService:
             tone=PwanimateTone.NEUTRAL,
             response_style=PwanimateResponseStyle.BALANCED,
             personal_instructions="",
+            voice_style=PwanimateVoiceStyle.WARM,
+            voice_gender=PwanimateVoiceGender.FEMALE,
+            auto_tts_enabled=False,
         )
 
     @classmethod
@@ -113,6 +124,9 @@ class PwanimatePreferenceService:
         tone: Optional[str] = None,
         response_style: Optional[str] = None,
         personal_instructions: Optional[str] = None,
+        voice_style: Optional[str] = None,
+        voice_gender: Optional[str] = None,
+        auto_tts_enabled: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Validate and normalize individual preference inputs.
@@ -151,6 +165,23 @@ class PwanimatePreferenceService:
             else:
                 cleaned["personal_instructions"] = norm_inst
 
+        if voice_style is not None:
+            norm_style = str(voice_style).strip().lower()
+            if norm_style not in dict(PwanimateVoiceStyle.choices):
+                errors["voice_style"] = "Invalid voice style."
+            else:
+                cleaned["voice_style"] = norm_style
+
+        if voice_gender is not None:
+            norm_gender = str(voice_gender).strip().lower()
+            if norm_gender not in dict(PwanimateVoiceGender.choices):
+                errors["voice_gender"] = "Invalid voice gender."
+            else:
+                cleaned["voice_gender"] = norm_gender
+
+        if auto_tts_enabled is not None:
+            cleaned["auto_tts_enabled"] = bool(auto_tts_enabled)
+
         if errors:
             raise ValidationError(errors)
 
@@ -165,6 +196,9 @@ class PwanimatePreferenceService:
         tone: Optional[str] = None,
         response_style: Optional[str] = None,
         personal_instructions: Optional[str] = None,
+        voice_style: Optional[str] = None,
+        voice_gender: Optional[str] = None,
+        auto_tts_enabled: Optional[bool] = None,
     ) -> PwanimatePreferences:
         """
         Partially or fully update preferences for the authenticated user.
@@ -177,6 +211,9 @@ class PwanimatePreferenceService:
             tone=tone,
             response_style=response_style,
             personal_instructions=personal_instructions,
+            voice_style=voice_style,
+            voice_gender=voice_gender,
+            auto_tts_enabled=auto_tts_enabled,
         )
 
         with transaction.atomic():

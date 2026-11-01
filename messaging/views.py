@@ -40,19 +40,71 @@ from .pagination import BeforeMessageIdPagination
 from .observability import metrics
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def share_post_to_conversation(request):
+    """Send a visible post as a rich internal-post message to a conversation."""
+    conversation_id = request.data.get('conversation_id')
+    post_share_id = request.data.get('post_share_id')
+    if not conversation_id or not post_share_id:
+        return Response(
+            {'error': 'conversation_id and post_share_id are required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    conversation = get_object_or_404(
+        Conversation,
+        id=conversation_id,
+        members__user=request.user,
+    )
+
+    from users.services.privacy import visible_posts_for
+
+    post = get_object_or_404(
+        visible_posts_for(request.user).select_related('author'),
+        share_id=post_share_id,
+    )
+    post_url = request.build_absolute_uri(
+        reverse('posts:post_details', kwargs={'share_id': post.share_id})
+    )
+    content = (request.data.get('content') or '').strip()
+    message = Message.objects.create(
+        conversation=conversation,
+        sender=request.user,
+        content=content or f'{request.user.get_full_name() or request.user.username} shared a post',
+        link_url=post_url,
+        link_title=(post.content or 'Post on vasto')[:500],
+        link_description=(post.content or '')[:2000],
+        link_type='internal_post',
+        is_forwarded=True,
+    )
+    conversation.save(update_fields=['updated_at'])
+
+    msg_data = MessageSerializer(message, context={'request': request}).data
+    async_to_sync(get_channel_layer().group_send)(
+        f"chat_{conversation.id}",
+        {'type': 'chat_message', 'message': msg_data},
+    )
+    ChatNotificationService.notify_new_message(message)
+    return Response(msg_data, status=status.HTTP_201_CREATED)
+
+
 class ConversationViewSet(viewsets.ModelViewSet):
     """ViewSet for managing conversations."""
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['type']
     search_fields = ['name']
-    ordering_fields = ['created_at', 'updated_at']
-    ordering = ['-updated_at']
+    ordering_fields = ['created_at', 'updated_at', 'last_message_at']
+    ordering = ['-last_message_at', '-updated_at']
 
     def get_queryset(self):
         """Return conversations for the current user."""
         return Conversation.objects.filter(
-            members__user=self.request.user
+            members__user=self.request.user,
+            messages__isnull=False,
+        ).annotate(
+            last_message_at=models.Max('messages__created_at'),
         ).distinct()
 
     def get_serializer_class(self):
@@ -1938,6 +1990,3 @@ def proxy_chat_media(request):
     except Exception as e:
         logger.warning(f'Failed to proxy media URL {media_url}: {e}')
         return HttpResponse('Failed to fetch upstream media', status=502)
-
-
-

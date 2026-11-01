@@ -347,6 +347,11 @@
         )) {
             return true;
         }
+        // The blurred letterbox filler behind a fullscreen reel is a silent
+        // copy of the reel itself — it must never be unmuted.
+        if (video.classList && video.classList.contains('reel-ambient-video')) {
+            return true;
+        }
         if (video.closest('.media-viewer-overlay, #messagesContainer, .messages-area, .media-bubble, .media-tile, .message-bubble, .message-wrapper, .conversation-container, #chatMessages, #chatAppContainer, .messaging-view, #mediaPreviewModal, .media-preview-modal, .media-composer-modal, .reels-carousel-shelf')) {
             return true;
         }

@@ -1,81 +1,201 @@
 {% load i18n static %}
-<div class="pwanimate-settings-usage-container">
-    <div class="mb-4">
-        <h4 class="fw-bold mb-1">{% trans "Usage & Activity" %}</h4>
-        <p class="text-muted small mb-0">
-            {% trans "Overview of your Spark activity, conversational threads, and platform capabilities." %}
-        </p>
-    </div>
+<div class="pwanimate-settings-usage-container"
+     id="pwanimateUsageTab"
+     data-usage-url="{% url 'pwanimate_api:billing_usage' %}"
+     data-tiers-url="{% url 'pwanimate_api:billing_tiers' %}">
 
-    <!-- User Account & Activity Card -->
-    <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
-        <div class="d-flex align-items-center justify-content-between mb-3">
-            <div class="d-flex align-items-center gap-3">
-                {% if request.user.profile_pic %}
-                    <img src="{{ request.user.profile_pic.url }}" alt="{{ user_display|default:request.user.username }}" class="rounded-circle border object-fit-cover flex-shrink-0" style="width: 44px; height: 44px;" onerror="this.onerror=null; this.src='{% static 'images/default_pic1.jpg' %}';">
-                {% else %}
-                    <img src="{% static 'images/default_pic1.jpg' %}" alt="{{ user_display|default:request.user.username }}" class="rounded-circle border object-fit-cover flex-shrink-0" style="width: 44px; height: 44px;">
-                {% endif %}
-                <div>
-                    <h6 class="fw-bold mb-0">{{ user_display|default:request.user.username }}</h6>
-                    <span class="text-muted small">@{{ request.user.username }}</span>
+    {% if usage_snapshot %}
+        {% with tier=usage_snapshot.tier day=usage_snapshot.windows.day week=usage_snapshot.windows.week %}
+
+        <!-- Account & activity -------------------------------------------------->
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center gap-3">
+                    {% if request.user.profile_pic %}
+                        <img src="{{ request.user.profile_pic.url }}" alt="{{ user_display|default:request.user.username }}" class="rounded-circle border object-fit-cover flex-shrink-0" style="width: 44px; height: 44px;" onerror="this.onerror=null; this.src='{% static 'images/default_pic1.jpg' %}';">
+                    {% else %}
+                        <img src="{% static 'images/default_pic1.jpg' %}" alt="{{ user_display|default:request.user.username }}" class="rounded-circle border object-fit-cover flex-shrink-0" style="width: 44px; height: 44px;">
+                    {% endif %}
+                    <div>
+                        <h6 class="fw-bold mb-0">{{ user_display|default:request.user.username }}</h6>
+                        <span class="text-muted small">@{{ request.user.username }}</span>
+                    </div>
+                </div>
+                <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
+                    <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>{% trans "Spark Active" %}
+                </span>
+            </div>
+
+            <div class="row g-3 pt-2 border-top">
+                <div class="col-sm-6">
+                    <div class="text-muted small">{% trans "Connected Account" %}</div>
+                    <div class="fw-semibold">{{ request.user.username }}</div>
+                </div>
+                <div class="col-sm-6">
+                    <div class="text-muted small">{% trans "Conversational Threads" %}</div>
+                    <div class="fw-semibold">{{ conversations_count }} {% if conversations_count == 1 %}{% trans "thread" %}{% else %}{% trans "threads" %}{% endif %}</div>
                 </div>
             </div>
-            <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
-                <i class="bi bi-check-circle-fill me-1"></i>{% trans "Spark Active" %}
+        </div>
+
+        <div class="mb-4 d-flex align-items-start justify-content-between gap-3">
+            <div>
+                <h4 class="fw-bold mb-1">{% trans "Usage & Activity" %}</h4>
+                <p class="text-muted small mb-0">
+                    {% trans "Your real Spark usage — these are the same counters your allowance is enforced on." %}
+                </p>
+            </div>
+            <span class="badge {% if tier.is_free %}bg-secondary-subtle text-secondary{% else %}bg-primary-subtle text-primary{% endif %} px-3 py-2 rounded-pill">
+                <i class="bi bi-person-circle me-1" aria-hidden="true"></i>{% if tier.name %}{{ tier.name }}{% else %}{% trans "Free" %}{% endif %}
             </span>
         </div>
 
-        <div class="row g-3 pt-2 border-top">
-            <div class="col-sm-6">
-                <div class="text-muted small">{% trans "Connected Account" %}</div>
-                <div class="fw-semibold">{{ request.user.username }}</div>
+        <!-- Quota balance ----------------------------------------------------->
+        {% if usage_bars %}
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <h6 class="fw-bold mb-3">{% trans "Your balance" %}</h6>
+            {% for bar in usage_bars %}
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-baseline mb-1">
+                    <span class="small">
+                        {{ bar.label }}
+                        <span class="text-muted">· {{ bar.window }}</span>
+                    </span>
+                    <span class="small fw-semibold">
+                        {{ bar.remaining }} {% trans "left" %}
+                        <span class="text-muted fw-normal">of {{ bar.limit }}</span>
+                    </span>
+                </div>
+                <div class="progress" style="height: 6px;">
+                    <div class="progress-bar {% if bar.pct >= 100 %}bg-danger{% elif bar.pct >= 80 %}bg-warning{% else %}bg-primary{% endif %}"
+                         style="width: {{ bar.pct }}%"
+                         role="progressbar"
+                         aria-valuenow="{{ bar.pct }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-label="{{ bar.label }} {{ bar.window }}: {{ bar.used }} of {{ bar.limit }} used"></div>
+                </div>
             </div>
-            <div class="col-sm-6">
-                <div class="text-muted small">{% trans "Conversational Threads" %}</div>
-                <div class="fw-semibold">{{ conversations_count }} {% if conversations_count == 1 %}{% trans "thread" %}{% else %}{% trans "threads" %}{% endif %}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Tokens ------------------------------------------------------------->
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <h6 class="fw-bold mb-3">{% trans "Tokens" %}</h6>
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small">{% trans "Prompts today" %}</div>
+                    <div class="fw-semibold">{{ day.tokens.prompt|default:0 }}</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small">{% trans "Answers today" %}</div>
+                    <div class="fw-semibold">{{ day.tokens.completion|default:0 }}</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small">{% trans "Prompts this week" %}</div>
+                    <div class="fw-semibold">{{ week.tokens.prompt|default:0 }}</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="text-muted small">{% trans "Answers this week" %}</div>
+                    <div class="fw-semibold">{{ week.tokens.completion|default:0 }}</div>
+                </div>
+            </div>
+            <p class="text-muted small mb-0 mt-3">
+                {% trans "Tokens reflect how much context Spark read and wrote. A long document or an open page uses more — that is context working for you, not extra charges." %}
+            </p>
+        </div>
+
+        <!-- Activity sparkline -------------------------------------------------->
+        {% if usage_spark %}
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <div class="d-flex justify-content-between align-items-baseline mb-2">
+                <h6 class="fw-bold mb-0">{% trans "Chats per day" %}</h6>
+                <span class="text-muted small">{% trans "last 14 days" %}</span>
+            </div>
+            <svg viewBox="0 0 {{ usage_spark.width }} {{ usage_spark.height }}"
+                 class="w-100"
+                 height="64"
+                 preserveAspectRatio="none"
+                 role="img"
+                 aria-label="{% trans 'Chats per day over the last 14 days' %}">
+                <polyline points="{{ usage_spark.points }}"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linejoin="round"
+                          stroke-linecap="round"
+                          opacity="0.85"></polyline>
+            </svg>
+            <div class="text-muted small mt-2">
+                {% trans "Peak" %} {{ usage_spark.peak }} {% trans "chats in a day" %} ·
+                {% trans "today" %} {{ usage_spark.last.chats }}
             </div>
         </div>
-    </div>
+        {% endif %}
 
-    <!-- Usage Accounting Notice -->
-    <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
-        <div class="d-flex align-items-start gap-3">
-            <div class="text-secondary mt-1">
-                <i class="bi bi-info-circle fs-4"></i>
-            </div>
-            <div>
-                <h6 class="fw-bold mb-1">{% trans "Detailed Usage Metrics in Preparation" %}</h6>
-                <p class="text-muted small mb-2">
-                    {% trans "Detailed personal activity summaries, query telemetry, and resource allocation meters are currently in development for a future update." %}
-                </p>
-                <p class="text-muted small mb-0">
-                    {% trans "Spark is currently available for your academic studies, peer discovery, and course inquiries under standard Kenyan Universities acceptable academic use and fair use guidelines." %}
-                </p>
+        <!-- Allowances + upgrade ---------------------------------------------->
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <h6 class="fw-bold mb-2">{% trans "Included with your tier" %}</h6>
+            <ul class="list-group list-group-flush rounded-3 border mb-0">
+                <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
+                    <span class="small"><i class="bi bi-lightning-charge me-2 text-primary"></i>{% trans "All four Spark engines" %}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">{% trans "Included" %}</span>
+                </li>
+                <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
+                    <span class="small"><i class="bi bi-search me-2 text-primary"></i>{% trans "Campus document retrieval" %}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">{% trans "Unlimited" %}</span>
+                </li>
+                <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
+                    <span class="small"><i class="bi bi-people me-2 text-primary"></i>{% trans "Peer discovery & group announcements" %}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">{% trans "Included" %}</span>
+                </li>
+                <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
+                    <span class="small"><i class="bi bi-cpu me-2 text-primary"></i>{% trans "Premium model turns" %}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">
+                        {% if tier.is_free %}{% trans "Paid tiers" %}{% else %}{% trans "Included" %}{% endif %}
+                    </span>
+                </li>
+            </ul>
+            <p class="text-muted small mb-0 mt-3">
+                {% trans "Spark is available for your academic studies, peer discovery and course inquiries under standard Kenyan Universities acceptable academic use and fair use guidelines." %}
+            </p>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <button type="button" class="btn btn-primary btn-sm" data-open-subscription>
+                <i class="bi bi-stars me-1" aria-hidden="true"></i>{% trans "See upgrade options" %}
+            </button>
+            <span class="text-muted small">
+                {% trans "Pay with M-Pesa · no card needed" %}
+            </span>
+        </div>
+
+        {% endwith %}
+    {% else %}
+        <!-- The billing tables are not available yet: stay honest, invent nothing. -->
+        <div class="mb-4">
+            <h4 class="fw-bold mb-1">{% trans "Usage & Activity" %}</h4>
+            <p class="text-muted small mb-0">
+                {% trans "Overview of your Spark activity, conversational threads, and platform capabilities." %}
+            </p>
+        </div>
+
+        <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
+            <div class="d-flex align-items-start gap-3">
+                <div class="text-secondary mt-1">
+                    <i class="bi bi-info-circle fs-4" aria-hidden="true"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-1">{% trans "Detailed Usage Metrics in Preparation" %}</h6>
+                    <p class="text-muted small mb-2">
+                        {% trans "Detailed personal activity summaries, query telemetry, and resource allocation meters are currently in development for a future update." %}
+                    </p>
+                    <p class="text-muted small mb-0">
+                        {% trans "Spark is currently available for your academic studies, peer discovery, and course inquiries under standard Kenyan Universities acceptable academic use and fair use guidelines." %}
+                    </p>
+                </div>
             </div>
         </div>
-    </div>
-
-    <!-- Supported Campus Capabilities -->
-    <div class="mb-3">
-        <h6 class="fw-bold text-muted small text-uppercase mb-2">{% trans "Included Capabilities" %}</h6>
-        <ul class="list-group list-group-flush rounded-3 border">
-            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                <span class="small"><i class="bi bi-file-earmark-text me-2 text-primary"></i>{% trans "Campus Documents & Lecture Retrieval" %}</span>
-                <span class="badge bg-secondary-subtle text-secondary small">{% trans "Available" %}</span>
-            </li>
-            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                <span class="small"><i class="bi bi-people me-2 text-primary"></i>{% trans "Student Peer Discovery & Academic Collaboration" %}</span>
-                <span class="badge bg-secondary-subtle text-secondary small">{% trans "Available" %}</span>
-            </li>
-            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                <span class="small"><i class="bi bi-bell me-2 text-primary"></i>{% trans "Group Announcements & Notification Summaries" %}</span>
-                <span class="badge bg-secondary-subtle text-secondary small">{% trans "Available" %}</span>
-            </li>
-            <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                <span class="small"><i class="bi bi-diagram-3 me-2 text-primary"></i>{% trans "Course & Programme Curriculum Structure" %}</span>
-                <span class="badge bg-secondary-subtle text-secondary small">{% trans "Available" %}</span>
-            </li>
-        </ul>
-    </div>
+    {% endif %}
 </div>

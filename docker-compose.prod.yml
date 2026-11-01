@@ -83,6 +83,37 @@ services:
     networks:
       - pwaninet_net
 
+  # spark-vector: self-hosted embedding worker (docs/local-models-design.md §4).
+  # Weights baked at build (pinned revision + checksum); internal only, no
+  # host ports. Cut over by setting PWANIMATE_EMBEDDING_PROVIDER=selfhosted.
+  spark_vector:
+    build:
+      context: spark_vector
+      dockerfile: Dockerfile
+    container_name: pwaninet_spark_vector
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPARK_VECTOR_MODEL_NAME: ${SPARK_VECTOR_MODEL_NAME:-multilingual-e5-base}
+      SPARK_VECTOR_EXPECTED_DIMENSIONS: ${SPARK_VECTOR_EXPECTED_DIMENSIONS:-768}
+      SPARK_VECTOR_TOKEN: ${SPARK_VECTOR_TOKEN:-}
+      # One inference slot; interactive queries are admitted ahead of bulk
+      # ingestion batches, and a backlog above the cap is refused (503) so
+      # callers back off instead of piling onto a busy 2-vCPU box.
+      SPARK_VECTOR_INFER_CONCURRENCY: ${SPARK_VECTOR_INFER_CONCURRENCY:-1}
+      SPARK_VECTOR_MAX_TOKENS_PER_REQUEST: ${SPARK_VECTOR_MAX_TOKENS_PER_REQUEST:-4096}
+      SPARK_VECTOR_MAX_WAITERS: ${SPARK_VECTOR_MAX_WAITERS:-32}
+    expose:
+      - "8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8100/healthz', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - pwaninet_net
+
 networks:
   pwaninet_net:
     driver: bridge

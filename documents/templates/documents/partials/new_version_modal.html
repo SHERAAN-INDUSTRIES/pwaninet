@@ -79,7 +79,7 @@ function handleNewVersionUpload(docId) {
     const fileInput = document.getElementById('version-file-' + docId);
     const errorAlert = document.getElementById('newVersionError-' + docId);
     const submitBtn = document.getElementById('submitNewVersionBtn-' + docId);
-    const form = document.getElementById('newVersionForm-' + docId);
+    const notesInput = document.getElementById('version-notes-' + docId);
 
     errorAlert.classList.add('d-none');
     errorAlert.textContent = '';
@@ -90,80 +90,94 @@ function handleNewVersionUpload(docId) {
         return;
     }
 
+    if (!window.resumableUpload || typeof window.resumableUpload.start !== 'function') {
+        errorAlert.textContent = 'The upload engine is not ready yet. Please refresh and try again.';
+        errorAlert.classList.remove('d-none');
+        return;
+    }
+
     const file = fileInput.files[0];
-    const formData = new FormData(form);
+    const allowed = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'zip', 'rar'];
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    if (allowed.indexOf(ext) === -1) {
+        errorAlert.textContent = `File type '${ext}' is not allowed. Supported formats: ${allowed.join(', ').toUpperCase()}`;
+        errorAlert.classList.remove('d-none');
+        return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+        errorAlert.textContent = 'File size exceeds maximum of 50MB';
+        errorAlert.classList.remove('d-none');
+        return;
+    }
 
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Uploading...';
 
-    // Show persistent upload banner if available
+    // Banner: the donut follows the transfer.
     if (window.uploadUI && typeof window.uploadUI.show === 'function') {
-        window.uploadUI.setHeaderTitle('NEW VERSION UPLOAD');
-        window.uploadUI.setTitle(file.name);
-        window.uploadUI.setSubtitle('Uploading replacement version...');
         window.uploadUI.show();
+        window.uploadUI.setHeaderTitle('NEW VERSION UPLOAD', 'phase-upload');
+        window.uploadUI.setTitle(file.name);
+        window.uploadUI.setSubtitle('Sending straight to storage…');
+        window.uploadUI.setProgressFillClass('phase-upload');
+        window.uploadUI.setAggregateProgress(0, 'Uploading 0%');
     }
 
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/documents/document/' + docId + '/new-version/', true);
-    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-
-    xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable && window.uploadUI) {
-            window.uploadUI.handleUploadProgress(e.loaded, e.total);
-        }
+    const onProgress = (ev) => {
+        const detail = ev.detail || {};
+        const pct = detail.total ? Math.round((detail.loaded / detail.total) * 100) : 0;
+        if (window.uploadUI) window.uploadUI.setAggregateProgress(pct, `Uploading ${pct}%`);
     };
+    window.addEventListener('resumable-upload-progress', onProgress);
 
-    xhr.onload = function() {
-        if (xhr.status >= 200 && xhr.status < 300) {
-            const data = JSON.parse(xhr.responseText);
-            if (data.success) {
-                // Close modal
-                const modalEl = document.getElementById('newVersionModal-' + docId);
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
+    // Direct to the bucket through the shared engine; the server adds the
+    // version and keeps processing it in the background.
+    window.resumableUpload.start(file, {
+        kind: 'document',
+        document: {
+            target: 'version',
+            document_share_id: docId,
+            change_notes: notesInput ? notesInput.value.trim() : '',
+        },
+    }).then(function(response) {
+        window.removeEventListener('resumable-upload-progress', onProgress);
 
-                if (window.uploadUI) {
-                    window.uploadUI.setHeaderTitle('PROCESSING NEW VERSION');
-                    window.uploadUI.setSubtitle('Generating previews and search indexes...');
-                }
+        const modalEl = document.getElementById('newVersionModal-' + docId);
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
 
-                // Refresh current view using HTMX or location reload
-                if (window.htmx) {
-                    htmx.ajax('GET', window.location.pathname, '#page-content-target');
-                } else {
-                    window.location.reload();
-                }
-            } else {
-                errorAlert.textContent = data.error || 'Upload failed';
-                errorAlert.classList.remove('d-none');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Upload Version';
-                if (window.uploadUI) window.uploadUI.showError(data.error || 'Upload failed');
-            }
+        if (window.uploadUI) {
+            window.uploadUI.setHeaderTitle('VERSION UPLOADED', 'phase-published');
+            window.uploadUI.setTitle('New version uploaded!');
+            window.uploadUI.setSubtitle('Processing in the background — carry on, we will keep working');
+            window.uploadUI.setProgressFillClass('phase-published');
+            window.uploadUI.setAggregateProgress(100, 'Uploaded ✓');
+            window.uploadUI.clearAggregateProgress();
+            setTimeout(function() {
+                if (window.uploadUI) window.uploadUI.hide();
+            }, 4000);
+        }
+
+        // Refresh current view using HTMX or location reload
+        if (window.htmx) {
+            htmx.ajax('GET', window.location.pathname, '#page-content-target');
         } else {
-            let errorMsg = 'Upload failed with status ' + xhr.status;
-            try {
-                const res = JSON.parse(xhr.responseText);
-                if (res.error) errorMsg = res.error;
-            } catch(err) {}
-            errorAlert.textContent = errorMsg;
-            errorAlert.classList.remove('d-none');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Upload Version';
-            if (window.uploadUI) window.uploadUI.showError(errorMsg);
+            window.location.reload();
         }
-    };
-
-    xhr.onerror = function() {
-        errorAlert.textContent = 'Network error during upload. Please try again.';
+        return response;
+    }).catch(function(err) {
+        window.removeEventListener('resumable-upload-progress', onProgress);
+        console.error('[NewVersion] transfer failed:', err);
+        const message = (err && err.message) ? err.message : 'Upload failed';
+        errorAlert.textContent = message;
         errorAlert.classList.remove('d-none');
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Upload Version';
-        if (window.uploadUI) window.uploadUI.showError('Network error');
-    };
-
-    xhr.send(formData);
+        if (window.uploadUI) {
+            window.uploadUI.clearAggregateProgress();
+            window.uploadUI.showError(message, false);
+        }
+    });
 }
 </script>
 

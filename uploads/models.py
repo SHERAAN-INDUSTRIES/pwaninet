@@ -25,6 +25,16 @@ class UploadStatus(models.TextChoices):
 class UploadRecord(models.Model):
     """Durable, account-wide upload history. Never auto-deleted."""
 
+    # What the transferred bytes become once the transfer completes.
+    KIND_POST = "post"
+    KIND_DOCUMENT = "document"
+    KIND_TIMETABLE = "timetable"
+    KIND_CHOICES = (
+        (KIND_POST, "Post media"),
+        (KIND_DOCUMENT, "Document"),
+        (KIND_TIMETABLE, "Timetable image"),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="uploads",
@@ -33,6 +43,11 @@ class UploadRecord(models.Model):
     client_upload_id = models.UUIDField(db_index=True)
     # Optional group: all sessions sharing it attach to a single post.
     post_group = models.UUIDField(null=True, blank=True, db_index=True)
+    # What this transfer produces. Posts publish a feed post; documents
+    # publish a Document whose processing runs in the background.
+    kind = models.CharField(
+        max_length=20, choices=KIND_CHOICES, default=KIND_POST, db_index=True,
+    )
     filename = models.CharField(max_length=255)
     mime_type = models.CharField(max_length=127, blank=True, default="")
     file_size = models.BigIntegerField()
@@ -48,6 +63,10 @@ class UploadRecord(models.Model):
     retry_count = models.PositiveIntegerField(default=0)
     post = models.ForeignKey(
         "posts.Post", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="source_uploads",
+    )
+    document = models.ForeignKey(
+        "documents.Document", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="source_uploads",
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)

@@ -110,6 +110,15 @@
             this.voiceAudioContext = null;
             this.voiceAnalyser = null;
             this.voiceAnimationFrame = null;
+            // Spark voice output (reads a reply aloud via the Web Speech API)
+            this.speaking = false;
+            this.speakingBtn = null;
+            this.speakUtterance = null;
+            this.speechAudio = null;
+            this.speechRequestId = 0;
+            this.voiceStyle = workspace.dataset.sparkVoiceStyle || 'warm';
+            this.voiceGender = workspace.dataset.sparkVoiceGender || 'female';
+            this.autoTtsEnabled = workspace.dataset.sparkAutoTts === 'true';
             this.sidebarList = document.getElementById('pwanimate-sidebar-list');
             this.mobileList = document.getElementById('pwanimate-mobile-list');
             this.quotaStatusEl = document.getElementById('pwanimate-quota-status');
@@ -158,10 +167,16 @@
             this._studyContextSyncTimer = null;
 
             // Model selection & Quota modal state
-            this.selectedProvider = localStorage.getItem('pwanimate_selected_provider') || '';
-            this.selectedModel = localStorage.getItem('pwanimate_selected_model') || '';
-            this.selectedDisplay = localStorage.getItem('pwanimate_selected_display') || 'Auto';
-            this.selectedProviderLabel = localStorage.getItem('pwanimate_selected_provider_label') || '';
+            // Engines-only picker: raw provider/model selections are retired —
+            // migrate any stored legacy selection back to Auto.
+            ['pwanimate_selected_provider', 'pwanimate_selected_model', 'pwanimate_selected_display', 'pwanimate_selected_provider_label']
+                .forEach((key) => localStorage.removeItem(key));
+            this.selectedProvider = '';
+            this.selectedModel = '';
+            this.selectedDisplay = 'Auto';
+            this.selectedProviderLabel = '';
+            this.selectedEngine = localStorage.getItem('pwanimate_selected_engine') || '';
+            this.selectedEngineLabel = localStorage.getItem('pwanimate_selected_engine_label') || '';
             this.selectedModelLabel = workspace.querySelector('#pwanimate-selected-model-label');
             this.dropdownStatusDot = workspace.querySelector('#pwanimate-dropdown-status-dot');
             this.dropdownModelsList = workspace.querySelector('#pwanimate-dropdown-models-list');
@@ -184,12 +199,16 @@
             requestAnimationFrame(() => this.checkCollapsibleUserBubbles());
             this.bindEvents();
             this.initVoiceInput();
+            this.initSpeakReplies();
             this.initMobileMenuSwipeNavigation();
             this.initContextDocumentPicker();
             this.initAttachmentHandlers();
-            this.updateQuotaStatus({ models: this.getDefaultModels() });
+            this.updateQuotaStatus({ engines: this.getDefaultEngines() });
             this.updateSelectedModelUI();
             this.updateSendButtonState();
+            this.initQuotaChip();
+            this.initSubscriptionOverlay();
+            this.initVisionChoice();
             if (this.input && this.input.value) {
                 this.resizeTextarea();
             }
@@ -197,6 +216,470 @@
             this.fetchQuotaStatus();
             this.updateTimestamps(); // apply relative time to any server-rendered timestamps
             this.startTimestampTicker();
+        }
+
+        // ------------------------------------------------------------ quota chip
+        // The composer's daily-usage indicator. It reads the same counters the
+        // quota check enforces, so the number shown is the number acted on.
+        initQuotaChip() {
+            this.quotaWrap = document.getElementById('pwanimateQuotaWrap');
+            this.quotaChip = document.getElementById('pwanimateQuotaChip');
+            this.quotaArc = document.getElementById('pwanimateQuotaArc');
+            this.quotaLabel = document.getElementById('pwanimateQuotaLabel');
+            this.quotaPopover = document.getElementById('pwanimateQuotaPopover');
+            if (!this.quotaWrap || !this.quotaChip) return;
+
+            this.quotaState = null;
+
+            // Hover/focus opens the detail; click toggles it (touch friendly).
+            this.quotaChip.addEventListener('mouseenter', () => this.openQuotaPopover());
+            this.quotaChip.addEventListener('mouseleave', () => this.scheduleQuotaClose());
+            this.quotaPopover.addEventListener('mouseenter', () => this.quotaCloseTimer && clearTimeout(this.quotaCloseTimer));
+            this.quotaPopover.addEventListener('mouseleave', () => this.scheduleQuotaClose());
+            this.quotaChip.addEventListener('focus', () => this.openQuotaPopover());
+            this.quotaChip.addEventListener('blur', () => this.scheduleQuotaClose());
+            this.quotaChip.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (this.quotaPopover.hidden) this.openQuotaPopover();
+                else this.closeQuotaPopover();
+            });
+            this.quotaPopover.addEventListener('click', (event) => event.stopPropagation());
+            document.addEventListener('click', () => this.closeQuotaPopover());
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') this.closeQuotaPopover();
+            });
+
+            this.loadQuota();
+            this.quotaTimer = setInterval(() => this.loadQuota(), 60000);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) this.loadQuota();
+            });
+        }
+
+        async loadQuota() {
+            try {
+                const response = await fetch('/api/pwanimate/billing/quota/', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                this.quotaState = data.quota || null;
+                this.renderQuotaChip();
+            } catch (error) {
+                // The chip is an aid, never a dependency: a failure here must
+                // not disturb the chat.
+            }
+        }
+
+        renderQuotaChip() {
+            const state = this.quotaState;
+            if (!state || !this.quotaChip) return;
+            const chats = state.chats || {};
+            const limit = Number(chats.limit);
+            const used = Number(chats.used || 0);
+            if (!limit || limit <= 0) {
+                this.quotaWrap.hidden = true;
+                return;
+            }
+            this.quotaWrap.hidden = false;
+
+            const remaining = Math.max(0, limit - used);
+            const ratio = Math.min(1, Math.max(0, remaining / limit));
+            const circumference = 2 * Math.PI * 15;
+            if (this.quotaArc) {
+                this.quotaArc.setAttribute('stroke-dasharray', `${circumference}`);
+                this.quotaArc.setAttribute('stroke-dashoffset', `${circumference * (1 - ratio)}`);
+            }
+            // The ring is the chat allowance (the thing that can run out);
+            // the number is the tokens Spark has read for you today.
+            const tokens = state.tokens || {};
+            if (this.quotaLabel) {
+                this.quotaLabel.textContent = this.formatQuotaTokens(tokens.total || 0);
+            }
+            this.quotaChip.classList.toggle('is-warning', ratio > 0 && ratio <= 0.2);
+            this.quotaChip.classList.toggle('is-critical', remaining <= 0);
+
+            this.quotaChip.setAttribute(
+                'aria-label',
+                `${this.formatQuotaTokens(tokens.total || 0)} tokens today. ` +
+                `${remaining} of ${limit} chats left today.`
+            );
+            if (this.quotaPopover && !this.quotaPopover.hidden) this.renderQuotaPopover();
+        }
+
+        formatQuotaTokens(value) {
+            const tokens = Number(value || 0);
+            if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+            if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
+            return String(tokens);
+        }
+
+        scheduleQuotaClose() {
+            if (this.quotaCloseTimer) clearTimeout(this.quotaCloseTimer);
+            this.quotaCloseTimer = setTimeout(() => {
+                if (this.quotaPopover && this.quotaPopover.matches(':hover')) return;
+                this.closeQuotaPopover();
+            }, 140);
+        }
+
+        openQuotaPopover() {
+            if (!this.quotaPopover || !this.quotaState) return;
+            this.renderQuotaPopover();
+            this.quotaPopover.hidden = false;
+            this.quotaChip.setAttribute('aria-expanded', 'true');
+            // Flip below when there is no room above.
+            this.quotaPopover.classList.remove('is-below');
+            if (this.quotaPopover.getBoundingClientRect().top < 8) {
+                this.quotaPopover.classList.add('is-below');
+            }
+        }
+
+        closeQuotaPopover() {
+            if (!this.quotaPopover) return;
+            this.quotaPopover.hidden = true;
+            this.quotaChip.setAttribute('aria-expanded', 'false');
+        }
+
+        renderQuotaPopover() {
+            const state = this.quotaState;
+            if (!state || !this.quotaPopover) return;
+            const chats = state.chats || {};
+            const images = state.images || {};
+            const tokens = state.tokens || {};
+            const tier = state.tier || {};
+            const resetText = state.resets_at ? this.quotaResetText(state.resets_at) : '';
+            const rows = [
+                ['Chats left today', `${chats.remaining ?? '—'} of ${chats.limit ?? '—'}`],
+                ['Images left today', `${images.remaining ?? '—'} of ${images.limit ?? '—'}`],
+                ['Tokens today', this.formatQuotaTokens(tokens.total || 0)],
+            ];
+            this.quotaPopover.innerHTML = `
+                <div class="pwanimate-quota-popover-title" id="pwanimateQuotaPopoverTitle">
+                    <span>${escapeHtml(tier.name || 'Free')}</span>
+                    <span class="pwanimate-quota-popover-tier">${tier.is_free ? 'Free tier' : 'Paid tier'}</span>
+                </div>
+                <dl class="pwanimate-quota-popover-rows">
+                    ${rows.map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join('')}
+                </dl>
+                <p class="pwanimate-quota-popover-note">${resetText ? `Daily allowance resets ${escapeHtml(resetText)}. ` : ''}Free routes are used whenever they are healthy — your allowance is never a hard block.</p>
+                <button type="button" class="pwanimate-quota-popover-cta" data-quota-usage-link>View full usage</button>
+            `;
+            const link = this.quotaPopover.querySelector('[data-quota-usage-link]');
+            if (link) {
+                link.addEventListener('click', () => {
+                    this.closeQuotaPopover();
+                    this.openUsageDashboard();
+                });
+            }
+        }
+
+        /** Open the Spark settings on the Usage tab — the right surface for the device. */
+        openUsageDashboard() {
+            // The mobile settings are a PAGE, not a modal: the modal is the
+            // desktop surface. Same breakpoint the app uses for the mobile
+            // settings layout (max-width: 767.98px).
+            const isMobile = !!(window.matchMedia
+                && window.matchMedia('(max-width: 767.98px)').matches);
+            if (isMobile) {
+                window.location.href = '/pwanimate/settings/usage/';
+                return;
+            }
+            const modal = document.getElementById('pwanimateSettingsModal');
+            if (modal && window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modal).show();
+            }
+            if (typeof window.switchSparkSettingsTab === 'function') {
+                window.switchSparkSettingsTab('modal', 'usage');
+            }
+        }
+
+        // ------------------------------------------------- vision image choice
+        /**
+         * One-time choice after a vision failure: keep the image in the
+         * conversation (so it can be reused) or drop it for good. The answer
+         * is recorded server-side, so the question is never asked twice.
+         */
+        initVisionChoice() {
+            document.addEventListener('click', async (event) => {
+                const button = event.target.closest('[data-vision-policy]');
+                if (!button) return;
+                const holder = button.closest('[data-vision-choice]');
+                const attachmentId = holder ? holder.dataset.visionChoice : null;
+                if (!attachmentId) return;
+                const policy = button.dataset.visionPolicy;
+                button.disabled = true;
+                try {
+                    const response = await fetch(
+                        `/api/pwanimate/attachments/${attachmentId}/vision-policy/`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRFToken': getCsrfToken(),
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ policy }),
+                        }
+                    );
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        button.disabled = false;
+                        return;
+                    }
+                    if (holder) {
+                        holder.innerHTML = `<i class="bi bi-check2"></i><span>${escapeHtml(data.message || 'Saved.')}</span>`;
+                    }
+                } catch (error) {
+                    button.disabled = false;
+                }
+            });
+        }
+
+        // ------------------------------------------------- subscription overlay
+        initSubscriptionOverlay() {
+            this.subscriptionOverlay = document.getElementById('pwanimateSubscriptionOverlay');
+            if (!this.subscriptionOverlay) return;
+            this.paymentTier = null;
+            this.paymentReference = null;
+
+            // Lift it to the body so it always paints above the settings
+            // modal (and its backdrop) whatever the chat layout does.
+            if (this.subscriptionOverlay.parentElement !== document.body) {
+                document.body.appendChild(this.subscriptionOverlay);
+            }
+
+            document.addEventListener('click', (event) => {
+                const opener = event.target.closest('[data-open-subscription]');
+                if (opener) {
+                    event.preventDefault();
+                    this.openSubscriptionOverlay();
+                    return;
+                }
+                const closer = event.target.closest('[data-close-subscription]');
+                if (closer) {
+                    event.preventDefault();
+                    this.closeSubscriptionOverlay();
+                    return;
+                }
+                const subscribe = event.target.closest('[data-subscribe-tier]');
+                if (subscribe) {
+                    event.preventDefault();
+                    this.startSubscriptionPayment(
+                        subscribe.dataset.subscribeTier,
+                        subscribe.dataset.tierPrice
+                    );
+                    return;
+                }
+                if (event.target.closest('[data-cancel-payment]')) {
+                    event.preventDefault();
+                    this.closeSubscriptionOverlay();
+                    return;
+                }
+                if (event.target.closest('[data-submit-payment]')) {
+                    event.preventDefault();
+                    this.submitSubscriptionPayment();
+                    return;
+                }
+                if (event.target.closest('[data-demo-complete]')) {
+                    event.preventDefault();
+                    this.completeDemoPayment();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !this.subscriptionOverlay.hidden) {
+                    this.closeSubscriptionOverlay();
+                }
+            });
+        }
+
+        openSubscriptionOverlay() {
+            if (!this.subscriptionOverlay) return;
+            this.subscriptionOverlay.hidden = false;
+            this.loadTiers();
+        }
+
+        closeSubscriptionOverlay() {
+            if (!this.subscriptionOverlay) return;
+            this.subscriptionOverlay.hidden = true;
+            const payment = document.getElementById('pwanimateSubscriptionPayment');
+            if (payment) payment.hidden = true;
+        }
+
+        async loadTiers() {
+            const container = document.getElementById('pwanimateSubscriptionCards');
+            if (!container) return;
+            try {
+                const response = await fetch('/api/pwanimate/billing/tiers/', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                const current = data.current_tier;
+                container.querySelectorAll('[data-tier-code]').forEach((card) => {
+                    const isCurrent = card.dataset.tierCode === current;
+                    card.classList.toggle('is-current', isCurrent);
+                    // The "Your plan" badge moves with the current tier.
+                    const badge = card.querySelector('.pwanimate-subscription-current');
+                    if (badge) badge.classList.toggle('d-none', !isCurrent);
+                    // ...and so does the button's label.
+                    const button = card.querySelector('[data-subscribe-tier]');
+                    if (!button) return;
+                    const price = Number(button.dataset.tierPrice || 0);
+                    button.disabled = isCurrent;
+                    button.classList.toggle('btn-outline-secondary', isCurrent);
+                    button.classList.toggle('btn-primary', !isCurrent);
+                    button.textContent = isCurrent
+                        ? 'Current plan'
+                        : (price > 0 ? 'Upgrade' : 'Included');
+                });
+            } catch (error) {
+                // The overlay stays usable with its server-rendered cards.
+            }
+        }
+
+        startSubscriptionPayment(tierCode, price) {
+            this.paymentTier = tierCode;
+            this.paymentReference = null;
+            const payment = document.getElementById('pwanimateSubscriptionPayment');
+            const summary = document.getElementById('pwanimatePaymentSummary');
+            const label = document.getElementById('pwanimatePaymentButtonLabel');
+            const status = document.getElementById('pwanimatePaymentStatus');
+            const demoButton = this.subscriptionOverlay.querySelector('[data-demo-complete]');
+            // Use the tier's display name ("Pro Monthly"), not its code.
+            const card = this.subscriptionOverlay.querySelector(`[data-tier-code="${tierCode}"]`);
+            const nameEl = card ? card.querySelector('.pwanimate-subscription-name') : null;
+            const tierName = nameEl ? nameEl.textContent.trim() : tierCode.replace(/_/g, ' ');
+            if (summary) {
+                summary.textContent = `You are upgrading to ${tierName} — KSh ${price}.`;
+            }
+            if (label) label.textContent = `Pay KSh ${price}`;
+            if (status) {
+                status.textContent = '';
+                status.classList.remove('is-error', 'is-success');
+            }
+            if (demoButton) demoButton.classList.add('d-none');
+            if (payment) payment.hidden = false;
+            const phone = document.getElementById('pwanimatePaymentPhone');
+            if (phone) phone.focus();
+        }
+
+        async submitSubscriptionPayment() {
+            const phone = document.getElementById('pwanimatePaymentPhone');
+            const status = document.getElementById('pwanimatePaymentStatus');
+            const demoButton = this.subscriptionOverlay.querySelector('[data-demo-complete]');
+            if (!this.paymentTier) return;
+            try {
+                const response = await fetch('/api/pwanimate/billing/mpesa/stk/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        tier_code: this.paymentTier,
+                        phone: phone ? phone.value : '',
+                    }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    if (status) {
+                        status.textContent = data.error || 'Could not start the payment.';
+                        status.classList.add('is-error');
+                    }
+                    return;
+                }
+                this.paymentReference = data.payment ? data.payment.reference : null;
+                if (status) {
+                    status.textContent = data.message || 'Check your phone for the M-Pesa prompt.';
+                    status.classList.remove('is-error');
+                }
+                if (demoButton) demoButton.classList.toggle('d-none', !data.demo);
+            } catch (error) {
+                if (status) {
+                    status.textContent = 'Could not reach the payment service. Try again.';
+                    status.classList.add('is-error');
+                }
+            }
+        }
+
+        async completeDemoPayment() {
+            const status = document.getElementById('pwanimatePaymentStatus');
+            if (!this.paymentReference) return;
+            try {
+                const response = await fetch('/api/pwanimate/billing/mpesa/demo-complete/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ reference: this.paymentReference }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.activated) {
+                    if (status) {
+                        status.textContent = data.error || 'The payment did not complete.';
+                        status.classList.add('is-error');
+                    }
+                    return;
+                }
+                if (status) {
+                    status.textContent = 'Payment complete — your plan is active.';
+                    status.classList.remove('is-error');
+                    status.classList.add('is-success');
+                }
+                // Refresh everything that depends on the tier.
+                if (this.loadQuota) this.loadQuota();
+                this.loadTiers();
+                this.refreshUsageTab();
+            } catch (error) {
+                if (status) {
+                    status.textContent = 'Could not complete the payment. Try again.';
+                    status.classList.add('is-error');
+                }
+            }
+        }
+
+        /** Re-render the Usage tab from the server so the numbers are fresh. */
+        async refreshUsageTab() {
+            const tab = document.getElementById('pwanimateUsageTab');
+            if (!tab) return;
+            try {
+                const response = await fetch('/pwanimate/settings/usage/', {
+                    headers: {
+                        'Accept': 'text/html',
+                        'HX-Request': 'true',
+                        'HX-Target': 'pwanimate-settings-modal-body',
+                    },
+                    credentials: 'same-origin',
+                });
+                if (!response.ok) return;
+                const html = await response.text();
+                tab.outerHTML = html;
+            } catch (error) {
+                // Keep the stale (but true) numbers rather than breaking the tab.
+            }
+        }
+
+        quotaResetText(iso) {
+            try {
+                const diff = new Date(iso).getTime() - Date.now();
+                if (diff <= 0) return 'shortly';
+                const hours = Math.floor(diff / 3600000);
+                const minutes = Math.floor((diff % 3600000) / 60000);
+                if (hours >= 1) return `in ${hours}h ${minutes}m`;
+                return `in ${minutes}m`;
+            } catch (error) {
+                return '';
+            }
         }
 
         initInitialContextResources() {
@@ -2113,6 +2596,39 @@
                         return;
                     }
 
+                    // A proposed action: the student approves or declines it.
+                    const actionConfirm = e.target.closest('.pwanimate-action-confirm');
+                    const actionCancel = e.target.closest('.pwanimate-action-cancel');
+                    if (actionConfirm || actionCancel) {
+                        e.preventDefault();
+                        const actionId = (actionConfirm || actionCancel).dataset.actionId;
+                        const decision = actionConfirm ? 'confirm' : 'cancel';
+                        this.decideAction(actionId, decision, actionConfirm || actionCancel);
+                        return;
+                    }
+
+                    // Feedback on a Spark answer.
+                    //
+                    // This is the platform's only outcome signal: what was
+                    // served and what it cost is already recorded, but
+                    // nothing recorded whether the answer was right.
+                    const feedbackBtn = e.target.closest('.pwanimate-feedback-btn[data-feedback]');
+                    if (feedbackBtn) {
+                        e.preventDefault();
+                        const row = feedbackBtn.closest('.pwanimate-message-row');
+                        this.sendFeedback(row, true, '');
+                        return;
+                    }
+
+                    const feedbackReason = e.target.closest('.pwanimate-feedback-reason-item');
+                    if (feedbackReason) {
+                        e.preventDefault();
+                        const row = feedbackReason.closest('.pwanimate-message-row');
+                        const reason = feedbackReason.dataset.reason || '';
+                        this.sendFeedback(row, false, reason);
+                        return;
+                    }
+
                     // Copy action on user or assistant message
                     const copyBtn = e.target.closest('.pwanimate-action-btn.copy-btn');
                     if (copyBtn) {
@@ -2128,6 +2644,19 @@
                                 const text = mdBody ? (mdBody.getAttribute('data-raw') || mdBody.innerText) : '';
                                 this.copyToClipboard(text, copyBtn);
                             }
+                        }
+                        return;
+                    }
+
+                    // Read an assistant reply aloud (per-message speaker)
+                    const speakBtn = e.target.closest('.pwanimate-action-btn.pwanimate-speak-btn');
+                    if (speakBtn) {
+                        e.preventDefault();
+                        const row = speakBtn.closest('.pwanimate-message-row.assistant');
+                        if (row) {
+                            const mdBody = row.querySelector('.pwanimate-markdown-body');
+                            const raw = mdBody ? (mdBody.getAttribute('data-raw') || mdBody.innerText) : '';
+                            this.speakResponse(raw, speakBtn);
                         }
                         return;
                     }
@@ -2460,15 +2989,13 @@
                     return;
                 }
 
-                // Model dropdown selection
+                // Spark engine dropdown selection (Auto item has no data-engine)
                 const opt = e.target.closest('.pwanimate-model-option');
                 if (opt) {
                     e.preventDefault();
-                    const provider = opt.dataset.provider || '';
-                    const model = opt.dataset.model || '';
+                    const engine = opt.dataset.engine || '';
                     const display = opt.dataset.display || 'Auto';
-                    const providerLabel = opt.dataset.providerLabel || '';
-                    this.selectModel(provider, model, display, providerLabel);
+                    this.selectEngine(engine, display);
                     return;
                 }
             };
@@ -2510,11 +3037,9 @@
                     const btn = e.target.closest('.pwanimate-modal-select-btn');
                     if (btn && !btn.classList.contains('disabled')) {
                         e.preventDefault();
-                        const provider = btn.dataset.provider || '';
-                        const model = btn.dataset.model || '';
+                        const engine = btn.dataset.engine || '';
                         const display = btn.dataset.display || 'Auto';
-                        const providerLabel = btn.dataset.providerLabel || '';
-                        this.selectModel(provider, model, display, providerLabel);
+                        this.selectEngine(engine, display);
 
                         // Dismiss modal
                         if (this.quotaModal) {
@@ -2568,6 +3093,156 @@
             this.voiceBtn.addEventListener('click', () => {
                 this.startVoiceCapture();
             });
+        }
+
+        initSpeakReplies() {
+            // Kick off async system-voice loading so the first read finds a
+            // matching voice right away. Playback itself is per-message and
+            // starts from a click (a user gesture, which iOS/Safari require).
+            if (typeof window.speechSynthesis !== 'undefined') {
+                try { window.speechSynthesis.getVoices(); } catch (error) { /* no-op */ }
+            }
+            window.addEventListener('beforeunload', () => this.stopSpeaking());
+        }
+
+        // Reflect playback state on a single per-message speaker button.
+        setSpeakBtnState(btn, active) {
+            if (!btn) return;
+            const icon = btn.querySelector('i');
+            btn.classList.toggle('is-speaking', active);
+            btn.setAttribute('aria-pressed', String(active));
+            const label = active ? 'Stop reading aloud' : 'Read this reply aloud';
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+            if (icon) {
+                icon.classList.toggle('bi-volume-up-fill', !active);
+                icon.classList.toggle('bi-stop-circle-fill', active);
+            }
+        }
+
+        stopSpeaking() {
+            const btn = this.speakingBtn;
+            this.speechRequestId += 1;
+            this.speaking = false;
+            this.speakingBtn = null;
+            this.speakUtterance = null;
+            if (this.speechAudio) {
+                this.speechAudio.pause();
+                this.speechAudio.removeAttribute('src');
+                this.speechAudio = null;
+            }
+            if (typeof window.speechSynthesis !== 'undefined') {
+                try { window.speechSynthesis.cancel(); } catch (error) { /* no-op */ }
+            }
+            if (btn) this.setSpeakBtnState(btn, false);
+        }
+
+        // Flatten markdown to something natural to read aloud.
+        textForSpeech(markdown) {
+            if (!markdown) return '';
+            let text = String(markdown);
+            // Drop fenced code blocks and math; keep the surrounding prose.
+            text = text.replace(/```[\s\S]*?```/g, ' ');
+            text = text.replace(/`([^`]+)`/g, '$1');
+            text = text.replace(/\$\$[\s\S]*?\$\$/g, ' ');
+            text = text.replace(/\$[^$\n]+\$/g, ' ');
+            // Images -> alt text; links -> their visible label.
+            text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+            text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+            // Headings, quotes, list bullets, numbered lists, table pipes.
+            text = text.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+            text = text.replace(/^\s{0,3}>\s?/gm, '');
+            text = text.replace(/^\s*[-*+]\s+/gm, '');
+            text = text.replace(/^\s*\d+\.\s+/gm, '');
+            text = text.replace(/\|/g, ' ');
+            // Emphasis markers.
+            text = text.replace(/(\*\*|__|~~|\*|_)/g, '');
+            // Bare URLs -> read the hostname only.
+            text = text.replace(/https?:\/\/\S+/g, (url) => {
+                try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return 'link'; }
+            });
+            return text.replace(/\s+/g, ' ').trim();
+        }
+
+        speakResponse(markdown, btn) {
+            // Tapping the active button again stops playback.
+            if (this.speaking && this.speakingBtn === btn) {
+                this.stopSpeaking();
+                return;
+            }
+
+            const text = this.textForSpeech(markdown);
+            if (!text) return;
+
+            // Clear any other reply still marked active, then preempt it:
+            // a new read cancels whatever is currently playing.
+            if (this.speakingBtn && this.speakingBtn !== btn) this.setSpeakBtnState(this.speakingBtn, false);
+            this.stopSpeaking();
+
+            const requestId = ++this.speechRequestId;
+            this.speaking = true;
+            this.speakingBtn = btn;
+            this.setSpeakBtnState(btn, true);
+            this.requestServerSpeech(text, btn, requestId);
+        }
+
+        async requestServerSpeech(text, btn, requestId) {
+            try {
+                const response = await fetch('/api/pwanimate/voice/synthesize/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                        'Accept': 'audio/mpeg'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        text,
+                        voice_id: `${this.voiceStyle}_${this.voiceGender}`
+                    })
+                });
+                if (response.ok && requestId === this.speechRequestId) {
+                    const audio = new Audio(URL.createObjectURL(await response.blob()));
+                    this.speechAudio = audio;
+                    audio.onended = () => {
+                        if (requestId === this.speechRequestId) this.stopSpeaking();
+                    };
+                    audio.onerror = () => {
+                        if (requestId === this.speechRequestId) this.stopSpeaking();
+                    };
+                    await audio.play();
+                    return;
+                }
+            } catch (error) {
+                // Fall back to the browser voice when Azure is unavailable.
+            }
+            if (requestId === this.speechRequestId) this.speakWithBrowserVoice(text, btn, requestId);
+        }
+
+        speakWithBrowserVoice(text, btn, requestId) {
+            if (typeof window.speechSynthesis === 'undefined'
+                || typeof window.SpeechSynthesisUtterance === 'undefined') {
+                this.stopSpeaking();
+                return;
+            }
+            const pageLang = document.documentElement.lang === 'sw' ? 'sw' : 'en';
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = pageLang;
+            utterance.rate = 1.0;
+            try {
+                const voices = window.speechSynthesis.getVoices() || [];
+                const match = voices.find(v => (v.lang || '').toLowerCase().replace('_', '-') === pageLang)
+                    || voices.find(v => (v.lang || '').toLowerCase().startsWith(pageLang));
+                if (match) utterance.voice = match;
+            } catch (error) { /* keep default voice */ }
+            const finish = () => {
+                if (this.speakUtterance !== utterance || requestId !== this.speechRequestId) return;
+                this.stopSpeaking();
+            };
+            utterance.onend = finish;
+            utterance.onerror = finish;
+            this.speakUtterance = utterance;
+            window.speechSynthesis.speak(utterance);
         }
 
         async startVoiceCapture() {
@@ -2729,12 +3404,23 @@
                     body: formData,
                     signal: controller.signal,
                 });
+
+                // Check content type before parsing JSON
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    // Server returned HTML or non-JSON response (likely an error page)
+                    const text = await response.text();
+                    console.error('[Voice Transcription] Non-JSON response:', text.substring(0, 200));
+                    throw new Error('Server returned an invalid response. Please try again.');
+                }
+
                 const payload = await response.json();
                 if (!response.ok) throw new Error(payload.error || 'Transcription failed. Please try again.');
                 this.voiceFinalTranscript = (payload.text || '').trim();
                 if (!this.voiceFinalTranscript) this.voiceErrorMessage = 'No speech was recognized. Please try again.';
             } catch (error) {
                 if (this.voiceCancelled) return;
+                console.error('[Voice Transcription] Error:', error);
                 this.voiceErrorMessage = error.message || 'Transcription failed. Please try again.';
             } finally {
                 if (this.voiceTranscriptionAbortController === controller) this.voiceTranscriptionAbortController = null;
@@ -2747,6 +3433,7 @@
         setVoiceListening(isListening) {
             const wasListening = this.voiceListening;
             this.voiceListening = isListening;
+            if (isListening) this.stopSpeaking();
             if (isListening && !wasListening) {
                 this.voiceWaveformHistory = this.voiceWaveformBars.map(() => 0);
                 this.voiceWaveformLastSampleAt = 0;
@@ -4420,6 +5107,7 @@
 
         setGenerating(loading) {
             this.isGenerating = loading;
+            if (loading) this.stopSpeaking();
             if (this.input) this.input.disabled = loading;
             if (this.voiceBtn) this.voiceBtn.disabled = loading || this.voiceStarting || !this.voiceRecorderSupported;
             if (loading && (this.voiceListening || this.voiceStarting || this.voiceStopping)) this.cancelVoiceCapture();
@@ -4960,11 +5648,8 @@
                 if (!this.conversationId) {
                     payload.create_conversation = true;
                 }
-                if (this.selectedProvider) {
-                    payload.provider = this.selectedProvider;
-                }
-                if (this.selectedModel) {
-                    payload.model = this.selectedModel;
+                if (this.selectedEngine) {
+                    payload.engine = this.selectedEngine;
                 }
                 if (snapshotAttachments.length > 0) {
                     payload.attachments = snapshotAttachments.map(a => a.id);
@@ -4989,14 +5674,51 @@
                 let data;
                 let responseOk = response.ok;
                 let responseStatus = response.status;
+                // Progressive token rendering: a live bubble fills as `chunk`
+                // events arrive; once the final `response` event lands it is
+                // replaced by the fully-rendered message row (identical to the
+                // non-streaming path).
+                let streamRow = null;
+                let streamRaw = '';
+                let streamRenderTimer = null;
+                const finalizeStreamBubble = () => {
+                    if (streamRenderTimer) {
+                        clearTimeout(streamRenderTimer);
+                        streamRenderTimer = null;
+                    }
+                    if (streamRow && streamRow.parentNode) {
+                        streamRow.remove();
+                    }
+                    streamRow = null;
+                };
+                const onChunk = (chunkText) => {
+                    if (!chunkText) return;
+                    if (!streamRow) {
+                        this.removeTypingIndicator();
+                        streamRow = this.createStreamingRow();
+                    }
+                    streamRaw += chunkText;
+                    if (!streamRenderTimer) {
+                        streamRenderTimer = setTimeout(() => {
+                            streamRenderTimer = null;
+                            const body = streamRow ? streamRow.querySelector('.pwanimate-markdown-body') : null;
+                            if (body) {
+                                body.innerHTML = this.renderMarkdownWithMathAndCode(streamRaw);
+                                body.dataset.raw = streamRaw;
+                                this.scrollToBottom();
+                            }
+                        }, 80);
+                    }
+                };
                 if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
-                    const streamed = await this.readChatEventStream(response);
+                    const streamed = await this.readChatEventStream(response, onChunk);
                     data = streamed.data || {};
                     responseStatus = Number(streamed.status_code) || response.status;
                     responseOk = responseStatus >= 200 && responseStatus < 300;
                 } else {
                     data = await response.json();
                 }
+                finalizeStreamBubble();
 
                 // Handle conversation ID update even if there's an error, to prevent spawning new conversations
                 if (data.conversation_id && !this.conversationId) {
@@ -5072,13 +5794,15 @@
                     fallback_used: data.fallback_info ? data.fallback_info.fallback_used : false
                 });
 
-                const assistantRow = this.appendAssistantMessage(data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html);
+                const assistantRow = this.appendAssistantMessage(data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || []);
                 const disclaimer = this.transcript.querySelector('#pwanimate-chat-disclaimer');
                 if (disclaimer) disclaimer.classList.remove('d-none');
                 this.scrollToMessageStart(assistantRow);
                 this.refreshConversationsList();
                 this.updateQuotaStatus(data.quota_status);
-                this.updateActiveModelChip(data.quota_info);
+                this.updateActiveModelChip(data.quota_info, data.serving_engine);
+                // The usage counters moved — refresh the composer's quota chip.
+                if (this.loadQuota) this.loadQuota();
 
             } catch (err) {
                 if (err.name === 'AbortError') {
@@ -5205,7 +5929,7 @@
             requestAnimationFrame(() => textEl.classList.add('status-changing'));
         }
 
-        async readChatEventStream(response) {
+        async readChatEventStream(response, onChunk = null) {
             if (!response.body || typeof response.body.getReader !== 'function') {
                 throw new Error('Live progress is not supported by this browser.');
             }
@@ -5234,6 +5958,10 @@
 
                 if (eventName === 'status') {
                     this.updateThinkingStatus(payload.stage);
+                } else if (eventName === 'chunk') {
+                    if (onChunk && typeof payload.text === 'string') {
+                        onChunk(payload.text);
+                    }
                 } else if (eventName === 'response') {
                     finalPayload = payload;
                 }
@@ -5453,7 +6181,104 @@
         }
 
 
-        appendAssistantMessage(answer, sources, citations, fallbackInfo, quotaInfo, people = [], messageId = null, peopleHtmlFromServer = '') {
+        createStreamingRow() {
+            // Lightweight assistant bubble used ONLY while chunks stream in;
+            // the final response event swaps it for the full message row.
+            const row = document.createElement('div');
+            row.className = 'pwanimate-message-row assistant pwanimate-streaming-row';
+            row.innerHTML = `
+                <div class="pwanimate-message-content">
+                    <div class="pwanimate-assistant-bubble">
+                        <div class="pwanimate-assistant-header">
+                            <img src="/static/images/pwanimate/pwanimate-transparent.png" class="pwanimate-assistant-avatar" alt="Spark">
+                            <span>Spark</span>
+                        </div>
+                        <div class="pwanimate-markdown-body" data-raw=""></div>
+                    </div>
+                </div>
+            `;
+            this.transcript.appendChild(row);
+            return row;
+        }
+
+        // ------------------------------------------------- proposed actions
+        async decideAction(actionId, decision, button) {
+            if (!actionId) return;
+            if (button) button.disabled = true;
+
+            try {
+                const response = await fetch(`/api/pwanimate/actions/${actionId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ decision: decision }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    this.showSystemNotice(data.error || 'That action could not be completed.');
+                    if (button) button.disabled = false;
+                    return;
+                }
+
+                const action = data.action || {};
+                const card = button ? button.closest('.pwanimate-action-card') : null;
+                if (card) {
+                    card.dataset.actionStatus = action.status || '';
+                    const title = card.querySelector('.pwanimate-action-card-title');
+                    const buttons = card.querySelector('.pwanimate-action-card-buttons');
+                    if (buttons) buttons.remove();
+                    if (title) {
+                        title.textContent = action.status === 'confirmed'
+                            ? 'Done'
+                            : (action.status === 'cancelled' ? 'Cancelled' : 'Done');
+                    }
+                }
+            } catch (error) {
+                console.warn('[Spark] Could not complete the action', error);
+                if (button) button.disabled = false;
+            }
+        }
+
+        // ------------------------------------------------- answer feedback
+        async sendFeedback(row, helpful, reason) {
+            if (!row) return;
+            const messageId = row.dataset.messageId;
+            if (!messageId) return;
+
+            const buttons = row.querySelectorAll('.pwanimate-feedback-btn');
+            buttons.forEach((btn) => btn.classList.add('disabled'));
+
+            try {
+                const response = await fetch(`/api/pwanimate/messages/${messageId}/feedback/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ helpful: helpful, reason: reason || '' }),
+                });
+                if (!response.ok) return;
+
+                // Mark the chosen verdict so the student can see it landed.
+                buttons.forEach((btn) => btn.classList.remove('feedback-active'));
+                const wanted = helpful ? '[data-feedback="helpful"]' : '.pwanimate-feedback-reason > .pwanimate-feedback-btn';
+                const chosen = row.querySelector(wanted);
+                if (chosen) chosen.classList.add('feedback-active');
+            } catch (error) {
+                // Feedback is a courtesy; never surface an error to a student.
+                console.warn('[Spark] Could not record feedback', error);
+            } finally {
+                buttons.forEach((btn) => btn.classList.remove('disabled'));
+            }
+        }
+
+        appendAssistantMessage(answer, sources, citations, fallbackInfo, quotaInfo, people = [], messageId = null, peopleHtmlFromServer = '', pendingActions = []) {
             const row = document.createElement('div');
             row.className = 'pwanimate-message-row assistant';
             if (messageId) {
@@ -5545,36 +6370,52 @@
                 `;
             }
 
+            // Actions Spark proposed. Nothing has happened yet: the student
+            // approves here, and the card updates to say so.
+            let actionsHtml = '';
+            if (Array.isArray(pendingActions) && pendingActions.length > 0) {
+                const cards = pendingActions.map((action) => {
+                    const actionId = escapeHtml(action.id || '');
+                    const summary = escapeHtml(action.summary || '');
+                    const decided = action.status && action.status !== 'pending';
+                    const statusText = decided
+                        ? (action.status === 'confirmed' ? 'Done' : escapeHtml(action.status))
+                        : 'Needs your approval';
+                    return `
+                        <div class="pwanimate-action-card" data-action-id="${actionId}" data-action-status="${escapeHtml(action.status || 'pending')}">
+                            <div class="pwanimate-action-card-header">
+                                <i class="bi bi-send"></i>
+                                <span class="pwanimate-action-card-title">${statusText}</span>
+                            </div>
+                            <div class="pwanimate-action-card-body">${summary}</div>
+                            ${decided ? '' : `
+                                <div class="pwanimate-action-card-buttons">
+                                    <button type="button" class="btn btn-sm btn-primary pwanimate-action-confirm" data-action-id="${actionId}">Send</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary pwanimate-action-cancel" data-action-id="${actionId}">Cancel</button>
+                                </div>`}
+                        </div>`;
+                }).join('');
+                actionsHtml = `<div class="pwanimate-action-cards">${cards}</div>`;
+            }
+
             let fallbackHtml = '';
             if (fallbackInfo && fallbackInfo.vision_text_fallback) {
-                const used = escapeHtml(fallbackInfo.provider_used || 'an available text model');
-                fallbackHtml = `
-                    <div class="pwanimate-fallback-notice">
-                        <i class="bi bi-eye-slash"></i>
-                        <span>Image vision models couldn’t process this request. I continued with your text using <strong>${used}</strong>; the image wasn’t analyzed.</span>
-                    </div>
-                `;
-            } else if (quotaInfo && quotaInfo.switched) {
-                const orig = escapeHtml(quotaInfo.primary_model || quotaInfo.primary_provider || 'primary model');
-                const active = escapeHtml(quotaInfo.active_model || quotaInfo.active_provider || 'alternate model');
-                fallbackHtml = `
-                    <div class="pwanimate-fallback-notice">
-                        <i class="bi bi-lightning-charge-fill"></i>
-                        <span>Free-tier limit reached for <strong>${orig}</strong>. Automatically switched to <strong>${active}</strong>.</span>
-                    </div>
-                `;
-            } else if (fallbackInfo && fallbackInfo.fallback_used) {
-                const orig = escapeHtml(fallbackInfo.original_provider || '');
-                const used = escapeHtml(fallbackInfo.provider_used || '');
-                const fallbackText = fallbackInfo.vision_fallback
-                    ? `Gemini vision was unavailable. Answered by <strong>${used}</strong>.`
-                    : `Answered by <strong>${used}</strong> (${orig} quota exceeded).`;
-                fallbackHtml = `
-                    <div class="pwanimate-fallback-notice">
-                        <i class="bi bi-arrow-repeat"></i>
-                        <span>${fallbackText}</span>
-                    </div>
-                `;
+                // No banner: the model reports the outage in its answer. The
+                // only extra is a one-time CHOICE (the image may be one the
+                // student wants to keep asking about) — shown while the
+                // decision is still open, never repeated.
+                const attachmentId = fallbackInfo.vision_attachment_id;
+                const policy = fallbackInfo.vision_policy || 'ask';
+                if (attachmentId && policy === 'ask') {
+                    fallbackHtml = `
+                        <div class="pwanimate-fallback-notice pwanimate-vision-choice" data-vision-choice="${escapeHtml(attachmentId)}">
+                            <i class="bi bi-eye-slash"></i>
+                            <span>Keep this image in the conversation?</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-vision-policy="keep">Keep it</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-vision-policy="drop">Drop it</button>
+                        </div>
+                    `;
+                }
             }
 
             row.innerHTML = `
@@ -5588,6 +6429,7 @@
                         ${peopleHtml}
                         ${citationsHtml}
                         ${fallbackHtml}
+                        ${actionsHtml}
                     </div>
                     <div class="pwanimate-message-actions assistant-actions">
                         <div class="dropdown pwanimate-resource-export">
@@ -5599,6 +6441,25 @@
                                 <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i class="bi bi-filetype-docx me-2"></i>Download Word document</button></li>
                             </ul>
                         </div>
+                        <button type="button" class="btn pwanimate-action-btn pwanimate-feedback-btn" data-feedback="helpful" title="This helped" aria-label="This helped">
+                            <i class="bi bi-hand-thumbs-up"></i>
+                        </button>
+                        <div class="dropdown pwanimate-feedback-reason">
+                            <button type="button" class="btn pwanimate-action-btn pwanimate-feedback-btn" data-bs-toggle="dropdown" aria-expanded="false" title="This did not help" aria-label="This did not help">
+                                <i class="bi bi-hand-thumbs-down"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end pwanimate-feedback-reason-menu">
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_answer">The answer is wrong</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="not_my_document">It ignored my document</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="too_slow">It took too long</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_language">Wrong language or register</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="too_long">Too long or too short</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="other">Something else</button></li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn pwanimate-action-btn pwanimate-speak-btn" title="Read this reply aloud" aria-label="Read this reply aloud" aria-pressed="false">
+                            <i class="bi bi-volume-up-fill" aria-hidden="true"></i>
+                        </button>
                         <button type="button" class="btn pwanimate-action-btn copy-btn" title="Copy answer" aria-label="Copy answer">
                             <i class="bi bi-clipboard"></i>
                         </button>
@@ -5614,6 +6475,10 @@
             this.enhanceWebSources(row);
             if (window.htmx && typeof window.htmx.process === 'function') {
                 window.htmx.process(row);
+            }
+            if (this.autoTtsEnabled) {
+                const speakBtn = row.querySelector('.pwanimate-speak-btn');
+                if (speakBtn) this.speakResponse(answer, speakBtn);
             }
             return row;
         }
@@ -5931,50 +6796,44 @@
                 if (data.quota_status && Array.isArray(data.quota_status.models) && data.quota_status.models.length > 0) {
                     const primary = data.quota_status.models[0];
                     const active = data.quota_status.models.find((m) => !m.rate_limited) || primary;
+                    // Brand-level attribution: credit the engine whose primary
+                    // matches the active model — never show the model itself.
+                    const enginesList = data.quota_status.engines || [];
+                    const matched = enginesList.find((eng) =>
+                        eng.primary_provider === active.provider && eng.primary_model === active.model
+                    );
                     this.updateActiveModelChip({
                         active_model: active.model || active.provider,
                         primary_model: primary.model || primary.provider,
                         switched: (active.model !== primary.model || active.provider !== primary.provider),
-                    });
+                    }, matched ? matched.name : null);
                 }
             } catch (e) {
                 console.warn('[Spark] Failed to fetch quota status:', e);
             }
         }
 
-        getDefaultModels() {
+        getDefaultEngines() {
+            // Static mirror of the server engine registry — used only when
+            // the quota-status API is unreachable.
             return [
-                { provider: 'gemini', model: 'gemini-3.6-flash', display_name: 'Gemini 3.6 Flash', provider_label: 'Google', description: "Google's flagship multimodal reasoning model", is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'groq', model: 'openai/gpt-oss-120b', display_name: 'GPT-OSS 120B', provider_label: 'Groq', description: 'Ultra-fast 120B reasoning model on Groq LPU', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'openrouter', model: 'google/gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', provider_label: 'OpenRouter', description: 'Multimodal Flash hosted on OpenRouter', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'groq', model: 'openai/gpt-oss-20b', display_name: 'GPT-OSS 20B', provider_label: 'Groq', description: 'Sub-second lightweight conversational model', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'gemini', model: 'gemini-3.5-flash', display_name: 'Gemini 3.5 Flash', provider_label: 'Google', description: 'High-speed balanced multimodal model', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', display_name: 'Nemotron 3.5 Lightning', provider_label: 'OpenRouter', description: 'NVIDIA fast reasoning model (Free Tier)', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'groq', model: 'qwen/qwen3.8-27b', display_name: 'Qwen 3.8 27B', provider_label: 'Groq', description: 'High-throughput multilingual model', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'gemini', model: 'gemini-3.5-flash-lite', display_name: 'Gemini 3.5 Flash-Lite', provider_label: 'Google', description: 'Ultra-lightweight low-latency model', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'openrouter', model: 'nex-agi/nex-n2.5-pro:free', display_name: 'NeX N2.5 Pro', provider_label: 'OpenRouter', description: 'General conversational agent (Free Tier)', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'groq', model: 'groq/compound-mini', display_name: 'Groq Compound Mini', provider_label: 'Groq', description: 'Compound reasoning model on Groq', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'gemini', model: 'gemini-flash-latest', display_name: 'Gemini Flash Latest', provider_label: 'Google', description: 'Latest stable Gemini Flash channel', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
-                { provider: 'openrouter', model: 'liquid/lfm-2.5-2.6b:free', display_name: 'Liquid LFM 2.6B', provider_label: 'OpenRouter', description: 'Liquid neural architecture (Free Tier)', is_configured: true, rate_limited: false, cooldown_remaining: 0 },
+                { slug: 'speed', name: 'Spark Speed', icon: 'bi-lightning-charge', tagline: 'Rapid everyday Q&A and chat', description: "Fast, balanced answers for quick questions — Spark's everyday workhorse with automatic multi-provider failover.", powered_by: ['Google', 'Groq', 'OpenRouter'], is_configured: true, rate_limited: false, cooldown_remaining: 0, fallbacks_ready: 2 },
+                { slug: 'coda', name: 'Spark Coda', icon: 'bi-terminal', tagline: 'Code debugging and explanations', description: 'Reads, traces and fixes code — line-by-line debugging help for assignments and past papers.', powered_by: ['Groq', 'Google', 'OpenRouter'], is_configured: true, rate_limited: false, cooldown_remaining: 0, fallbacks_ready: 2 },
+                { slug: 'scholar', name: 'Spark Scholar', icon: 'bi-journal-richtext', tagline: 'Lecture slides, notes & quiz synthesis', description: 'Long-context reading of course documents — summaries, revision guides and quiz generation.', powered_by: ['Google', 'OpenRouter', 'Groq'], is_configured: true, rate_limited: false, cooldown_remaining: 0, fallbacks_ready: 2 },
+                { slug: 'vision', name: 'Spark Vision', icon: 'bi-eye', tagline: 'Images, OCR and whiteboard math', description: 'Reads uploaded images — timetables, circuit diagrams and handwritten working.', powered_by: ['Google', 'Groq'], is_configured: true, rate_limited: false, cooldown_remaining: 0, fallbacks_ready: 1 },
             ];
         }
 
-        selectModel(provider, model, display, providerLabel) {
-            this.selectedProvider = provider || '';
-            this.selectedModel = model || '';
-            this.selectedDisplay = display || 'Auto';
-            this.selectedProviderLabel = providerLabel || '';
+        selectEngine(engine, display) {
+            this.selectedEngine = engine || '';
+            this.selectedEngineLabel = this.selectedEngine ? (display || 'Spark') : '';
 
-            if (this.selectedModel) {
-                localStorage.setItem('pwanimate_selected_provider', this.selectedProvider);
-                localStorage.setItem('pwanimate_selected_model', this.selectedModel);
-                localStorage.setItem('pwanimate_selected_display', this.selectedDisplay);
-                localStorage.setItem('pwanimate_selected_provider_label', this.selectedProviderLabel);
+            if (this.selectedEngine) {
+                localStorage.setItem('pwanimate_selected_engine', this.selectedEngine);
+                localStorage.setItem('pwanimate_selected_engine_label', this.selectedEngineLabel);
             } else {
-                localStorage.removeItem('pwanimate_selected_provider');
-                localStorage.removeItem('pwanimate_selected_model');
-                localStorage.removeItem('pwanimate_selected_display');
-                localStorage.removeItem('pwanimate_selected_provider_label');
+                localStorage.removeItem('pwanimate_selected_engine');
+                localStorage.removeItem('pwanimate_selected_engine_label');
             }
 
             // Dismiss dropdown menu if open
@@ -5988,16 +6847,17 @@
             if (this.cachedQuotaStatus) {
                 this.updateQuotaStatus(this.cachedQuotaStatus);
             } else {
-                this.updateQuotaStatus({ models: this.getDefaultModels() });
+                this.updateQuotaStatus({ engines: this.getDefaultEngines() });
             }
         }
 
         updateSelectedModelUI() {
             if (this.selectedModelLabel) {
-                this.selectedModelLabel.textContent = this.selectedDisplay || 'Auto';
-                if (this.selectedModel) {
-                    this.selectedModelLabel.title = `Manual override: ${this.selectedDisplay} (${this.selectedProviderLabel || this.selectedProvider})`;
+                if (this.selectedEngine) {
+                    this.selectedModelLabel.textContent = this.selectedEngineLabel || 'Spark';
+                    this.selectedModelLabel.title = `Engine: ${this.selectedEngineLabel || this.selectedEngine}`;
                 } else {
+                    this.selectedModelLabel.textContent = 'Auto';
                     this.selectedModelLabel.title = 'Auto routing: Failover across available models';
                 }
             }
@@ -6009,36 +6869,83 @@
 
             this.dropdownStatusDot.classList.remove('healthy', 'rate-limited', 'cooldown');
 
-            if (!this.cachedQuotaStatus || !Array.isArray(this.cachedQuotaStatus.models)) {
+            const engines = (this.cachedQuotaStatus && Array.isArray(this.cachedQuotaStatus.engines))
+                ? this.cachedQuotaStatus.engines : [];
+            if (!engines.length) {
                 this.dropdownStatusDot.classList.add('healthy');
                 return;
             }
 
-            const models = this.cachedQuotaStatus.models;
-            if (this.selectedModel) {
-                const found = models.find((m) => m.model === this.selectedModel);
-                if (found) {
-                    if (!found.is_configured || (found.rate_limited && found.cooldown_remaining > 0)) {
+            if (this.selectedEngine) {
+                const found = engines.find((e) => e.slug === this.selectedEngine);
+                if (found && (!found.is_configured || found.rate_limited)) {
+                    if (!found.is_configured || found.cooldown_remaining > 0) {
                         this.dropdownStatusDot.classList.add('rate-limited');
-                    } else if (found.rate_limited) {
-                        this.dropdownStatusDot.classList.add('cooldown');
                     } else {
-                        this.dropdownStatusDot.classList.add('healthy');
+                        this.dropdownStatusDot.classList.add('cooldown');
                     }
                 } else {
                     this.dropdownStatusDot.classList.add('healthy');
                 }
-            } else {
-                const allRateLimited = models.length > 0 && models.every((m) => m.rate_limited);
-                const primary = models[0];
-                if (allRateLimited) {
-                    this.dropdownStatusDot.classList.add('rate-limited');
-                } else if (primary && primary.rate_limited) {
-                    this.dropdownStatusDot.classList.add('cooldown');
-                } else {
-                    this.dropdownStatusDot.classList.add('healthy');
-                }
+                return;
             }
+
+            const allRateLimited = engines.every((e) => e.rate_limited);
+            const primary = engines[0];
+            if (allRateLimited) {
+                this.dropdownStatusDot.classList.add('rate-limited');
+            } else if (primary && primary.rate_limited) {
+                this.dropdownStatusDot.classList.add('cooldown');
+            } else {
+                this.dropdownStatusDot.classList.add('healthy');
+            }
+        }
+
+        getEngineStatusPresentation(item) {
+            if (!item.is_configured) {
+                return {
+                    dotClass: 'rate-limited',
+                    statusText: 'Unavailable',
+                    badge: '<span class="pwanimate-status-badge rate-limited"><i class="bi bi-exclamation-octagon-fill"></i> Unavailable</span>',
+                };
+            }
+            // primary_status is server-computed: WHY the primary candidate is or
+            // isn't usable — a missing API key is not the same as a rate limit.
+            const primaryStatus = item.primary_status || (item.rate_limited ? 'rate_limited' : 'ready');
+            if (primaryStatus === 'ready') {
+                return {
+                    dotClass: 'healthy',
+                    statusText: 'Ready',
+                    badge: '<span class="pwanimate-status-badge healthy"><i class="bi bi-check-circle-fill"></i> Operational</span>',
+                };
+            }
+            if (item.cooldown_remaining > 0) {
+                // Live quota cooldown tracked from real 429s in this process.
+                return {
+                    dotClass: 'rate-limited',
+                    statusText: `Rate limited (${Math.ceil(item.cooldown_remaining)}s)`,
+                    badge: `<span class="pwanimate-status-badge rate-limited"><i class="bi bi-hourglass-split"></i> Rate Limited (${Math.ceil(item.cooldown_remaining)}s)</span>`,
+                };
+            }
+            if (primaryStatus === 'unconfigured') {
+                return {
+                    dotClass: 'cooldown',
+                    statusText: 'Backup active — primary provider not configured',
+                    badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-plug-fill"></i> Primary Not Configured</span>',
+                };
+            }
+            if (item.fallbacks_ready > 0) {
+                return {
+                    dotClass: 'cooldown',
+                    statusText: 'Busy — backup routing active',
+                    badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-arrow-repeat"></i> Backup Active</span>',
+                };
+            }
+            return {
+                dotClass: 'cooldown',
+                statusText: 'Recovering',
+                badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-arrow-repeat"></i> Recovering</span>',
+            };
         }
 
         updateQuotaStatus(quotaStatus) {
@@ -6049,8 +6956,10 @@
                 this.quotaStatusEl.innerHTML = '';
             }
 
-            const models = Array.isArray(quotaStatus.models) ? quotaStatus.models : [];
-            const isAutoSelected = !this.selectedModel;
+            const engines = Array.isArray(quotaStatus.engines)
+                ? quotaStatus.engines
+                : this.getDefaultEngines();
+            const isAutoSelected = !this.selectedEngine;
 
             // 1. Update Auto item in dropdown menu
             const autoItem = this.workspace ? this.workspace.querySelector('.pwanimate-model-option[data-model=""]') : null;
@@ -6069,55 +6978,26 @@
                 }
             }
 
-            // 2. Populate dropdown models list
-            if (this.dropdownModelsList && models.length > 0) {
+            // 2. Populate dropdown with Spark engines
+            if (this.dropdownModelsList && engines.length > 0) {
                 let dropdownHtml = '';
-                let lastProvider = null;
-                for (const item of models) {
-                    const isSelected = (this.selectedModel === item.model);
-                    let dotClass = 'healthy';
-                    let statusDesc = 'Available';
-
-                    if (!item.is_configured) {
-                        dotClass = 'rate-limited';
-                        statusDesc = 'API key not configured';
-                    } else if (item.rate_limited) {
-                        if (item.cooldown_remaining > 0) {
-                            dotClass = 'rate-limited';
-                            statusDesc = `Rate limited (${Math.ceil(item.cooldown_remaining)}s cooldown)`;
-                        } else {
-                            dotClass = 'cooldown';
-                            statusDesc = 'Recovering';
-                        }
-                    } else {
-                        dotClass = 'healthy';
-                        statusDesc = 'Ready';
-                    }
-
-                    if (item.provider !== lastProvider) {
-                        lastProvider = item.provider;
-                        const pLabel = item.provider_label || item.provider.toUpperCase();
-                        dropdownHtml += `
-                            <li><h6 class="dropdown-header text-muted py-1 px-3 fw-bold text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.06em; margin-top: 4px; opacity: 0.85;">${escapeHtml(pLabel)}</h6></li>
-                        `;
-                    }
+                for (const item of engines) {
+                    const isSelected = (this.selectedEngine === item.slug);
+                    const st = this.getEngineStatusPresentation(item);
 
                     dropdownHtml += `
                         <li>
                             <button class="dropdown-item d-flex align-items-center justify-content-between pwanimate-model-option ${isSelected ? 'active' : ''}"
-                                    data-provider="${escapeHtml(item.provider)}"
-                                    data-model="${escapeHtml(item.model)}"
-                                    data-display="${escapeHtml(item.display_name || item.model)}"
-                                    data-provider-label="${escapeHtml(item.provider_label || item.provider)}"
+                                    data-engine="${escapeHtml(item.slug)}"
+                                    data-display="${escapeHtml(item.name)}"
                                     type="button"
                                     ${!item.is_configured ? 'disabled' : ''}>
                                 <div class="pe-2">
                                     <div class="d-flex align-items-center gap-1">
-                                        <span class="pwanimate-model-status-dot ${dotClass}"></span>
-                                        <span class="fw-semibold small">${escapeHtml(item.display_name || item.model)}</span>
-                                        <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">${escapeHtml(item.provider_label || item.provider)}</span>
+                                        <span class="pwanimate-model-status-dot ${st.dotClass}"></span>
+                                        <span class="fw-semibold small">${escapeHtml(item.name)}</span>
                                     </div>
-                                    <div class="text-muted" style="font-size: 0.72rem;">${escapeHtml(statusDesc)}</div>
+                                    <div class="text-muted" style="font-size: 0.72rem;">${escapeHtml(st.statusText)}</div>
                                 </div>
                                 ${isSelected ? '<i class="bi bi-check2 text-primary pwanimate-check-icon"></i>' : ''}
                             </button>
@@ -6167,68 +7047,37 @@
                     </div>
                 `;
 
-                // Individual model cards with provider section separators
-                let lastModalProvider = null;
-                for (const item of models) {
-                    const isSelected = (this.selectedModel === item.model);
-                    let dotClass = 'healthy';
-                    let statusBadgeHtml = '';
-
-                    if (!item.is_configured) {
-                        dotClass = 'rate-limited';
-                        statusBadgeHtml = `<span class="pwanimate-status-badge rate-limited"><i class="bi bi-exclamation-octagon-fill"></i> Unconfigured</span>`;
-                    } else if (item.rate_limited) {
-                        if (item.cooldown_remaining > 0) {
-                            dotClass = 'rate-limited';
-                            statusBadgeHtml = `<span class="pwanimate-status-badge rate-limited"><i class="bi bi-hourglass-split"></i> Rate Limited (${Math.ceil(item.cooldown_remaining)}s)</span>`;
-                        } else {
-                            dotClass = 'cooldown';
-                            statusBadgeHtml = `<span class="pwanimate-status-badge cooldown"><i class="bi bi-arrow-repeat"></i> Recovering</span>`;
-                        }
-                    } else {
-                        dotClass = 'healthy';
-                        statusBadgeHtml = `<span class="pwanimate-status-badge healthy"><i class="bi bi-check-circle-fill"></i> Operational</span>`;
-                    }
-
-                    if (item.provider !== lastModalProvider) {
-                        lastModalProvider = item.provider;
-                        const pLabel = item.provider_label || item.provider.toUpperCase();
-                        modalHtml += `
-                            <div class="d-flex align-items-center gap-2 mt-3 mb-1">
-                                <span class="fw-bold small text-uppercase text-muted" style="font-size: 0.75rem; letter-spacing: 0.05em;">${escapeHtml(pLabel)}</span>
-                                <hr class="flex-grow-1 m-0 opacity-25">
-                            </div>
-                        `;
-                    }
+                // Spark engine cards
+                for (const item of engines) {
+                    const isSelected = (this.selectedEngine === item.slug);
+                    const st = this.getEngineStatusPresentation(item);
 
                     modalHtml += `
                         <div class="pwanimate-quota-card ${isSelected ? 'selected' : ''}">
                             <div class="d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center gap-2">
-                                    <span class="pwanimate-model-status-dot ${dotClass}"></span>
-                                    <span class="fw-bold fs-6">${escapeHtml(item.display_name || item.model)}</span>
-                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.7rem;">${escapeHtml(item.provider_label || item.provider)}</span>
+                                    <span class="pwanimate-model-status-dot ${st.dotClass}"></span>
+                                    <span class="fw-bold fs-6">${escapeHtml(item.name)}</span>
+                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.7rem;">${escapeHtml((item.powered_by || []).join(' · '))}</span>
                                 </div>
-                                ${statusBadgeHtml}
+                                ${st.badge}
                             </div>
                             <p class="text-muted small mb-3">
-                                ${escapeHtml(item.description || item.model)}
+                                ${escapeHtml(item.description || item.tagline || '')}
                             </p>
                             <div class="d-flex align-items-center justify-content-between">
-                                <code class="text-muted" style="font-size: 0.75rem;">${escapeHtml(item.model)}</code>
+                                <span class="text-muted" style="font-size: 0.75rem;">${escapeHtml(item.tagline || '')}</span>
                                 ${isSelected ? `
                                     <button type="button" class="btn btn-sm btn-outline-primary active disabled" style="font-size: 0.8rem;">
                                         <i class="bi bi-check2 me-1"></i>Active
                                     </button>
                                 ` : `
                                     <button type="button" class="btn btn-sm btn-primary pwanimate-modal-select-btn"
-                                            data-provider="${escapeHtml(item.provider)}"
-                                            data-model="${escapeHtml(item.model)}"
-                                            data-display="${escapeHtml(item.display_name || item.model)}"
-                                            data-provider-label="${escapeHtml(item.provider_label || item.provider)}"
+                                            data-engine="${escapeHtml(item.slug)}"
+                                            data-display="${escapeHtml(item.name)}"
                                             ${!item.is_configured ? 'disabled' : ''}
                                             style="font-size: 0.8rem;">
-                                        Select Model
+                                        Select Engine
                                     </button>
                                 `}
                             </div>
@@ -6241,33 +7090,46 @@
             this.updateDropdownStatusDot();
         }
 
-        updateActiveModelChip(quotaInfo) {
+        updateActiveModelChip(quotaInfo, servingEngine = null) {
             const chip = document.getElementById('pwanimate-active-model-chip');
             const nameEl = document.getElementById('pwanimate-active-model-name');
+            // Brand-level attribution only: the chip and header credit an
+            // engine (Speed/Coda/Scholar/Vision) — raw provider/model names
+            // are never surfaced (Build ③ privacy rule).
+            const engineShortName = servingEngine
+                ? String(servingEngine).replace(/^Spark\s+/i, '')
+                : null;
             if (chip && nameEl && quotaInfo) {
-                const activeModel = quotaInfo.active_model || quotaInfo.active_provider || 'gemini';
-                nameEl.textContent = activeModel;
-
-                if (quotaInfo.switched) {
-                    chip.classList.add('switched');
-                    const orig = quotaInfo.primary_model || quotaInfo.primary_provider || '';
-                    chip.title = `Switched to ${activeModel} (${orig} free-tier limit reached)`;
+                if (this.selectedEngine) {
+                    nameEl.textContent = this.selectedEngineLabel || 'Spark';
+                    if (quotaInfo.switched) {
+                        chip.classList.add('switched');
+                        chip.title = `${this.selectedEngineLabel || 'Spark'} busy — backup routing active`;
+                    } else {
+                        chip.classList.remove('switched');
+                        chip.title = `${this.selectedEngineLabel || 'Spark'} ready`;
+                    }
                 } else {
-                    chip.classList.remove('switched');
-                    chip.title = `Active model: ${activeModel}`;
+                    nameEl.textContent = engineShortName || 'Spark';
+                    if (quotaInfo.switched) {
+                        chip.classList.add('switched');
+                        chip.title = 'Busy — backup routing active';
+                    } else {
+                        chip.classList.remove('switched');
+                        chip.title = 'Smart routing active';
+                    }
                 }
             }
 
-            if (!this.selectedModel && quotaInfo && this.selectedModelLabel) {
-                const activeModel = quotaInfo.active_model || quotaInfo.active_provider;
-                if (activeModel) {
-                    if (quotaInfo.switched) {
-                        this.selectedModelLabel.textContent = `Auto (${activeModel})`;
-                        this.selectedModelLabel.title = `Auto failover active: responding with ${activeModel}`;
-                    } else {
-                        this.selectedModelLabel.textContent = 'Auto';
-                        this.selectedModelLabel.title = `Auto routing: responding with ${activeModel}`;
-                    }
+            if (!this.selectedEngine && quotaInfo && this.selectedModelLabel) {
+                if (engineShortName) {
+                    this.selectedModelLabel.textContent = `Auto (${engineShortName})`;
+                    this.selectedModelLabel.title = quotaInfo.switched
+                        ? 'Auto routing: backup engine active'
+                        : 'Auto routing: engine selected automatically';
+                } else {
+                    this.selectedModelLabel.textContent = 'Auto';
+                    this.selectedModelLabel.title = 'Auto routing: engine selected automatically';
                 }
             }
         }

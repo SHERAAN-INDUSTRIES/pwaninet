@@ -8,6 +8,10 @@ services:
       - POSTGRES_DB=${DB_NAME:-pwaninet_db}
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+    # Postgres needs more than Docker's 64 MB default /dev/shm: a parallel
+    # query during a migration will otherwise kill the backend with
+    # "server closed the connection unexpectedly".
+    shm_size: "256mb"
     ports:
       - "5432:5432"
 

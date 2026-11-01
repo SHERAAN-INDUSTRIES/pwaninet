@@ -36,7 +36,18 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
         timeout: int = 10
     ):
         self.api_key = api_key if api_key is not None else getattr(settings, 'PWANIMATE_GEMINI_API_KEY', '')
-        self.model_name = model_name or getattr(settings, 'PWANIMATE_EMBEDDING_MODEL', 'gemini-embedding-2')
+        # PWANIMATE_EMBEDDING_MODEL names the ACTIVE provider's model. Only
+        # adopt it when it really is a Gemini model id — otherwise this
+        # provider would stamp its vectors with another model's name (D5:
+        # the stamp must match the model that produced the vector).
+        configured_model = (getattr(settings, 'PWANIMATE_EMBEDDING_MODEL', '') or '').strip()
+        if configured_model and (
+            configured_model.startswith('gemini-') or configured_model.startswith('models/gemini')
+        ):
+            default_model = configured_model
+        else:
+            default_model = 'gemini-embedding-2'
+        self.model_name = model_name or default_model
         self.dimensions = dimensions or getattr(settings, 'PWANIMATE_EMBEDDING_DIMENSIONS', 768)
         self.timeout = timeout
 

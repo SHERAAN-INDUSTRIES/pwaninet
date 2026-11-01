@@ -103,3 +103,12 @@ class MockLLMProvider(BaseLLMProvider):
             citations=citations,
             metadata={"mock": True, "call_count": self.call_count},
         )
+
+    def generate_stream(self, request: LLMRequest, on_token) -> LLMResponse:
+        """Streaming variant: emit the deterministic answer in small chunks."""
+        response = self.generate(request)
+        text = response.content or ""
+        step = 24
+        for start in range(0, len(text), step):
+            on_token(text[start:start + step])
+        return response

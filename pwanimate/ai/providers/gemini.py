@@ -7,6 +7,7 @@ generateContent REST API using direct HTTP requests.
 
 from typing import Any, Dict, List, Optional
 import base64
+import json
 import logging
 import requests
 
@@ -25,6 +26,7 @@ from pwanimate.ai.gateway.types import ChatMessage, LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 
 GEMINI_GENERATE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse"
 
 
 class GeminiLLMProvider(BaseLLMProvider):
@@ -126,6 +128,114 @@ class GeminiLLMProvider(BaseLLMProvider):
 
         return self._parse_response(data, request, model)
 
+    def generate_stream(self, request: LLMRequest, on_token) -> LLMResponse:
+        """
+        Streaming variant of generate(): text deltas from Gemini's SSE
+        streamGenerateContent endpoint are pushed to `on_token`. Returns the
+        same normalized LLMResponse shape (usageMetadata from the stream
+        tail) so callers see identical semantics to the non-streaming path.
+        """
+        if not self.is_available():
+            raise AIProviderConfigurationError(
+                "Gemini API key is not configured.",
+                provider=self.provider_name,
+            )
+
+        model = request.model or self.model_name
+        if model in {"gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"}:
+            model = "gemini-3.8-flash"
+        url = GEMINI_STREAM_URL.format(model=model)
+
+        payload = self._build_payload(request)
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+
+        try:
+            resp = self.session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=(self.connect_timeout, self.timeout),
+                stream=True,
+            )
+        except requests.exceptions.Timeout as exc:
+            raise AIProviderTimeoutError(
+                f"Gemini API request timed out after {self.timeout}s: {exc}",
+                provider=self.provider_name,
+            ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise AIProviderAPIError(
+                f"Gemini HTTP connection error: {exc}",
+                provider=self.provider_name,
+            ) from exc
+
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise AIProviderAuthenticationError(
+                "Gemini API authentication failed (invalid or forbidden key).",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+        elif resp.status_code == 429:
+            err_msg = self._extract_error_message(resp)
+            raise AIProviderRateLimitError(
+                f"Gemini API rate limit or quota exceeded: {err_msg}",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+        elif resp.status_code != 200:
+            err_msg = self._extract_error_message(resp)
+            raise AIProviderAPIError(
+                f"Gemini API error ({resp.status_code}): {err_msg}",
+                provider=self.provider_name,
+                status_code=resp.status_code,
+            )
+
+        text_parts: List[str] = []
+        finish_reason = None
+        usage: Dict[str, Any] = {}
+
+        for raw_line in resp.iter_lines():
+            if isinstance(raw_line, bytes):
+                # SSE bytes are UTF-8 by spec; never trust requests' header
+                # guessing (text/event-stream without charset falls back to
+                # Latin-1 and mangles multi-byte characters into 'â' garbage).
+                raw_line = raw_line.decode("utf-8", errors="replace")
+            if not raw_line or not raw_line.startswith("data:"):
+                continue
+            data_str = raw_line[5:].strip()
+            if not data_str:
+                continue
+            try:
+                chunk = json.loads(data_str)
+            except ValueError:
+                continue
+            if chunk.get("usageMetadata"):
+                usage = chunk["usageMetadata"]
+            candidates = chunk.get("candidates") or []
+            if not candidates:
+                continue
+            candidate = candidates[0]
+            for part in (candidate.get("content") or {}).get("parts") or []:
+                piece = part.get("text")
+                if piece:
+                    text_parts.append(piece)
+                    on_token(piece)
+            if candidate.get("finishReason"):
+                finish_reason = candidate["finishReason"]
+
+        # Reassemble a Gemini-shaped payload and reuse _parse_response for
+        # finish handling and usageMetadata extraction.
+        synthetic = {
+            "candidates": [{
+                "content": {"parts": [{"text": "".join(text_parts)}]},
+                "finishReason": finish_reason or "STOP",
+            }],
+            "usageMetadata": usage,
+        }
+        return self._parse_response(synthetic, request, model)
+
     def _build_payload(self, request: LLMRequest) -> Dict[str, Any]:
         """Construct Gemini generateContent JSON payload."""
         system_instruction_text = request.system_instruction or ""
@@ -169,6 +279,12 @@ class GeminiLLMProvider(BaseLLMProvider):
                             logger.warning("Could not read file_path for image attachment: %s", e)
                     att_mime = getattr(att, "mime_type", "image/jpeg")
                     if att_type == "image" and att_bytes:
+                        # Strip EXIF and downscale before the image leaves
+                        # the building: it costs less and it does not hand a
+                        # third party the student's location.
+                        from pwanimate.ai.vision_images import prepare_image_for_vision
+
+                        att_bytes, att_mime = prepare_image_for_vision(att_bytes, att_mime)
                         b64_data = base64.b64encode(att_bytes).decode("utf-8")
                         parts.append({
                             "inlineData": {

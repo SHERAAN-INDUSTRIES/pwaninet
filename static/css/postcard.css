@@ -1112,7 +1112,10 @@
   }
 }
 
-/* Ambient Blurred Video Backdrop */
+/* Ambient Blurred Video Backdrop
+   Fills the letterbox band above/below a portrait reel so the player reads as
+   one full-bleed surface. The video itself keeps its FULL width (never
+   cropped) — only the empty space is filled. */
 .reel-ambient-backdrop {
   position: absolute;
   inset: -24px;
@@ -1127,6 +1130,69 @@
   object-fit: cover;
   filter: blur(36px) brightness(0.4) saturate(1.2);
   transform: scale(1.15);
+}
+
+/* Fullscreen player only: a brighter, softer fill so the band above/below a
+   portrait reel reads as "the reel continues" instead of empty padding.
+   (Feed cards keep the original darker ambient look.) */
+.reel-fullscreen-content .reel-ambient-img {
+  filter: blur(44px) brightness(0.62) saturate(1.45);
+  transform: scale(1.25);
+}
+
+/* ── Live blurred copy of the reel (mobile fullscreen) ──────────────────────
+   A second, muted copy of the SAME video is played behind the main one,
+   blurred and scaled up, so the band above/below moves with the footage
+   (Instagram / TikTok Reels look) instead of being a static poster.
+
+   Cheap by construction: the copy is rendered at 34% of the stage and scaled
+   up by the parent, so the blur filter rasterises a small bitmap instead of a
+   full-screen one. */
+.reel-ambient-video-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.reel-ambient-video-wrap.is-live {
+  opacity: 1;
+}
+
+.reel-ambient-video-scale {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34%;
+  height: 34%;
+  transform: translate(-50%, -50%) scale(3);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.reel-ambient-video-layer {
+  width: 100%;
+  height: 100%;
+  filter: blur(11px) brightness(0.62) saturate(1.45);
+  will-change: filter;
+}
+
+/* Beats the generic `.reels-snap-item video` rule: the filler is absolutely
+   positioned inside its small scale box, covers it, and stays behind the
+   main reel (z-index 0). */
+.reels-snap-item video.reel-ambient-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000000;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .reel-video-element {

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile Fullscreen Reel Player — Full Width, No Crop (Blur Fill) Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b0d12;
+    --panel: #131722;
+    --panel-2: #0f131c;
+    --line: #242a38;
+    --txt: #e7eaf0;
+    --muted: #8a92a6;
+    --cur: #ff8fa3;
+    --cur-bg: #3a2430;
+    --new: #57d9c7;
+    --new-bg: #17323a;
+    --alt: #9db4ff;
+  }
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 28px 32px 64px;
+  }
+  h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 0.85rem; margin-top: 6px; line-height: 1.6; max-width: 1000px; }
+  .sub code, code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; color: #cbd5e1; background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; }
+
+  /* ── controls ─────────────────────────────────────────── */
+  .controls { display: flex; gap: 26px; flex-wrap: wrap; align-items: center; margin: 20px 0 26px; }
+  .ctl-group { display: flex; align-items: center; gap: 10px; }
+  .ctl-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+  .seg { display: inline-flex; gap: 4px; background: #161a23; border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 0.78rem;
+    padding: 7px 14px; border-radius: 7px; cursor: pointer; transition: 0.15s; white-space: nowrap;
+  }
+  .seg button:hover { color: #cfd6e4; }
+  .seg button.active { background: #2e3546; color: #fff; }
+
+  /* ── orientation blocks ───────────────────────────────── */
+  .block { margin-bottom: 42px; }
+  .block-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .block-head h2 { font-size: 1.02rem; font-weight: 700; }
+  .block-head .meta { font-size: 0.78rem; color: var(--muted); font-family: ui-monospace, monospace; }
+  .block-head p { font-size: 0.8rem; color: var(--muted); flex-basis: 100%; line-height: 1.55; margin-top: 2px; }
+
+  .frames { display: flex; gap: 26px; flex-wrap: wrap; }
+  .frame { flex: 0 0 auto; }
+  .frame[hidden] { display: none; }
+
+  .tag {
+    display: inline-block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; padding: 3px 9px; border-radius: 999px; margin-bottom: 8px;
+  }
+  .tag.cur { background: var(--cur-bg); color: var(--cur); }
+  .tag.new { background: var(--new-bg); color: var(--new); }
+  .tag.alt { background: #1d2440; color: var(--alt); }
+  .frame h3 { font-size: 0.9rem; margin-bottom: 2px; }
+  .frame .desc { font-size: 0.75rem; color: var(--muted); line-height: 1.5; min-height: 42px; max-width: 340px; }
+
+  /* ── phone shell ──────────────────────────────────────── */
+  .phone-slot { position: relative; }
+  .phone {
+    position: relative;
+    border-radius: 44px;
+    background: #05070c;
+    padding: 10px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08);
+    transform-origin: top left;
+  }
+  .phone-screen {
+    position: relative;
+    width: 100%; height: 100%;
+    border-radius: 34px;
+    overflow: hidden;
+    background: #000;
+  }
+
+  /* ── REAL reel CSS (mirrors static/css/postcard.css) ──── */
+  .reels-snap-item {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    background: #000; width: 100%; height: 100%;
+  }
+  .reel-fullscreen-content {
+    position: relative; width: 100%; height: 100%; max-width: 100%;
+    margin: 0; background: #000; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .reel-ambient-backdrop { position: absolute; inset: -24px; overflow: hidden; z-index: 0; pointer-events: none; }
+  .reel-ambient-img {
+    width: 100%; height: 100%; object-fit: cover;
+    filter: blur(36px) brightness(0.4) saturate(1.2); transform: scale(1.15);
+  }
+  /* PROPOSED: brighter, richer blur so the band reads as "the video continues"
+     instead of "empty padding". */
+  .state-fillA .reel-ambient-img,
+  .state-fillB .reel-ambient-img {
+    filter: blur(48px) brightness(0.62) saturate(1.45); transform: scale(1.28);
+  }
+  /* PROPOSED (option B): a live, synced, blurred copy of the video itself */
+  .reel-ambient-video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; pointer-events: none;
+    filter: blur(46px) brightness(0.6) saturate(1.4); transform: scale(1.28);
+  }
+  .reels-snap-item video.fullscreen-reel-video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; background: transparent; z-index: 1;
+  }
+
+  .reel-scrim-top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
+    padding-top: max(16px, env(safe-area-inset-top, 16px));
+    padding-right: max(16px, env(safe-area-inset-right, 16px));
+    padding-left: calc(max(16px, env(safe-area-inset-left, 16px)) + 48px);
+    padding-bottom: 0.75rem;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.2) 65%, transparent 100%);
+    pointer-events: none;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .reel-scrim-top .unit-badge {
+    font-size: 11px; letter-spacing: .03em; color: #fff; background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.22); padding: 2px 8px; border-radius: 6px; backdrop-filter: blur(6px);
+  }
+  .reel-scrim-top .dots { color: #fff; font-size: 20px; line-height: 1; padding: 0 2px; }
+
+  .reel-actions-stack {
+    position: absolute; right: 12px; bottom: 28px; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; gap: 0.85rem;
+  }
+  .reel-action-unit { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .reel-action-btn {
+    background: transparent; color: #fff; border: 0; padding: 3px;
+    font-size: 1.75rem; line-height: 1; display: flex; filter: none;
+  }
+  .reel-action-label { font-size: 0.72rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); line-height: 1; }
+  .reel-vinyl-disc {
+    width: 38px; height: 38px; border-radius: 50%; background: #111; border: 3px solid #222;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.6), inset 0 0 0 2px rgba(255,255,255,.1);
+  }
+  .reel-vinyl-art { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+
+  .reel-scrim-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+    min-height: 190px;
+    background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.5) 60%, rgba(0,0,0,0.1) 85%, transparent 100%);
+    pointer-events: none;
+    padding: 2rem 0.85rem 0.85rem;
+    display: flex; flex-direction: column; justify-content: flex-end;
+  }
+  .reel-creator-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .reel-creator-row .ava { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,.9); }
+  .reel-creator-row .handle { color: #fff; font-weight: 700; font-size: 0.92rem; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+  .reel-creator-row .meta { color: rgba(255,255,255,.6); font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,.85); }
+  .reel-caption-text { color: #fff; font-size: 0.84rem; line-height: 1.35; text-shadow: 0 1px 3px rgba(0,0,0,.9); max-width: 74%; }
+  .reel-audio-wrap { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .reel-audio-pill {
+    display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: 12px; font-weight: 600;
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2);
+    padding: 4px 10px; border-radius: 999px; backdrop-filter: blur(8px);
+  }
+
+  .reel-progress-container {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 18px; z-index: 12;
+    display: flex; align-items: flex-end;
+  }
+  .reel-progress-bar { position: relative; height: 3px; width: 38%; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.8); }
+
+  /* ── chrome drawn over the phone ──────────────────────── */
+  .phone-statusbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 47px; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 22px 0 26px; color: #fff; font-size: 13px; font-weight: 600;
+    pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
+  .phone-statusbar .right { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .phone-island {
+    position: absolute; top: 11px; left: 50%; transform: translateX(-50%);
+    width: 118px; height: 32px; border-radius: 999px; background: #000; z-index: 21; pointer-events: none;
+  }
+  .phone-homebar {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 140px; height: 5px; border-radius: 999px; background: rgba(255,255,255,.85); z-index: 21; pointer-events: none;
+  }
+  .close-btn {
+    position: absolute; top: 16px; left: 16px; z-index: 22;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(0,0,0,.5); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,.25); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+
+  /* ── measurement overlays ─────────────────────────────── */
+  .guides { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
+  .guide {
+    position: absolute;
+    background: repeating-linear-gradient(45deg, rgba(255,99,132,.17) 0 8px, rgba(255,99,132,.04) 8px 16px);
+    border: 1px dashed rgba(255,99,132,.8);
+  }
+  .guide.fill {
+    background: repeating-linear-gradient(45deg, rgba(87,217,199,.18) 0 8px, rgba(87,217,199,.05) 8px 16px);
+    border-color: rgba(87,217,199,.8);
+  }
+  .guide.g-top { top: 0; left: 0; right: 0; }
+  .guide.g-bottom { bottom: 0; left: 0; right: 0; }
+  .guide-label {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    background: rgba(10,12,18,.9); color: #ff8fa3; font-size: 10px; font-weight: 700;
+    font-family: ui-monospace, monospace; padding: 3px 7px; border-radius: 6px; white-space: nowrap;
+    border: 1px solid rgba(255,99,132,.45);
+  }
+  .guide-label.top { top: 52px; }
+  .guide-label.bottom { bottom: 52px; }
+  .guide-label.fill { color: var(--new); border-color: rgba(87,217,199,.5); }
+  .video-outline {
+    position: absolute; z-index: 31; pointer-events: none;
+    border: 1px solid rgba(255,255,255,.5);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+  }
+  .safe-line {
+    position: absolute; left: 0; right: 0; height: 1px;
+    background: repeating-linear-gradient(90deg, rgba(157,180,255,.5) 0 6px, transparent 6px 12px);
+  }
+  .safe-line.top { top: 47px; }
+  .safe-line.bottom { bottom: 34px; }
+
+  /* ── readout ──────────────────────────────────────────── */
+  .readout {
+    margin-top: 12px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, monospace;
+    font-size: 0.72rem; line-height: 1.75; color: #b6bfd0; min-width: 320px;
+  }
+  .readout .k { color: #6d7689; display: inline-block; min-width: 132px; }
+  .readout .bad { color: #ff8fa3; }
+  .readout .good { color: #57d9c7; }
+  .readout .warn { color: var(--alt); }
+
+  /* ── tables / notes ───────────────────────────────────── */
+  table.compare { width: 100%; max-width: 980px; border-collapse: collapse; font-size: 0.8rem; margin-top: 10px; }
+  table.compare th, table.compare td { padding: 9px 12px; border-bottom: 1px solid #232937; text-align: left; vertical-align: top; }
+  table.compare th { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: 0.66rem; letter-spacing: 0.07em; }
+  table.compare td.num { font-family: ui-monospace, monospace; }
+  td.gain { color: var(--new); font-weight: 700; }
+
+  .notes { margin-top: 34px; max-width: 1040px; }
+  .notes h2 { font-size: 1rem; margin-bottom: 10px; }
+  .notes ul { padding-left: 20px; color: #b6bfd0; font-size: 0.84rem; line-height: 1.85; }
+  .notes li { margin-bottom: 6px; }
+  .notes h3 { font-size: 0.86rem; margin: 18px 0 8px; color: var(--new); }
+  pre {
+    background: #0f131c; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    overflow-x: auto; font-family: ui-monospace, monospace; font-size: 0.74rem; line-height: 1.6; color: #cbd5e1;
+  }
+  pre .c { color: #6d7689; }
+  pre .add { color: #7ee7d4; }
+  .banner {
+    margin: 18px 0 0; border: 1px solid rgba(255,180,84,.35); background: rgba(255,180,84,.08);
+    border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #ffd9a6; line-height: 1.6;
+  }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.75rem; color: var(--muted); margin: 0 0 18px; }
+  .legend .k { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<h1>Mobile Fullscreen Reel Player — Full Width, No Crop, Blur Fill</h1>
+<div class="sub">
+  Your call: <b>keep the whole width of the video</b> (nothing cropped on the left/right) and still <b>fill the screen top-to-bottom</b>.<br>
+  The only way to do both is to let the video keep its own height and fill the leftover space with a <b>blurred version of the video</b> — the Instagram / TikTok / Facebook Reels look.
+  Two fills are previewed below: <b>A</b> = blurred poster frame (cheap, static), <b>B</b> = live blurred copy of the video (moves with the content).
+  Mockup replicates the real DOM + the real CSS rules from <code>static/css/postcard.css</code>.
+</div>
+
+<div class="controls">
+  <div class="ctl-group">
+    <span class="ctl-label">Compare</span>
+    <div class="seg" id="modeSeg">
+      <button data-mode="both" class="active">Side by side</button>
+      <button data-mode="current">Current only</button>
+      <button data-mode="fillA">Fill A only</button>
+      <button data-mode="fillB">Fill B only</button>
+    </div>
+  </div>
+  <div class="ctl-group">
+    <span class="ctl-label">Device</span>
+    <div class="seg" id="deviceSeg">
+      <button data-device="iphone15" class="active">iPhone 15 Pro · 393×852</button>
+      <button data-device="pixel7">Pixel 7 · 412×915</button>
+      <button data-device="iphonese">iPhone SE · 375×667</button>
+      <button data-device="s9">Galaxy S9 · 360×740</button>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:repeating-linear-gradient(45deg,rgba(255,99,132,.45) 0 4px,transparent 4px 8px)"></span>Empty / dead band (today)</span>
+  <span class="k"><span class="sw" style="background:repeating-linear-gradient(45deg,rgba(87,217,199,.45) 0 4px,transparent 4px 8px)"></span>Blurred fill (proposed)</span>
+  <span class="k"><span class="sw" style="background:#fff"></span>Video frame — always full width, never cropped</span>
+</div>
+
+<!-- ══════════════ PORTRAIT ══════════════ -->
+<section class="block" data-orient="portrait">
+  <div class="block-head">
+    <h2>Portrait reel — 576 × 1024 (9:16)</h2>
+    <span class="meta" id="meta-portrait"></span>
+    <p>
+      <b>Current:</b> the video keeps its own height inside the full-screen box, so the strips above and below are near-empty (a very dark blur of the poster —
+      which is why it reads as padding). <b>Proposed A/B:</b> the video still keeps its full width and its own height — but the leftover space becomes a
+      bright, blurred, moving extension of the reel itself, so the screen reads as one full-bleed surface.
+    </p>
+  </div>
+  <div class="frames" id="frames-portrait"></div>
+</section>
+
+<!-- ══════════════ LANDSCAPE ══════════════ -->
+<section class="block" data-orient="landscape">
+  <div class="block-head">
+    <h2>Landscape reel — 1280 × 720 (16:9)</h2>
+    <span class="meta" id="meta-landscape"></span>
+    <p>
+      Same rule: fill the width, keep the video's own height, and the rest of the screen gets the blurred fill. For a 16:9 source the band is tall (≈315px on an
+      iPhone 15 Pro) so the blur fill matters even more here — option B keeps the fill alive with the actual footage.
+    </p>
+  </div>
+  <div class="frames" id="frames-landscape"></div>
+</section>
+
+<!-- ══════════════ MATH ══════════════ -->
+<section class="block">
+  <div class="block-head">
+    <h2>Numbers for the selected device</h2>
+    <p>Computed live from the device viewport and the source aspect ratio. Nothing is cropped in any row.</p>
+  </div>
+  <table class="compare" id="mathTable">
+    <thead>
+      <tr><th>Orientation</th><th>Viewport</th><th>Video box</th><th>Crop</th><th>Top/bottom fill</th><th>Screen used</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ══════════════ PLAN ══════════════ -->
+<section class="notes">
+  <h2>What gets changed once you approve (implementation plan)</h2>
+
+  <h3>1 · CSS — make the ambient fill look intentional</h3>
+  <pre><span class="c">/* static/css/postcard.css — .reel-ambient-img today is very dark */</span>
+<span class="c">/* filter: blur(36px) brightness(0.4) saturate(1.2); transform: scale(1.15);  */</span>
+<span class="add">.reel-ambient-backdrop {
+  position: absolute;
+  inset: 0;                    /* was -24px: fill the whole stage, not just the letterbox */
+  overflow: hidden;
+  z-index: 0;
+}
+.reel-ambient-img {
+  width: 100%; height: 100%; object-fit: cover;
+  filter: blur(46px) brightness(0.62) saturate(1.45);
+  transform: scale(1.28);
+}</span></pre>
+  <p style="font-size:.82rem;color:#b6bfd0;line-height:1.7">
+    The video itself stays <code>object-fit: contain</code> — nothing about the crop changes, only how the leftover space looks.
+  </p>
+
+  <h3>2 · Option B (live blurred copy) — one extra element + sync</h3>
+  <pre><span class="c">/* static/js/video-manager.js → buildSnapItemFromReelCard(): inside .reel-ambient-backdrop */</span>
+<span class="add">&lt;video class="reel-ambient-video"
+       muted loop playsinline preload="none"
+       data-video-url="${videoSrc}"&gt;&lt;/video&gt;</span>
+
+<span class="c">/* keep it locked to the main video */</span>
+<span class="add">main.addEventListener('timeupdate', () =&gt; {
+    if (Math.abs(ambient.currentTime - main.currentTime) &gt; 0.25) {
+        ambient.currentTime = main.currentTime;   // re-sync after seeks / stalls
+    }
+});
+main.addEventListener('seeked',  () =&gt; ambient.currentTime = main.currentTime);
+main.addEventListener('play',    () =&gt; ambient.play().catch(() =&gt; {}));
+main.addEventListener('pause',   () =&gt; ambient.pause());</span></pre>
+
+  <h3>3 · Cost / edge cases</h3>
+  <ul>
+    <li><b>Option B costs a second decoder + a second stream.</b> For HLS reels that means double segment traffic, so B is recommended for direct MP4 reels and the poster fill (A) for HLS.</li>
+    <li>Option A costs one extra JPEG (the poster) — most posts already have one (<code>post.video_poster</code>); posts without a poster fall back to a plain dark fill.</li>
+    <li>The ambient layer must pause when the reel scrolls out of view (it already pauses for the main video in the snap observer).</li>
+    <li>Overlays are unaffected: caption block, engagement rail and scrubber already sit on top with <code>env(safe-area-inset-*)</code> padding.</li>
+    <li>Desktop player, feed cards and the reel rail are untouched by this change.</li>
+  </ul>
+
+  <div class="banner">
+    <b>Decide before I build:</b> <b>A</b> (blurred poster — one cached JPEG, static, works for every source incl. HLS) or
+    <b>B</b> (live blurred copy — exact Instagram look, but a 2nd decoder and a 2nd stream on every reel)?<br>
+    <b>Recommended:</b> A everywhere by default, and B only for direct-MP4 reels if you want the fill to move with the footage.
+    Optional extra: a per-post toggle so an author can force “fit” (plain letterbox) instead of the blur fill.
+  </div>
+</section>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   Asset paths are resolved relative to THIS file, so the preview
+   works when opened straight from disk (file://) or through any
+   static server — no Django/dev-server dependency.
+   ───────────────────────────────────────────────────────────── */
+const BASE = new URL('.', location.href).href;
+const media = p => BASE + p;
+
+const ASSETS = {
+  portrait: {
+    label: '576 × 1024 (9:16)',
+    video: media('media/preview-assets/reel-portrait-9x16.mp4'),
+    poster: media('media/posts/videos/posters/post_70_poster_bclFpnb.jpg'),
+    videoRel: 'media/preview-assets/reel-portrait-9x16.mp4',
+    posterRel: 'media/posts/videos/posters/post_70_poster_bclFpnb.jpg',
+    ratio: 576 / 1024,
+    orientation: 'portrait'
+  },
+  landscape: {
+    label: '1280 × 720 (16:9)',
+    video: media('media/preview-assets/reel-landscape-16x9.mp4'),
+    poster: media('media/posts/videos/posters/post_57_poster_CbqJUBV.jpg'),
+    videoRel: 'media/preview-assets/reel-landscape-16x9.mp4',
+    posterRel: 'media/posts/videos/posters/post_57_poster_CbqJUBV.jpg',
+    ratio: 1280 / 720,
+    orientation: 'landscape'
+  }
+};
+
+const AVATAR = media('media/profile_pic/1000003050.png');
+const AVATAR_REL = 'media/profile_pic/1000003050.png';
+const onImgErr = rel => `this.onerror=null;this.src='${rel}'`;
+const onVidErr = rel => `this.onerror=null;this.src='${rel}'`;
+
+const DEVICES = {
+  iphone15: { name: 'iPhone 15 Pro', w: 393, h: 852, island: true },
+  pixel7:    { name: 'Pixel 7',       w: 412, h: 915, island: false },
+  iphonese:  { name: 'iPhone SE',     w: 375, h: 667, island: false },
+  s9:        { name: 'Galaxy S9',     w: 360, h: 740, island: false }
+};
+
+let device = DEVICES.iphone15;
+let mode = 'both';
+
+/* contained video box inside the viewport (no crop, full width) */
+function containBox(W, H, r) {
+  if (W / H > r) { const h = H, w = H * r; return { w, h, padX: (W - w) / 2, padY: 0 }; }
+  const w = W, h = W / r; return { w, h, padX: 0, padY: (H - h) / 2 };
+}
+
+const STATES = {
+  current: { tag: 'cur', title: 'as shipped' },
+  fillA:   { tag: 'new', title: 'blur fill (poster)' },
+  fillB:   { tag: 'alt', title: 'blur fill (live)' }
+};
+
+function phoneHTML(state, asset, dev) {
+  const W = dev.w, H = dev.h;
+  const box = containBox(W, H, asset.ratio);
+  const isPortrait = asset.orientation === 'portrait';
+
+  /* guides: red = empty band today, teal = blur fill proposed */
+  let guides = '';
+  if (box.padY > 0.5) {
+    const fill = state !== 'current';
+    guides += `<div class="guide ${fill ? 'fill' : ''} g-top" style="height:${box.padY}px"></div>`;
+    guides += `<div class="guide ${fill ? 'fill' : ''} g-bottom" style="height:${box.padY}px"></div>`;
+    const lbl = fill ? `${Math.round(box.padY)}px blurred fill` : `${Math.round(box.padY)}px empty band`;
+    guides += `<div class="guide-label ${fill ? 'fill' : ''} top">${lbl}</div>`;
+    guides += `<div class="guide-label ${fill ? 'fill' : ''} bottom">${lbl}</div>`;
+  }
+
+  /* option B: a live, blurred copy of the same video behind the main one */
+  const backdrop = state === 'fillB'
+    ? `<video class="reel-ambient-video" src="${asset.video}" onerror="${onVidErr(asset.videoRel)}"
+              muted loop playsinline preload="auto" autoplay></video>`
+    : `<img class="reel-ambient-img" src="${asset.poster}" onerror="${onImgErr(asset.posterRel)}" alt="">`;
+
+  const outline = `<div class="video-outline" style="left:${box.padX}px;top:${box.padY}px;width:${box.w}px;height:${box.h}px"></div>`;
+
+  return `
+  <div class="phone" data-w="${W}" data-h="${H}" style="width:${W}px;height:${H}px">
+    <div class="phone-screen state-${state}">
+      <div class="reels-snap-item">
+        <div class="reel-fullscreen-content">
+          <div class="reel-ambient-backdrop" aria-hidden="true">${backdrop}</div>
+          <video class="fullscreen-reel-video" src="${asset.video}" poster="${asset.poster}"
+                 onerror="${onVidErr(asset.videoRel)}"
+                 muted loop playsinline autoplay preload="auto"></video>
+
+          <div class="reel-scrim-top">
+            <div class="unit-badge">ISACA · WK26</div>
+            <div class="dots">⋮</div>
+          </div>
+
+          <div class="reel-actions-stack">
+            <div class="reel-action-unit"><div class="reel-action-btn">♥</div><span class="reel-action-label">12.4K</span></div>
+            <div class="reel-action-unit"><div class="reel-action-btn">💬</div><span class="reel-action-label">318</span></div>
+            <div class="reel-action-unit"><div class="reel-action-btn">↻</div><span class="reel-action-label">96</span></div>
+            <div class="reel-action-unit"><div class="reel-action-btn">↗</div><span class="reel-action-label">Share</span></div>
+            <div class="reel-action-unit"><div class="reel-action-btn">🔊</div><span class="reel-action-label">Sound</span></div>
+            <div class="reel-action-unit"><div class="reel-vinyl-disc"><img class="reel-vinyl-art" src="${AVATAR}" onerror="${onImgErr(AVATAR_REL)}" alt=""></div></div>
+          </div>
+
+          <div class="reel-scrim-bottom">
+            <div class="reel-creator-row">
+              <img class="ava" src="${AVATAR}" onerror="${onImgErr(AVATAR_REL)}" alt="">
+              <div>
+                <div class="handle">@vastostudents</div>
+                <div class="meta">2h · 🌍 Public</div>
+              </div>
+            </div>
+            <div class="reel-caption-text">Building in public — day 14 of the fellowship. Full video, no cuts.</div>
+            <div class="reel-audio-wrap"><span class="reel-audio-pill">🎵 original sound — vasto</span></div>
+          </div>
+
+          <div class="reel-progress-container"><div class="reel-progress-bar" style="width:38%"></div></div>
+        </div>
+      </div>
+
+      <div class="safe-line top"></div>
+      <div class="safe-line bottom"></div>
+      <div class="phone-statusbar">
+        <span>9:41</span>
+        <span class="right">▮▮▮ ᯤ 􀙇 ▰</span>
+      </div>
+      ${dev.island ? '<div class="phone-island"></div>' : ''}
+      <div class="close-btn">✕</div>
+      <div class="phone-homebar"></div>
+      ${outline}
+      <div class="guides">${guides}</div>
+    </div>
+  </div>`;
+}
+
+/* keep the blurred duplicate locked to the main video (option B) */
+function syncAmbient(screen) {
+  const main = screen.querySelector('video.fullscreen-reel-video');
+  const amb = screen.querySelector('video.reel-ambient-video');
+  if (!main || !amb) return;
+  const align = () => { if (Math.abs(amb.currentTime - main.currentTime) > 0.25) amb.currentTime = main.currentTime; };
+  main.addEventListener('timeupdate', align);
+  main.addEventListener('seeked', align);
+  main.addEventListener('play', () => amb.play().catch(() => {}));
+  main.addEventListener('pause', () => amb.pause());
+  amb.addEventListener('loadedmetadata', align);
+}
+
+function readout(state, asset, dev) {
+  const W = dev.w, H = dev.h;
+  const box = containBox(W, H, asset.ratio);
+  let html = '';
+  html += `<div><span class="k">viewport</span>${W} × ${H}</div>`;
+  html += `<div><span class="k">video box</span>${Math.round(box.w)} × ${Math.round(box.h)} <span class="good">(full width)</span></div>`;
+  html += `<div><span class="k">crop</span><span class="good">0px — nothing cut off</span></div>`;
+  if (state === 'current') {
+    html += `<div><span class="k">top/bottom</span><span class="bad">${Math.round(box.padY)}px empty band</span> <span style="color:#6d7689">(dark blur)</span></div>`;
+    html += `<div><span class="k">reads as</span><span class="bad">padding</span></div>`;
+  } else if (state === 'fillA') {
+    html += `<div><span class="k">top/bottom</span><span class="good">${Math.round(box.padY)}px blurred poster</span></div>`;
+    html += `<div><span class="k">cost</span>1 extra JPEG · static</div>`;
+  } else {
+    html += `<div><span class="k">top/bottom</span><span class="good">${Math.round(box.padY)}px live blurred copy</span></div>`;
+    html += `<div><span class="k">cost</span><span class="warn">2nd decoder + 2nd stream</span></div>`;
+  }
+  return `<div class="readout">${html}</div>`;
+}
+
+function frameHTML(state, asset) {
+  const isPortrait = asset.orientation === 'portrait';
+  const s = STATES[state];
+  let desc = '';
+  if (state === 'current') {
+    desc = 'Video keeps its full width and its own height; the strip above and below is a very dark blur of the poster — it reads as empty padding.';
+  } else if (state === 'fillA') {
+    desc = 'Same video, same full width, zero crop — but the leftover space becomes a bright blurred poster frame, so the screen reads as one full-bleed surface.';
+  } else {
+    desc = 'Same video, same full width, zero crop — the leftover space is a live blurred copy of the reel, locked to the main playback (Instagram Reels look).';
+  }
+  return `
+    <figure class="frame" data-state="${state}">
+      <span class="tag ${s.tag}">${state === 'current' ? 'Current' : 'Option ' + (state === 'fillA' ? 'A' : 'B')}</span>
+      <h3>${isPortrait ? 'Portrait reel 9:16' : 'Landscape reel 16:9'} — ${s.title}</h3>
+      <div class="desc">${desc}</div>
+      <div class="phone-slot">${phoneHTML(state, asset, device)}</div>
+      ${readout(state, asset, device)}
+    </figure>`;
+}
+
+function render() {
+  const p = ASSETS.portrait, l = ASSETS.landscape;
+  document.getElementById('frames-portrait').innerHTML =
+    frameHTML('current', p) + frameHTML('fillA', p) + frameHTML('fillB', p);
+  document.getElementById('frames-landscape').innerHTML =
+    frameHTML('current', l) + frameHTML('fillA', l) + frameHTML('fillB', l);
+
+  document.querySelectorAll('.phone-screen').forEach(syncAmbient);
+
+  document.getElementById('meta-portrait').textContent =
+    `${p.label} · source ratio ${p.ratio.toFixed(3)}`;
+  document.getElementById('meta-landscape').textContent =
+    `${l.label} · source ratio ${l.ratio.toFixed(3)}`;
+
+  document.querySelectorAll('.frame').forEach(f => {
+    f.hidden = !(mode === 'both' || f.dataset.state === mode);
+  });
+
+  const W = device.w, H = device.h;
+  const rows = [];
+  for (const key of ['portrait', 'landscape']) {
+    const a = ASSETS[key];
+    const box = containBox(W, H, a.ratio);
+    rows.push(`<tr>
+      <td>${a.orientation === 'portrait' ? 'Portrait 9:16' : 'Landscape 16:9'}</td>
+      <td class="num">${W} × ${H}</td>
+      <td class="num">${Math.round(box.w)} × ${Math.round(box.h)}</td>
+      <td class="num gain">0px (full width)</td>
+      <td class="num">${Math.round(box.padY)}px top + ${Math.round(box.padY)}px bottom → blur fill</td>
+      <td class="num">${(box.h / H * 100).toFixed(0)}% video + ${(box.padY * 2 / H * 100).toFixed(0)}% blur</td>
+    </tr>`);
+  }
+  document.querySelector('#mathTable tbody').innerHTML = rows.join('');
+
+  fitPhones();
+}
+
+/* scale every phone mock to fit its column */
+function fitPhones() {
+  document.querySelectorAll('.phone-slot').forEach(slot => {
+    const phone = slot.querySelector('.phone');
+    if (!phone) return;
+    const W = +phone.dataset.w, H = +phone.dataset.h;
+    const avail = Math.min(slot.parentElement.clientWidth, 380);
+    const s = Math.min(1, avail / (W + 20));
+    phone.style.transform = `scale(${s})`;
+    slot.style.width = ((W + 20) * s) + 'px';
+    slot.style.height = ((H + 20) * s) + 'px';
+  });
+}
+
+document.getElementById('modeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.mode;
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('active', x === b));
+  render();
+});
+
+document.getElementById('deviceSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  device = DEVICES[b.dataset.device];
+  document.querySelectorAll('#deviceSeg button').forEach(x => x.classList.toggle('active', x === b));
+  render();
+});
+
+window.addEventListener('resize', fitPhones);
+render();
+</script>
+</body>
+</html>

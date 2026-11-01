@@ -19,6 +19,21 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pwaninet.settings.local')
 
 django_asgi_app = get_asgi_application()
 
+# Warm the static fingerprint before the first request arrives. Hashing the
+# collected static tree takes about a second; doing it here keeps that cost
+# off the request path. The value is cached for the life of the process and
+# only changes when a static file's content changes.
+try:
+    import time as _time
+
+    from pwaninet.static_storage import static_fingerprint as _static_fingerprint
+
+    _started = _time.time()
+    _fingerprint = _static_fingerprint()
+    print(f'[ASGI] Static fingerprint {_fingerprint} computed in {_time.time() - _started:.2f}s')
+except Exception as _exc:  # pragma: no cover - never block startup
+    print(f'[ASGI] Static fingerprint warm-up skipped: {_exc}')
+
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 from channels.middleware import BaseMiddleware

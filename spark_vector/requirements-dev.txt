@@ -1,0 +1,3 @@
+# Test-only dependencies (NOT baked into the runtime image).
+# In-container: pip install -q -r requirements-dev.txt && python -m unittest discover -s . -p 'tests_*.py'
+httpx==0.28.1

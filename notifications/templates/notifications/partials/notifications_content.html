@@ -152,7 +152,10 @@
 </div>
 
 <script type="module">
-  import { initNotificationCenter } from "{% static 'notifications/js/notifications.js' %}?v=4";
+  // No manual "?v=" here: the static template tag appends the content
+  // fingerprint, and a module must resolve to the same URL at every entry
+  // point (see pwaninet/tests_module_identity.py).
+  import { initNotificationCenter } from "{% static 'notifications/js/notifications.js' %}";
   initNotificationCenter();
 </script>
 <script>

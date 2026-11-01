@@ -6,7 +6,10 @@
      data-conversation-id="{{ active_conversation_id }}"
      data-initial-study-mode="{% if initial_study_mode or active_study_session and active_study_session.status == 'active' %}true{% else %}false{% endif %}"
      data-study-mode="{% if initial_study_mode or active_study_session and active_study_session.status == 'active' %}true{% else %}false{% endif %}"
-     data-study-session-id="{{ active_study_session.id|default:'' }}">
+     data-study-session-id="{{ active_study_session.id|default:'' }}"
+     data-spark-voice-style="{{ preferences.voice_style|default:'warm' }}"
+     data-spark-voice-gender="{{ preferences.voice_gender|default:'female' }}"
+     data-spark-auto-tts="{{ preferences.auto_tts_enabled|yesno:'true,false' }}">
     {{ initial_context_resources|json_script:"pwanimate-initial-context-resources" }}
     {{ active_study_session|json_script:"pwanimate-active-study-session" }}
     {{ resumable_study_session|json_script:"pwanimate-resumable-study-session" }}
@@ -561,6 +564,38 @@
                                             <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i class="bi bi-filetype-docx me-2"></i>{% trans "Download Word document" %}</button></li>
                                         </ul>
                                     </div>
+                                    <button type="button"
+                                            class="btn pwanimate-action-btn pwanimate-feedback-btn"
+                                            data-feedback="helpful"
+                                            title="{% trans 'This helped' %}"
+                                            aria-label="{% trans 'This helped' %}">
+                                        <i class="bi bi-hand-thumbs-up"></i>
+                                    </button>
+                                    <div class="dropdown pwanimate-feedback-reason">
+                                        <button type="button"
+                                                class="btn pwanimate-action-btn pwanimate-feedback-btn"
+                                                data-bs-toggle="dropdown"
+                                                aria-expanded="false"
+                                                title="{% trans 'This did not help' %}"
+                                                aria-label="{% trans 'This did not help' %}">
+                                            <i class="bi bi-hand-thumbs-down"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end pwanimate-feedback-reason-menu">
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_answer">{% trans "The answer is wrong" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="not_my_document">{% trans "It ignored my document" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="too_slow">{% trans "It took too long" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_language">{% trans "Wrong language or register" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="too_long">{% trans "Too long or too short" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="other">{% trans "Something else" %}</button></li>
+                                        </ul>
+                                    </div>
+                                    <button type="button"
+                                            class="btn pwanimate-action-btn pwanimate-speak-btn"
+                                            title="{% trans 'Read this reply aloud' %}"
+                                            aria-label="{% trans 'Read this reply aloud' %}"
+                                            aria-pressed="false">
+                                        <i class="bi bi-volume-up-fill" aria-hidden="true"></i>
+                                    </button>
                                     <button type="button" class="btn pwanimate-action-btn copy-btn" title="{% trans 'Copy answer' %}" aria-label="{% trans 'Copy answer' %}">
                                         <i class="bi bi-clipboard"></i>
                                     </button>
@@ -811,12 +846,12 @@
                                     id="pwanimateModelDropdownBtn"
                                     data-bs-toggle="dropdown"
                                     aria-expanded="false"
-                                    title="{% trans 'Select AI Model' %}">
+                                    title="{% trans 'Select Spark Engine' %}">
                                 <span id="pwanimate-selected-model-label" class="fw-medium text-truncate" style="max-width: 140px;">Auto</span>
                                 <i class="bi bi-chevron-down ms-1" style="font-size: 0.7rem; opacity: 0.7;"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-start shadow pwanimate-model-menu" aria-labelledby="pwanimateModelDropdownBtn" id="pwanimate-model-dropdown-menu">
-                                <li><h6 class="dropdown-header text-uppercase fs-xs">{% trans "AI Model Selection" %}</h6></li>
+                                <li><h6 class="dropdown-header text-uppercase fs-xs">{% trans "Spark Engine Selection" %}</h6></li>
                                 <li>
                                     <button class="dropdown-item active d-flex align-items-center justify-content-between pwanimate-model-option"
                                             data-provider=""
@@ -848,6 +883,26 @@
                         </div>
                     </div>
                     <div class="pwanimate-composer-actions-end">
+                        <div class="pwanimate-quota-chip-wrap" id="pwanimateQuotaWrap" hidden>
+                            <button type="button"
+                                    id="pwanimateQuotaChip"
+                                    class="pwanimate-quota-chip"
+                                    aria-haspopup="dialog"
+                                    aria-expanded="false"
+                                    aria-controls="pwanimateQuotaPopover"
+                                    aria-label="{% trans 'Your usage today' %}">
+                                <svg class="pwanimate-quota-ring" viewBox="0 0 36 36" aria-hidden="true">
+                                    <circle class="pwanimate-quota-track" cx="18" cy="18" r="15" fill="none" stroke-width="3"></circle>
+                                    <circle class="pwanimate-quota-progress" id="pwanimateQuotaArc" cx="18" cy="18" r="15" fill="none" stroke-width="3" stroke-linecap="round"></circle>
+                                </svg>
+                                <span class="pwanimate-quota-label" id="pwanimateQuotaLabel">—</span>
+                            </button>
+                            <div class="pwanimate-quota-popover"
+                                 id="pwanimateQuotaPopover"
+                                 role="dialog"
+                                 aria-labelledby="pwanimateQuotaPopoverTitle"
+                                 hidden></div>
+                        </div>
                         <button type="button"
                                 class="pwanimate-attach-btn pwanimate-voice-btn"
                                 id="pwanimateVoiceBtn"
@@ -956,7 +1011,7 @@
                 <div class="modal-header">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-cpu text-primary fs-5"></i>
-                        <h5 class="modal-title fw-bold" id="pwanimateQuotaModalLabel">{% trans "AI Models & Quotas" %}</h5>
+                        <h5 class="modal-title fw-bold" id="pwanimateQuotaModalLabel">{% trans "Spark Engines & Quotas" %}</h5>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="pwanimateRefreshQuotaBtn" title="{% trans 'Refresh quota status' %}">
@@ -968,14 +1023,14 @@
                 </div>
                 <div class="modal-body p-3">
                     <p class="text-muted small mb-3">
-                        {% trans "Select an AI model to manually override default routing, or keep Auto for automatic zero-downtime failover between tiers." %}
+                        {% trans "Select a Spark engine to control how Spark handles your request, or keep Auto for automatic zero-downtime failover across engines." %}
                     </p>
 
                     <div id="pwanimate-modal-models-container" class="d-flex flex-column gap-2">
                         <!-- Populated dynamically by JS -->
                         <div class="text-center py-4 text-muted">
                             <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                            <span>{% trans "Loading models..." %}</span>
+                            <span>{% trans "Loading engines..." %}</span>
                         </div>
                     </div>
                 </div>
@@ -1152,6 +1207,8 @@
 
     <!-- Spark Dedicated Settings Modal -->
     {% include 'pwanimate/settings/partials/settings_modal.html' %}
+    {# Moved to <body> by the chat script: in the chat column it would paint under the settings modal's backdrop. #}
+    {% include 'pwanimate/settings/partials/subscription_overlay.html' %}
 </div>
 
 <script>
@@ -1172,7 +1229,7 @@
             scriptsToLoad.push("{% static 'documents/js/document-viewer.js' %}");
         }
         if (typeof window.initSpark !== 'function') {
-            scriptsToLoad.push("{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261011-2");
+            scriptsToLoad.push("{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261026-1");
         }
 
         function loadNext() {

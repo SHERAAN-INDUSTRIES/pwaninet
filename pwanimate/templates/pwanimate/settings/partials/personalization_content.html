@@ -159,6 +159,35 @@
         </div>
     </div>
 
+    <!-- 5. Voice -->
+    <div class="mb-4 pwanimate-settings-section">
+        <label class="form-label fw-bold mb-1">{% trans "Spark Voice" %}</label>
+        <p class="text-muted small mb-2">{% trans "Choose how Spark sounds when you use Read Aloud." %}</p>
+        <div class="d-flex flex-column gap-2 pwanimate-options-grid">
+            <label class="pwanimate-choice-card d-flex align-items-start gap-3 p-3 rounded-3 border {% if preferences.voice_style == 'warm' or not preferences.voice_style %}selected{% endif %}">
+                <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="voice_style" value="warm" {% if preferences.voice_style == 'warm' or not preferences.voice_style %}checked{% endif %}>
+                <div><div class="fw-semibold">{% trans "Warm Guide" %}</div><div class="text-muted small">{% trans "Friendly, encouraging, and conversational." %}</div></div>
+            </label>
+            <label class="pwanimate-choice-card d-flex align-items-start gap-3 p-3 rounded-3 border {% if preferences.voice_style == 'academic' %}selected{% endif %}">
+                <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="voice_style" value="academic" {% if preferences.voice_style == 'academic' %}checked{% endif %}>
+                <div><div class="fw-semibold">{% trans "Focused Academic" %}</div><div class="text-muted small">{% trans "Measured, precise, and study-focused." %}</div></div>
+            </label>
+        </div>
+        <div class="d-flex gap-3 mt-3">
+            <label class="form-check"><input class="form-check-input" type="radio" name="voice_gender" value="female" {% if preferences.voice_gender == 'female' or not preferences.voice_gender %}checked{% endif %}> {% trans "Female" %}</label>
+            <label class="form-check"><input class="form-check-input" type="radio" name="voice_gender" value="male" {% if preferences.voice_gender == 'male' %}checked{% endif %}> {% trans "Male" %}</label>
+        </div>
+    </div>
+
+    <!-- 6. Auto-TTS -->
+    <div class="mb-4 pwanimate-settings-section">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="pwanimate-auto-tts" name="auto_tts_enabled" {% if preferences.auto_tts_enabled %}checked{% endif %}>
+            <label class="form-check-label fw-bold" for="pwanimate-auto-tts">{% trans "Automatically read new Spark replies aloud" %}</label>
+        </div>
+        <p class="text-muted small mt-1 mb-0">{% trans "Off by default so Spark does not speak unexpectedly in public spaces." %}</p>
+    </div>
+
     <!-- Submit Action -->
     <div class="d-flex justify-content-end pt-3 border-top">
         <button type="submit" id="pwanimate-save-pref-btn" class="btn {% if success %}btn-success{% else %}btn-primary{% endif %} px-4 d-inline-flex align-items-center gap-2">

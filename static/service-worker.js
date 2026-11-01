@@ -5,9 +5,9 @@
  */
 
 'use strict';
-let CACHE_VERSION = '1.6.3';
-let CACHE_BUILD = '115';
-const SW_CACHE_REVISION = '16';
+let CACHE_VERSION = '1.6.4';
+let CACHE_BUILD = '117';
+const SW_CACHE_REVISION = '18';
 let CACHE_NAME = `vasto-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
 let OFFLINE_CACHE_NAME = `vasto-offline-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
 
@@ -294,8 +294,26 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
+    // Offline Media Hub keeps its own cache-first handler (it serves HTMX
+    // partials while offline), so it is exempt from the HTMX bypass below.
+    const isOfflineMedia = url.pathname === '/offline-media/' ||
+                           url.pathname.startsWith('/offline-media-stream/');
+    
+    // HTMX partials are HTML fragments, not pages. They are never cached,
+    // and turning a transient network failure into a 503 "Offline" body
+    // makes htmx read a network blip as a server error (it then swaps
+    // nothing and the user sees a dead page). Let them hit the network
+    // directly so htmx sees the real failure and can fall back.
+    if (!isOfflineMedia && isHtmxRequest(request)) {
+        return;
+    }
+    
     event.respondWith(handleRequest(request));
 });
+
+function isHtmxRequest(request) {
+    return request.headers.get('HX-Request') === 'true';
+}
 
 async function handleRequest(request) {
     const url = new URL(request.url);
@@ -330,7 +348,7 @@ async function handleRequest(request) {
         return await networkFirst(request);
         
     } catch (error) {
-        console.error('Service Worker: Request handling failed:', error);
+        console.error('Service Worker: Request handling failed for', request.url, error);
         return await getOfflineResponse(request);
     }
 }
@@ -660,7 +678,14 @@ async function getOfflineResponse(request) {
         return await getOfflineApiResponse(request);
     }
     
-    // Default offline response
+    // Default offline response. XHR/fetch callers expect JSON - handing
+    // them the text "Offline" makes their JSON.parse throw on top of the
+    // real failure.
+    const accept = request.headers.get('Accept') || '';
+    if (accept.includes('application/json') || request.destination === '') {
+        return await getOfflineApiResponse(request);
+    }
+    
     return new Response('Offline', {
         status: 503,
         statusText: 'Service Unavailable'

@@ -9,7 +9,14 @@
 
 import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261011-16';
 import { UploadState } from './upload_state_machine.js?v=20261011-16';
-import { uploadManager } from './upload_manager.js?v=20261011-16';
+
+// The manager singleton is reached via window (base.html exports it as
+// window.uploadManager), deliberately NOT imported here: this file is
+// loaded through the fingerprinted template URL, and an import of
+// upload_manager.js would go through a different module URL -- evaluating
+// a second copy of the class with its own empty session Map, which is how
+// the donut once ended up permanently stuck on "Preparing…".
+const getUploadManager = () => (typeof window !== 'undefined' ? window.uploadManager : null);
 
 class UploadBanner {
     constructor() {
@@ -24,6 +31,7 @@ class UploadBanner {
         this.activeThumbnailUrls = [];
         this.hasVideo = false;
         this.isInitialized = false;
+        this.phaseClass = '';
     }
 
     /**
@@ -58,7 +66,12 @@ class UploadBanner {
                 <div class="upload-count" id="upload-count">0</div>
             </div>
             <div class="upload-meta">
+                <div class="upload-phase" id="upload-phase"></div>
                 <div class="upload-status" id="upload-status">Preparing…</div>
+                <div class="upload-subtitle" id="upload-subtitle">
+                    <span id="upload-subtitle-text"></span>
+                    <span id="upload-mini-text"></span>
+                </div>
             </div>
             <button class="upload-cancel-btn" id="upload-banner-cancel" title="Cancel">
                 <i class="bi bi-x-lg"></i>
@@ -123,6 +136,10 @@ class UploadBanner {
 
         // Listen to resumable upload progress events
         window.addEventListener('resumable-upload-progress', (e) => {
+            // Pages that drive several transfers at once aggregate them
+            // themselves and push the merged number in; ignore the raw
+            // per-file events while that mode is on.
+            if (this.aggregateProgress) return;
             this.handleResumableProgress(e.detail);
         });
 
@@ -181,7 +198,7 @@ class UploadBanner {
         this.activeUploadCount = Math.max(0, (this.activeUploadCount || 1) - 1);
         this.updateCount();
         // Safety net: if no uploads are active, dismiss immediately
-        if (!uploadManager.getActiveUpload()) {
+        if (!getUploadManager()?.getActiveUpload()) {
             setTimeout(() => this.hide(), 2000);
         }
     }
@@ -194,7 +211,7 @@ class UploadBanner {
         this.updateDonutProgress(100);
         this.activeUploadCount = Math.max(0, (this.activeUploadCount || 1) - 1);
         this.updateCount();
-        if (!uploadManager.getActiveUpload()) {
+        if (!getUploadManager()?.getActiveUpload()) {
             setTimeout(() => this.hide(), 1500);
         }
     }
@@ -205,7 +222,7 @@ class UploadBanner {
     handleUploadFailed(data) {
         this.activeUploadCount = Math.max(0, (this.activeUploadCount || 1) - 1);
         this.updateCount();
-        if (!uploadManager.getActiveUpload()) {
+        if (!getUploadManager()?.getActiveUpload()) {
             setTimeout(() => this.hide(), 3000);
         }
     }
@@ -216,7 +233,7 @@ class UploadBanner {
     handleUploadCancelled(data) {
         this.activeUploadCount = Math.max(0, (this.activeUploadCount || 1) - 1);
         this.updateCount();
-        if (!uploadManager.getActiveUpload()) {
+        if (!getUploadManager()?.getActiveUpload()) {
             this.hide();
         }
     }
@@ -252,6 +269,175 @@ class UploadBanner {
         }
     }
 
+    // --- Classic banner API ---------------------------------------------------
+    // The donut is the current banner UI, but older upload flows (document
+    // upload, new-version modal) still drive the banner imperatively through
+    // the classic header/title/subtitle/progress API. These adapters map that
+    // API onto the donut so both generations share one banner. Without them
+    // the classic flows throw "setHeaderTitle is not a function" and abort
+    // the upload before the request is ever sent.
+
+    /**
+     * Phase label shown above the status line (e.g. "UPLOADING DOCUMENT")
+     */
+    setHeaderTitle(text, phaseClass = '') {
+        const phaseEl = document.getElementById('upload-phase');
+        const title = typeof text === 'string' ? text : '';
+        if (phaseEl) {
+            phaseEl.textContent = title;
+            phaseEl.classList.toggle('visible', Boolean(title));
+        }
+        if (phaseClass) this.setProgressFillClass(phaseClass);
+    }
+
+    /**
+     * Main status line (file name / current state)
+     */
+    setTitle(text) {
+        this.setStatus(text);
+    }
+
+    /**
+     * Muted secondary line under the status
+     */
+    setSubtitle(text) {
+        const subEl = document.getElementById('upload-subtitle-text');
+        const title = typeof text === 'string' ? text : '';
+        if (subEl) subEl.textContent = title;
+        this.syncSubtitleVisibility();
+    }
+
+    /**
+     * Tiny trailing note (e.g. "Uploading 45%", "Document ready! ✓")
+     */
+    updateMiniText(text) {
+        const miniEl = document.getElementById('upload-mini-text');
+        const title = typeof text === 'string' ? text : '';
+        if (miniEl) miniEl.textContent = title;
+        this.syncSubtitleVisibility();
+    }
+
+    /**
+     * Show the subtitle line only when it has something to show
+     */
+    syncSubtitleVisibility() {
+        const subEl = document.getElementById('upload-subtitle');
+        if (!subEl) return;
+        const hasText = Boolean(
+            (subEl.querySelector('#upload-subtitle-text')?.textContent || '').trim() ||
+            (subEl.querySelector('#upload-mini-text')?.textContent || '').trim()
+        );
+        subEl.classList.toggle('visible', hasText);
+    }
+
+    /**
+     * Progress as a percentage (0-100) - drives the donut ring
+     */
+    updateProgress(percent) {
+        const clamped = Math.min(100, Math.max(0, Math.round(Number(percent) || 0)));
+        this.currentProgress = clamped;
+        // No label: the status line belongs to the caller (file name, phase).
+        this.updateDonutProgress(clamped);
+    }
+
+    /**
+     * Take over progress reporting.
+     *
+     * A page that drives several transfers at once merges them into one
+     * number and pushes it here; while this mode is on the raw per-file
+     * engine events are ignored so the donut does not flicker between files.
+     */
+    setAggregateProgress(percent, label) {
+        this.aggregateProgress = true;
+        const clamped = Math.min(100, Math.max(0, Math.round(Number(percent) || 0)));
+        this.currentProgress = clamped;
+        this.updateDonutProgress(clamped, label);
+    }
+
+    /**
+     * Hand progress reporting back to the engine's own events.
+     */
+    clearAggregateProgress() {
+        this.aggregateProgress = false;
+    }
+
+    /**
+     * Phase class - tints the donut ring (phase-upload/-transcoding/
+     * -published/-error)
+     */
+    setProgressFillClass(className) {
+        this.phaseClass = className || '';
+        if (!this.banner) return;
+        ['phase-upload', 'phase-transcoding', 'phase-published', 'phase-error'].forEach((cls) => {
+            this.banner.classList.toggle(cls, this.phaseClass.split(/\s+/).includes(cls));
+        });
+    }
+
+    /**
+     * Error state - keeps the banner up with the failure reason
+     */
+    showError(message, canRetry = false) {
+        this.setHeaderTitle('UPLOAD FAILED', 'phase-error');
+        this.setTitle(message || 'Upload failed');
+        this.setSubtitle(canRetry ? 'Retry to start over' : '');
+        this.updateMiniText('Upload failed ✕');
+        this.show();
+    }
+
+    /**
+     * Success state
+     */
+    showCompletion() {
+        this.setHeaderTitle('ALL SET', 'phase-published');
+        this.setTitle('Ready!');
+        this.setSubtitle('');
+        this.updateProgress(100);
+        this.updateMiniText('Ready ✓');
+        this.show();
+    }
+
+    /**
+     * Byte progress for the classic XHR flows.
+     * Accepts the object form ({loaded, total, percent}) or the positional
+     * form (loaded, total).
+     */
+    handleUploadProgress(data, total) {
+        let loaded = 0;
+        let size = 0;
+        let percent = 0;
+
+        if (data && typeof data === 'object') {
+            loaded = Number(data.loaded) || 0;
+            size = Number(data.total) || 0;
+            percent = Number(data.percent) || 0;
+        } else {
+            loaded = Number(data) || 0;
+            size = Number(total) || 0;
+        }
+
+        if (!percent && size > 0) percent = (loaded / size) * 100;
+
+        const clamped = Math.min(100, Math.max(0, Math.round(percent)));
+        this.currentProgress = clamped;
+        this.updateDonutProgress(clamped);
+        this.updateMiniText(`Uploading ${clamped}%`);
+    }
+
+    /**
+     * Reset the banner back to its idle state
+     */
+    reset() {
+        this.currentProgress = 0;
+        this.setHeaderTitle('', '');
+        this.setTitle('Preparing…');
+        this.setSubtitle('');
+        this.updateMiniText('');
+        this.setProgressFillClass('');
+        this.updateDonutProgress(0);
+        this.activeUploadCount = 0;
+        this.updateCount();
+    }
+
     /**
      * Show the banner
      */
@@ -271,6 +457,10 @@ class UploadBanner {
         this.activeUploadCount = 0;
         this.updateCount();
         this.updateDonutProgress(0);
+        this.setHeaderTitle('', '');
+        this.setProgressFillClass('');
+        this.setSubtitle('');
+        this.updateMiniText('');
     }
 
     /**
@@ -279,7 +469,7 @@ class UploadBanner {
      * The banner always hides either way — ✕ must never stick.
      */
     cancelCurrentUpload() {
-        const currentUpload = uploadManager.getActiveUpload();
+        const currentUpload = getUploadManager()?.getActiveUpload() || null;
         if (!currentUpload) {
             this.hide();
             return;
@@ -290,7 +480,7 @@ class UploadBanner {
         );
         if (choice) {
             try {
-                uploadManager.cancelUpload(currentUpload.id);
+                getUploadManager()?.cancelUpload(currentUpload.id);
             } catch (_) {}
         }
         // Banner always hides: dismissed UI only, or cancelled upload.
@@ -477,6 +667,7 @@ class UploadUI {
             /* Phase label: tells the user why a video sits on processing */
             .upload-meta {
                 max-width: 220px;
+                min-width: 0;
             }
             .upload-status {
                 font-size: 12px;
@@ -492,6 +683,57 @@ class UploadUI {
             }
             [data-theme="light"] .upload-status {
                 color: var(--text-dark, #0f172a);
+            }
+
+            /* Classic-flow lines: phase label above, subtitle below */
+            .upload-phase {
+                display: none;
+                max-width: 220px;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: #3b82f6;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .upload-phase.visible {
+                display: block;
+            }
+            .upload-subtitle {
+                display: none;
+                max-width: 220px;
+                font-size: 10px;
+                font-weight: 500;
+                color: var(--text-muted, #b0b3b8);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .upload-subtitle.visible {
+                display: block;
+            }
+            .upload-mini-text {
+                color: var(--text-muted, #b0b3b8);
+            }
+            .upload-mini-text:not(:empty)::before {
+                content: '· ';
+            }
+            [data-theme="light"] .upload-subtitle,
+            [data-theme="light"] .upload-mini-text {
+                color: var(--text-muted, #64748b);
+            }
+
+            /* Phase tinting of the donut ring */
+            .upload-banner.phase-transcoding .upload-donut-progress {
+                stroke: #f59e0b;
+            }
+            .upload-banner.phase-published .upload-donut-progress {
+                stroke: #22c55e;
+            }
+            .upload-banner.phase-error .upload-donut-progress {
+                stroke: #ef4444;
             }
 
             [data-theme="light"] .upload-count {
@@ -559,19 +801,23 @@ class UploadUI {
         return this.banner;
     }
 
-    // Direct proxy methods to inner banner
-    show() { return this.banner.show(); }
-    hide() { return this.banner.hide(); }
-    reset() { return this.banner.reset(); }
-    setHeaderTitle(text, phaseClass) { return this.banner.setHeaderTitle(text, phaseClass); }
-    setTitle(text) { return this.banner.setTitle(text); }
-    setSubtitle(text) { return this.banner.setSubtitle(text); }
-    updateProgress(percent) { return this.banner.updateProgress(percent); }
-    setProgressFillClass(className) { return this.banner.setProgressFillClass(className); }
-    updateMiniText(text) { return this.banner.updateMiniText(text); }
-    showError(message, canRetry) { return this.banner.showError(message, canRetry); }
-    showCompletion() { return this.banner.showCompletion(); }
-    handleUploadProgress(data) { return this.banner.handleUploadProgress(data); }
+    // Direct proxy methods to inner banner.
+    // Optional chaining on purpose: the banner is presentation only, so a
+    // missing/stale banner method must never abort the caller's upload.
+    show() { return this.banner?.show?.(); }
+    hide() { return this.banner?.hide?.(); }
+    reset() { return this.banner?.reset?.(); }
+    setHeaderTitle(text, phaseClass) { return this.banner?.setHeaderTitle?.(text, phaseClass); }
+    setTitle(text) { return this.banner?.setTitle?.(text); }
+    setSubtitle(text) { return this.banner?.setSubtitle?.(text); }
+    updateProgress(percent) { return this.banner?.updateProgress?.(percent); }
+    setAggregateProgress(percent, label) { return this.banner?.setAggregateProgress?.(percent, label); }
+    clearAggregateProgress() { return this.banner?.clearAggregateProgress?.(); }
+    setProgressFillClass(className) { return this.banner?.setProgressFillClass?.(className); }
+    updateMiniText(text) { return this.banner?.updateMiniText?.(text); }
+    showError(message, canRetry) { return this.banner?.showError?.(message, canRetry); }
+    showCompletion() { return this.banner?.showCompletion?.(); }
+    handleUploadProgress(data, total) { return this.banner?.handleUploadProgress?.(data, total); }
 }
 
 // Global upload UI instance

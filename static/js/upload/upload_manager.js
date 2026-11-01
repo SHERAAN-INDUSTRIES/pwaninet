@@ -71,15 +71,48 @@ class UploadManager {
 
     async processUpload(uploadId) {
         const session = this.uploads.get(uploadId);
-        if (!session) return;
+        if (!session) {
+            // This manager does not own the session (historically: two module
+            // instances of this file loaded under different import URLs, so
+            // the composer registered the upload elsewhere). Never return
+            // silently -- the queue item would sit at the head forever and
+            // every later upload would hang at "Preparing…". Fail it so the
+            // queue keeps moving and the banner reports the failure.
+            const error = new Error(`Upload session ${uploadId} not found`);
+            console.error('[UploadManager] processUpload: ' + error.message);
+            uploadQueue.uploadFailed(uploadId, error);
+            uploadEvents.emit(UploadEventNames.UPLOAD_FAILED, {
+                uploadId,
+                session: null,
+                error: error.message,
+                canRetry: false,
+            });
+            return;
+        }
 
-        const progressTracker = progressManager.getTracker(uploadId);
+        const PREPARING_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes for preparation
+        let preparingTimeout = null;
 
         try {
+            // Everything that can throw stays inside the try: an exception
+            // escaping processUpload would never reach failUpload, and the
+            // queue would wait for this item forever.
+            const progressTracker = progressManager.getTracker(uploadId);
+
             progressTracker.start();
+
+            // Set up timeout for preparation phase
+            preparingTimeout = setTimeout(() => {
+                const error = new Error(`Upload ${uploadId} timed out during preparation (2 minutes)`);
+                console.error('[UploadManager] Preparation timeout:', error.message);
+                this.failUpload(uploadId, error);
+            }, PREPARING_TIMEOUT_MS);
 
             this.transitionState(uploadId, UploadState.PREPARING);
             await this.prepareUpload(uploadId);
+
+            clearTimeout(preparingTimeout);
+            preparingTimeout = null;
 
             this.transitionState(uploadId, UploadState.VALIDATING);
             uploadEvents.emit(UploadEventNames.VALIDATION_STARTED, { uploadId });
@@ -104,6 +137,7 @@ class UploadManager {
 
             this.waitForQueueTurn(uploadId);
         } catch (error) {
+            if (preparingTimeout) clearTimeout(preparingTimeout);
             this.failUpload(uploadId, error);
         }
     }
@@ -189,12 +223,31 @@ class UploadManager {
         const session = this.uploads.get(uploadId);
         if (!session) return;
 
+        const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout
+        let isTimedOut = false;
+
+        const timeoutHandle = setTimeout(() => {
+            isTimedOut = true;
+            const error = new Error(`Upload ${uploadId} timed out waiting for queue turn (5 minutes)`);
+            console.error('[UploadManager] waitForQueueTurn timeout:', error.message);
+            this.failUpload(uploadId, error);
+        }, TIMEOUT_MS);
+
         const checkQueue = () => {
+            if (isTimedOut) return;
+
             const currentUpload = uploadQueue.getCurrentUpload();
             if (currentUpload && currentUpload.id === uploadId) {
+                clearTimeout(timeoutHandle);
                 this.performUpload(uploadId);
             } else if (this.uploads.has(uploadId)) {
                 setTimeout(checkQueue, 100);
+            } else {
+                // Session was removed while waiting - fail the upload
+                clearTimeout(timeoutHandle);
+                const error = new Error(`Upload session ${uploadId} was removed while waiting for queue turn`);
+                console.error('[UploadManager] waitForQueueTurn session removed:', error.message);
+                this.failUpload(uploadId, error);
             }
         };
 
@@ -203,12 +256,28 @@ class UploadManager {
 
     async performUpload(uploadId) {
         const session = this.uploads.get(uploadId);
-        if (!session) return;
+        if (!session) {
+            // Reached the head of the queue without a session (cleanup race
+            // or module-instance drift). Never return silently here: the
+            // queue waits on this item forever and every later upload would
+            // hang at "Preparing…".
+            const error = new Error(`Upload session ${uploadId} not found at upload time`);
+            console.error('[UploadManager] performUpload: ' + error.message);
+            uploadQueue.uploadFailed(uploadId, error);
+            uploadEvents.emit(UploadEventNames.UPLOAD_FAILED, {
+                uploadId,
+                session: null,
+                error: error.message,
+                canRetry: false,
+            });
+            return;
+        }
 
-        const tracker = progressManager.getTracker(uploadId);
         console.log('[UploadManager] performUpload called for uploadId:', uploadId, 'files:', session.files.length);
 
         try {
+            const tracker = progressManager.getTracker(uploadId);
+
             this.transitionState(uploadId, UploadState.UPLOADING);
             uploadEvents.emit(UploadEventNames.UPLOAD_STARTED, { uploadId, session });
 
@@ -334,21 +403,61 @@ class UploadManager {
 
     failUpload(uploadId, error) {
         const session = this.uploads.get(uploadId);
-        if (!session) return;
+        if (!session) {
+            // Session already gone (or owned by another module instance).
+            // Still fail the queue item: a failure that never reaches the
+            // queue freezes its head and blocks every subsequent upload.
+            uploadQueue.uploadFailed(
+                uploadId,
+                error instanceof Error ? error : new Error(String(error))
+            );
+            return;
+        }
 
         this.transitionState(uploadId, UploadState.FAILED, { error: error.message });
         uploadQueue.uploadFailed(uploadId, error);
 
+        const errorMsg = error.message || String(error);
+        const isRetryable = this.isRetryableError(errorMsg);
+
         uploadEvents.emit(UploadEventNames.UPLOAD_FAILED, {
             uploadId,
             session,
-            error: error.message,
-            canRetry: session.canRetry(),
+            error: errorMsg,
+            canRetry: session.canRetry() && isRetryable,
         });
         uploadEvents.emit(UploadEventNames.ERROR_OCCURRED, {
             uploadId,
-            error: error.message,
+            error: errorMsg,
         });
+
+        // Auto-retry for retryable errors if retries available
+        if (isRetryable && session.canRetry()) {
+            console.log(`[UploadManager] Auto-retrying upload ${uploadId} (attempt ${session.retryCount + 1}/${session.maxRetries})`);
+            setTimeout(() => {
+                this.retryUpload(uploadId);
+            }, 2000); // Wait 2 seconds before retry
+        }
+    }
+
+    /**
+     * Determine if an error is retryable
+     * @param {string} errorMsg - Error message
+     * @returns {boolean}
+     */
+    isRetryableError(errorMsg) {
+        const retryablePatterns = [
+            /timeout/i,
+            /network/i,
+            /connection/i,
+            /fetch/i,
+            /server.*error/i,
+            /5\d\d/i, // 5xx server errors
+            /ECONN/i,
+            /ETIMEDOUT/i,
+        ];
+
+        return retryablePatterns.some(pattern => pattern.test(errorMsg));
     }
 
     /**
@@ -570,6 +679,19 @@ class UploadManager {
     }
 }
 
-export const uploadManager = new UploadManager();
+// One manager per window.
+//
+// Templates reach this file through the static template tag (which appends a
+// content fingerprint) while other modules have imported it with their own
+// version queries -- each URL used to get its own instance with its own
+// empty session Map. base.html then initialized one instance while the post
+// composer created uploads on another: the UPLOAD_ADDED handler could not
+// find the session, returned silently, and the queue head never reached a
+// terminal state, so every post hung at "Preparing…". Keying the singleton
+// on window makes instance identity independent of the URL.
+const UPLOAD_MANAGER_KEY = '__pwaninetUploadManager';
+const uploadManagerRoot = typeof window !== 'undefined' ? window : globalThis;
+export const uploadManager = uploadManagerRoot[UPLOAD_MANAGER_KEY]
+    || (uploadManagerRoot[UPLOAD_MANAGER_KEY] = new UploadManager());
 
 export default UploadManager;

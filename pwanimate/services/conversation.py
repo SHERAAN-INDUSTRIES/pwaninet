@@ -228,6 +228,7 @@ class ConversationService:
                     update_fields.append("title")
 
             conversation.save(update_fields=update_fields)
+            transaction.on_commit(lambda: ConversationService.schedule_embedding(msg.id))
             return msg
 
     @staticmethod
@@ -236,9 +237,20 @@ class ConversationService:
         content: str,
         citations: Optional[list] = None,
         sources: Optional[list] = None,
+        provider: str = "",
+        model_id: str = "",
+        task: str = "",
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
     ) -> PwanimateMessage:
         """
         Persist an assistant turn with grounding citations and source provenance.
+
+        The serving model and the task are stored on the message as well as
+        in the billing ledger: the ledger says what a turn cost, this says
+        what the student was shown, and joining the two is what makes it
+        possible to judge whether a model change actually helped.
         Touches conversation updated_at in a short atomic transaction.
         """
         with transaction.atomic():
@@ -248,6 +260,25 @@ class ConversationService:
                 content=content.strip(),
                 citations=citations or [],
                 sources=sources or [],
+                provider=str(provider or "")[:32],
+                model_id=str(model_id or "")[:160],
+                task=str(task or "")[:64],
+                prompt_tokens=int(prompt_tokens or 0),
+                completion_tokens=int(completion_tokens or 0),
+                total_tokens=int(total_tokens or 0),
             )
             conversation.save(update_fields=["updated_at"])
+            transaction.on_commit(lambda: ConversationService.schedule_embedding(msg.id))
             return msg
+
+    @staticmethod
+    def schedule_embedding(message_id: int) -> None:
+        """Queue semantic indexing without making message persistence depend on Celery."""
+        try:
+            from pwanimate.tasks.conversation_memory import embed_message
+
+            delay_fn = getattr(embed_message, "delay", None)
+            if callable(delay_fn):
+                delay_fn(message_id)
+        except Exception:
+            logger.warning("Could not schedule conversation message embedding", exc_info=True)

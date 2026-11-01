@@ -76,7 +76,7 @@
                 <div class="d-flex justify-content-between align-items-center gap-2">
                     <div class="text-truncate">
                         <strong class="d-block text-truncate">${item.filename}${queueInfo}</strong>
-                        <small class="text-muted">${formatBytes(item.total_bytes)} · ${item.session_protocol || ''}</small>
+                        <small class="text-muted">${formatBytes(item.total_bytes)} · ${item.session_protocol || ''}${item.kind === 'document' ? ' · document' : ''}</small>
                     </div>
                     <div>${statusBadge(item.status)}</div>
                 </div>
@@ -90,6 +90,7 @@
                         ${canCancel ? '<button class="btn btn-outline-danger" data-action="cancel">Cancel</button>' : ''}
                         ${canDelete ? '<button class="btn btn-outline-secondary" data-action="delete">Delete</button>' : ''}
                         ${item.post ? `<a class="btn btn-outline-success" href="/post/${item.post_share_id || ''}/">View post</a>` : ''}
+                        ${item.document_share_id ? `<a class="btn btn-outline-success" href="/documents/document/${item.document_share_id}/">View document</a>` : ''}
                     </div>
                 </div>
             </div>

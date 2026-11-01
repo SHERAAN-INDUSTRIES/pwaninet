@@ -1,10 +1,12 @@
 """
 Domain Tools Package for Pwanimate.
 
-Exports the five standard read-only domain tools.
+Exports the standard read-only domain tools, plus the write-action tools
+(Spark proposes, the student approves).
 """
 
 from pwanimate.tools.domain.academic import AcademicLookupTool, StudentTimetableTool
+from pwanimate.tools.domain.actions import FollowUserTool, SendMessageTool
 from pwanimate.tools.domain.documents import DocumentDetailTool
 from pwanimate.tools.domain.groups import GroupAnnouncementsTool
 from pwanimate.tools.domain.users import UserProfileTool
@@ -24,4 +26,5 @@ __all__ = [
     "PeopleDiscoveryTool",
     "LocalTimeTool", "ContentSearchTool", "SendNotificationTool", "WebSearchTool",
     "SiteInfoTool",
+    "SendMessageTool", "FollowUserTool",
 ]

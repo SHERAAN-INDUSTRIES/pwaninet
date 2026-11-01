@@ -144,6 +144,17 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
             'chunk_count': 0,
         }
 
+    # Validation: PDF documents MUST have page numbers for page-specific retrieval
+    if extracted_doc.format == 'pdf':
+        chunks_without_pages = sum(1 for chunk in chunks_data if chunk.page_number is None)
+        if chunks_without_pages > 0:
+            logger.error(
+                f"[PWANIMATE-INGESTION] CRITICAL: PDF document {doc.id} (version {version_id}) has "
+                f"{chunks_without_pages}/{len(chunks_data)} chunks without page numbers. "
+                f"This will break page-specific retrieval."
+            )
+            # Continue anyway to allow manual intervention, but log the critical issue
+
     # Phase 2C: Atomic Database Persistence
     try:
         with transaction.atomic():

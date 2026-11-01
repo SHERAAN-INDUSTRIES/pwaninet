@@ -11,6 +11,7 @@ from .mock import MockEmbeddingProvider
 from .jina import JinaEmbeddingProvider
 from .voyage import VoyageEmbeddingProvider
 from .cloudflare import CloudflareEmbeddingProvider
+from .selfhosted import SelfHostedEmbeddingProvider
 
 
 def get_embedding_provider(
@@ -21,7 +22,7 @@ def get_embedding_provider(
     Factory function returning an instance of the configured embedding provider.
 
     Args:
-        provider_name: Optional override for provider type ('gemini', 'mock', 'jina', 'voyage', 'cloudflare').
+        provider_name: Optional override for provider type ('gemini', 'mock', 'jina', 'voyage', 'cloudflare', 'selfhosted').
         **kwargs: Optional constructor arguments passed to the provider.
 
     Returns:
@@ -39,7 +40,9 @@ def get_embedding_provider(
         return VoyageEmbeddingProvider(**kwargs)
     elif name in ('cloudflare', 'cf'):
         return CloudflareEmbeddingProvider(**kwargs)
+    elif name in ('selfhosted', 'local'):
+        return SelfHostedEmbeddingProvider(**kwargs)
     else:
         raise ValueError(
-            f"Unsupported embedding provider: '{name}'. Supported providers are: 'gemini', 'mock', 'jina', 'voyage', 'cloudflare'."
+            f"Unsupported embedding provider: '{name}'. Supported providers are: 'gemini', 'mock', 'jina', 'voyage', 'cloudflare', 'selfhosted'."
         )

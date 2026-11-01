@@ -108,5 +108,29 @@ def head_object_ok(client, bucket, key):
         return False
 
 
+def promote_object(client, bucket, staging_key, final_key):
+    """Move a verified staging object to its public key.
+
+    This is a server-side copy inside the bucket: the bytes never travel
+    through the application server.
+    """
+    client.copy_object(
+        CopySource={"Bucket": bucket, "Key": staging_key},
+        Bucket=bucket,
+        Key=final_key,
+    )
+    return final_key
+
+
+def delete_object(client, bucket, key):
+    """Best-effort cleanup of a staging object."""
+    try:
+        client.delete_object(Bucket=bucket, Key=key)
+        return True
+    except Exception:
+        logger.warning("R2 delete failed for %s (non-fatal)", key, exc_info=True)
+        return False
+
+
 def credential_expiry():
     return timezone.now() + timezone.timedelta(seconds=PRESIGNED_URL_TTL_SECONDS)

@@ -256,7 +256,7 @@ def sweep_r2_debris():
             except Exception:
                 logger.warning("sweep: abort failed for %s", upload.get("Key"), exc_info=True)
     finished_keys = UploadRecord.objects.filter(
-        status__in=("completed", "cancelled"),
+        status__in=("completed", "cancelled", "failed"),
         updated_at__lt=cutoff,
         session__finalized=True,
     ).values_list("session__r2_key", flat=True)[:500]

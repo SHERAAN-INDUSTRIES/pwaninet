@@ -581,7 +581,12 @@ def toggle_document_availability(request, share_id):
 
 @login_required
 def upload_new_version(request, share_id):
-    """Upload a new version of an existing document."""
+    """Upload a new version of an existing document.
+
+    LEGACY PATH: the bytes are posted through Django. The version modal now
+    uses the direct-to-R2 engine (uploads/ app, kind='document' with
+    target='version'); this endpoint stays for API clients.
+    """
     document = Document.objects.filter(share_id=share_id).first()
     if not document:
         return JsonResponse({'success': False, 'error': 'Document not found'}, status=404)
@@ -631,6 +636,12 @@ from django.views.decorators.http import require_http_methods
 def upload_document(request):
     """
     Multi-stage upload flow for documents with student academic defaults.
+
+    LEGACY PATH: the file bytes are posted through Django and written to
+    storage by the app server. The upload UI now uses the direct-to-R2
+    engine instead (uploads/ app, kind='document'): the browser PUTs the
+    bytes straight into the bucket and this flow is only kept for API
+    clients that cannot use the engine.
     """
     from .academic.models import AcademicUnit, Semester, AcademicYear, AcademicLevel, Programme
     from .academic.services import StudentAcademicEnrollmentService, DocumentAcademicLinkService

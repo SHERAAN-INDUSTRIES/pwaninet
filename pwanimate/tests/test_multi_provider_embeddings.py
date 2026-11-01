@@ -47,6 +47,7 @@ from pwanimate.ai.embeddings.base import (
 )
 from pwanimate.ai.embeddings.gemini import GeminiEmbeddingProvider
 from pwanimate.ai.embeddings.mock import MockEmbeddingProvider
+from pwanimate.ai.embeddings.selfhosted import SelfHostedEmbeddingProvider
 from pwanimate.ai.embeddings.jina import JinaEmbeddingProvider
 from pwanimate.ai.embeddings.voyage import VoyageEmbeddingProvider
 from pwanimate.ai.embeddings.cloudflare import CloudflareEmbeddingProvider
@@ -481,9 +482,24 @@ class MultiProviderFactoryTestCase(TestCase):
             get_embedding_provider("unknown-provider")
         self.assertIn("Unsupported embedding provider", str(ctx.exception))
 
-    def test_default_provider_remains_gemini(self):
+    def test_default_provider_follows_settings(self):
+        """The default provider follows configuration (it became `selfhosted`
+        at the local-embedding cutover); Gemini stays available explicitly."""
+        configured = (getattr(settings, 'PWANIMATE_EMBEDDING_PROVIDER', 'gemini') or 'gemini').strip().lower()
+        expected = {
+            'gemini': GeminiEmbeddingProvider,
+            'selfhosted': SelfHostedEmbeddingProvider,
+            'local': SelfHostedEmbeddingProvider,
+            'mock': MockEmbeddingProvider,
+        }.get(configured)
         default_provider = get_embedding_provider()
-        self.assertIsInstance(default_provider, GeminiEmbeddingProvider)
+        if expected is not None:
+            self.assertIsInstance(default_provider, expected)
+        # The Gemini provider is always reachable by name, whatever the default is.
+        self.assertIsInstance(get_embedding_provider('gemini'), GeminiEmbeddingProvider)
+        # ...and it never claims another provider's model id (D5: the stamp must
+        # match the model that produced the vector).
+        self.assertTrue(get_embedding_provider('gemini').get_model_name().startswith('gemini'))
 
 
 class GeminiAndMockCompatibilityTestCase(TestCase):

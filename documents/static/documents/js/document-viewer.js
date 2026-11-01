@@ -4,6 +4,16 @@
  * across desktop, mobile, Document Detail previews, and embedded context panels.
  */
 
+// This file is included from several templates and re-evaluated whenever an
+// htmx partial that carries it is swapped in. A second `class DocumentViewer`
+// declaration would throw a SyntaxError and take the whole viewer down, so
+// everything lives in one self-guarding scope.
+(function (root) {
+    'use strict';
+    if (root.DocumentViewer) {
+        return; // already loaded - do not redeclare
+    }
+
 class DocumentViewer {
     /**
      * Supports both modern options-based signature:
@@ -1775,28 +1785,27 @@ class UnsupportedViewer {
     destroy() {}
 }
 
-// Global Browser Export
-if (typeof window !== 'undefined') {
-    window.DocumentViewer = DocumentViewer;
-    window.ViewerFactory = ViewerFactory;
-    window.PDFViewer = PDFViewer;
-    window.DOCXViewer = DOCXViewer;
-    window.PPTXViewer = PPTXViewer;
-    window.TextViewer = TextViewer;
-    window.ImageViewer = ImageViewer;
-    window.UnsupportedViewer = UnsupportedViewer;
-}
+    // Global Browser Export
+    root.DocumentViewer = DocumentViewer;
+    root.ViewerFactory = ViewerFactory;
+    root.PDFViewer = PDFViewer;
+    root.DOCXViewer = DOCXViewer;
+    root.PPTXViewer = PPTXViewer;
+    root.TextViewer = TextViewer;
+    root.ImageViewer = ImageViewer;
+    root.UnsupportedViewer = UnsupportedViewer;
 
-// Node.js CommonJS Export for Testing
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        DocumentViewer,
-        ViewerFactory,
-        PDFViewer,
-        DOCXViewer,
-        PPTXViewer,
-        TextViewer,
-        ImageViewer,
-        UnsupportedViewer
-    };
-}
+    // Node.js CommonJS Export for Testing
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            DocumentViewer,
+            ViewerFactory,
+            PDFViewer,
+            DOCXViewer,
+            PPTXViewer,
+            TextViewer,
+            ImageViewer,
+            UnsupportedViewer
+        };
+    }
+})(typeof window !== 'undefined' ? window : globalThis);

@@ -237,9 +237,10 @@ def process_file(self, file_id: int):
     """Process a single document file.
     
     This task handles file-specific processing:
-    1. Generate thumbnail
-    2. Generate preview
-    3. Extract file metadata
+    1. Compute the checksum (so duplicate detection has something to compare)
+    2. Generate thumbnail
+    3. Generate preview
+    4. Extract file metadata
     """
     try:
         file = DocumentFile.objects.get(id=file_id)
@@ -247,6 +248,14 @@ def process_file(self, file_id: int):
         
         file.processing_status = 'processing'
         file.save(update_fields=['processing_status'])
+        
+        # Checksum first: duplicate detection compares against it. Direct
+        # uploads arrive without one because the bytes never touched Django.
+        if not file.checksum:
+            checksum = compute_file_checksum(file)
+            if checksum:
+                file.checksum = checksum
+                file.save(update_fields=['checksum'])
         
         # Generate thumbnail
         generate_thumbnail.delay(file_id)
@@ -270,6 +279,23 @@ def process_file(self, file_id: int):
         file.processing_error = str(e)
         file.save(update_fields=['processing_status', 'processing_error'])
         raise self.retry(exc=e, countdown=60)
+
+
+def compute_file_checksum(document_file):
+    """SHA-256 of a stored document file. Reads from storage, never from disk."""
+    import hashlib
+
+    try:
+        if not document_file.file or not document_file.file.name:
+            return None
+        digest = hashlib.sha256()
+        with document_file.file.open('rb') as handle:
+            for chunk in handle.chunks():
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception as exc:
+        logger.warning("Could not compute checksum for file %s: %s", document_file.id, exc)
+        return None
 
 
 @shared_task(bind=True, max_retries=2)
@@ -722,6 +748,13 @@ def check_duplicate(self, file_id: int):
     try:
         file = DocumentFile.objects.get(id=file_id)
         logger.info(f"Checking duplicates for file {file_id}")
+        
+        if not file.checksum:
+            # No checksum yet (direct upload still being hashed) - nothing
+            # to compare against, and an empty checksum would match every
+            # unhashed file.
+            logger.info(f"No checksum for file {file_id}, skipping duplicate check")
+            return
         
         from ..storage.models import FileChecksum
         duplicate_files = DocumentFile.objects.filter(

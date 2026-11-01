@@ -33,6 +33,9 @@
                muted loop playsinline
                data-post-id="{{ post.share_id }}"
                data-autoplay="{% if disable_autoplay or in_search %}false{% else %}true{% endif %}"
+               data-video-duration="{{ post.video_duration|default:'' }}"
+               data-video-width="{{ post.video_width|default:'' }}"
+               data-video-height="{{ post.video_height|default:'' }}"
                poster="{{ post.get_video_poster|default:'' }}"
                {% if hls_url %}data-hls-url="{{ hls_url }}"{% endif %}
                {% if feed_video %}data-video-url="{{ feed_video.url }}"{% endif %}

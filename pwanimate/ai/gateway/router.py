@@ -17,7 +17,7 @@ from pwanimate.ai.gateway.types import LLMRequest
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "mock"}
+SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare", "mock"}
 
 
 class LLMRouter:
@@ -57,6 +57,9 @@ class LLMRouter:
         elif normalized_name == "openrouter":
             from pwanimate.ai.providers.openrouter import OpenRouterLLMProvider
             provider = OpenRouterLLMProvider()
+        elif normalized_name == "cloudflare":
+            from pwanimate.ai.providers.cloudflare import CloudflareLLMProvider
+            provider = CloudflareLLMProvider()
         elif normalized_name == "mock":
             from pwanimate.ai.providers.mock import MockLLMProvider
             provider = MockLLMProvider()
@@ -117,7 +120,9 @@ class LLMRouter:
                 [{"provider": "groq", "model": "qwen/qwen3.8-27b"}],
             )
         else:
-            configured_chain = getattr(
+            # Engine-selected requests carry their own ordered chain (Spark
+            # engine registry); everything else uses the global chain.
+            configured_chain = (request.metadata or {}).get("fallback_chain") or getattr(
                 settings,
                 "PWANIMATE_LLM_FALLBACK_CHAIN",
                 None,
@@ -142,7 +147,7 @@ class LLMRouter:
                     ])
                 elif p == "openrouter":
                     configured_chain.append(
-                        {"provider": "openrouter", "model": getattr(settings, "PWANIMATE_OPENROUTER_MODEL", "google/gemini-flash-latest")}
+                        {"provider": "openrouter", "model": getattr(settings, "PWANIMATE_OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")}
                     )
                 else:
                     configured_chain.append({"provider": p, "model": None})
@@ -176,6 +181,13 @@ class LLMRouter:
                 unique_image_ids.add(getattr(attachment, "id", None) or id(attachment))
         image_count = len(unique_image_ids)
 
+        # Capability routing is INFERRED, not opt-in: if the turn carries an
+        # image, only image-capable models may serve it. Relying on the caller
+        # to set `required_capability` let the tool path hand an image to a
+        # text-only model (groq/gpt-oss-120b), which then refused the turn.
+        if image_count > 0:
+            required_capability = "image"
+
         # Deduplicate while preserving order & filter by availability and scope
         available: List[Dict[str, str]] = []
         seen = set()
@@ -187,13 +199,11 @@ class LLMRouter:
                 continue
 
             if required_capability == "image":
-                model_id = (m_name or "").strip().lower()
-                supports_images = (
-                    p_name == "gemini" and model_id.startswith("gemini-")
-                ) or (
-                    p_name == "groq" and model_id == "qwen/qwen3.8-27b" and image_count <= 3
-                )
-                if not supports_images:
+                # Capability lives in a table, not in a literal here, so
+                # adding a vision provider is a data change.
+                from pwanimate.ai.capabilities import provider_supports_images
+
+                if not provider_supports_images(p_name, m_name, image_count):
                     continue
 
             # If router was given an explicit providers map (e.g. in tests with mock),
@@ -222,6 +232,24 @@ class LLMRouter:
                 provider="none",
             )
 
+        # Tier gate: a candidate the caller's tier may not reach is withheld
+        # from the chain, so a free-tier student can never fall through to a
+        # paid model (e.g. the frontier rung in the global Auto chain).
+        tier_rank = (request.metadata or {}).get("tier_rank")
+        if tier_rank is not None:
+            available = self._filter_by_tier(available, tier_rank)
+            if not available:
+                raise AIProviderConfigurationError(
+                    "No models are available for your tier right now.",
+                    provider="tier",
+                )
+
+        # An explicitly requested offering (the premium capability chip) is
+        # served first — but only if the caller's tier includes it.
+        offering_key = (request.metadata or {}).get("offering")
+        if offering_key:
+            available = self._prepend_offering(available, offering_key, tier_rank)
+
         # Dynamically prioritize un-throttled, healthy candidates based on live quota status
         if quota_tracker is not None and len(available) > 1:
             has_user_override = bool(request.provider or request.model)
@@ -240,3 +268,55 @@ class LLMRouter:
                     available = healthy + throttled
 
         return available
+
+    # ------------------------------------------------------------------ tier
+    @staticmethod
+    def _filter_by_tier(candidates: List[Dict[str, str]], tier_rank: int) -> List[Dict[str, str]]:
+        """
+        Withhold candidates the caller's tier may not reach.
+
+        The registry is the source of truth: a registered offering is allowed
+        when its min_tier is at or below the caller's rank. An unregistered
+        candidate is allowed only if it is recognisably a free route — an
+        unpriced model must never become a free-tier leak.
+        """
+        try:
+            from pwanimate.billing.services import offering_allows_tier, offering_index
+        except Exception:  # noqa: BLE001 - the registry must never break routing
+            return candidates
+
+        index = offering_index()
+        kept: List[Dict[str, str]] = []
+        for candidate in candidates:
+            provider = candidate.get("provider") or ""
+            model = candidate.get("model") or ""
+            offering = index.get((provider, model)) or index.get((provider, model.lower()))
+            if offering_allows_tier(offering, provider, model, tier_rank):
+                kept.append(candidate)
+        return kept
+
+    @staticmethod
+    def _prepend_offering(
+        candidates: List[Dict[str, str]], offering_key: str, tier_rank: Optional[int]
+    ) -> List[Dict[str, str]]:
+        """Put an explicitly requested offering first, if the tier allows it."""
+        try:
+            from pwanimate.billing.services import offering_allows_tier, offering_by_key
+        except Exception:  # noqa: BLE001
+            return candidates
+
+        offering = offering_by_key(offering_key)
+        if offering is None:
+            return candidates
+        if not offering_allows_tier(offering, offering.provider, offering.model_id, tier_rank):
+            return candidates
+        entry = {"provider": offering.provider, "model": offering.model_id}
+        rest = [
+            candidate
+            for candidate in candidates
+            if not (
+                candidate.get("provider") == entry["provider"]
+                and (candidate.get("model") or "") == entry["model"]
+            )
+        ]
+        return [entry] + rest

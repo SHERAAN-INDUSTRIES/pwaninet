@@ -717,14 +717,30 @@
         });
     }
     
-    // Upload button - submit form
+    // Upload button - direct-to-R2 through the shared upload engine.
+    // The browser PUTs the bytes straight into the bucket; Django only
+    // mints the presigned URLs and creates the document afterwards. The
+    // user is free to navigate away: the transfer survives in IndexedDB and
+    // resumes on the next page load, and processing continues in Celery.
     const uploadBtn = document.querySelector('.doc-upload-actions .btn-primary');
+    const DOC_ALLOWED_EXTENSIONS = ['pdf', 'docx', 'doc', 'pptx', 'ppt', 'zip', 'rar'];
+    const DOC_MAX_BYTES = 50 * 1024 * 1024;
+
+    function documentExtension(name) {
+        return (name || '').split('.').pop().toLowerCase();
+    }
+
     if (uploadBtn) {
-        uploadBtn.addEventListener('click', function(e) {
+        uploadBtn.addEventListener('click', async function(e) {
             e.preventDefault();
-            
+
             if (selectedFiles.length === 0) {
                 alert('Please select at least one file to upload');
+                return;
+            }
+
+            if (!window.resumableUpload || typeof window.resumableUpload.start !== 'function') {
+                alert('The upload engine is not ready yet. Please refresh the page and try again.');
                 return;
             }
 
@@ -742,7 +758,10 @@
             const academicYear = academicYearEl ? academicYearEl.value : '';
             const semester = semesterEl ? semesterEl.value : '';
             const tagsInput = document.querySelector('input[placeholder="e.g., database, SQL, normalization"]');
-            const tags = tagsInput ? tagsInput.value : '';
+            const tags = (tagsInput ? tagsInput.value : '')
+                .split(',')
+                .map(t => t.trim())
+                .filter(Boolean);
 
             if (academicUnit === 'other' && !category && otherCatId) {
                 category = otherCatId;
@@ -759,77 +778,109 @@
                 return;
             }
 
+            // Pre-flight exactly what the server would reject, so nobody
+            // spends bandwidth on a file that cannot be published.
+            const rejected = selectedFiles.find((file) => {
+                const ext = documentExtension(file.name);
+                return DOC_ALLOWED_EXTENSIONS.indexOf(ext) === -1 || file.size > DOC_MAX_BYTES;
+            });
+            if (rejected) {
+                const ext = documentExtension(rejected.name);
+                alert(ext && DOC_ALLOWED_EXTENSIONS.indexOf(ext) === -1
+                    ? `File type '${ext}' is not allowed. Supported formats: ${DOC_ALLOWED_EXTENSIONS.join(', ').toUpperCase()}`
+                    : `File size exceeds maximum of ${DOC_MAX_BYTES / (1024 * 1024)}MB`);
+                return;
+            }
+
             const originalBtnHtml = uploadBtn.innerHTML;
             uploadBtn.disabled = true;
             uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Uploading...';
-            
-            const csrfToken = getCsrfToken();
 
-            // Create FormData with files and metadata
-            const formData = new FormData();
-            if (csrfToken) {
-                formData.append('csrfmiddlewaretoken', csrfToken);
-            }
-            selectedFiles.forEach(file => {
-                formData.append('files', file);
-            });
-            formData.append('academic_unit', academicUnit);
-            formData.append('category', category);
-            formData.append('academic_level', academicLevel);
-            formData.append('academic_year', academicYear);
-            formData.append('semester', semester);
-            formData.append('tags', tags);
-            
-            // Add individual file metadata
-            document.querySelectorAll('.file-title-input').forEach(input => {
-                const index = input.dataset.index;
-                formData.append(`file_${index}_title`, input.value);
-            });
-            
-            document.querySelectorAll('.file-desc-input').forEach(input => {
-                const index = input.dataset.index;
-                formData.append(`file_${index}_description`, input.value);
-            });
-            
-            // Submit form via XMLHttpRequest for upload progress & persistent banner integration
-            const xhr = new XMLHttpRequest();
-            window._activeDocumentUploadXhr = xhr;
-
-            // Activate persistent upload banner if uploadUI is available
+            // Banner: the donut follows the merged progress of every file.
             if (window.uploadUI) {
                 window.uploadUI.show();
-                window.uploadUI.setHeaderTitle('UPLOADING DOCUMENT', 'phase-upload');
-                const bannerTitle = selectedFiles.length === 1 
-                    ? `Uploading ${selectedFiles[0].name}…` 
-                    : `Uploading ${selectedFiles.length} Documents…`;
-                window.uploadUI.setTitle(bannerTitle);
-                window.uploadUI.setSubtitle('Sending to repository…');
-                window.uploadUI.updateProgress(0);
+                window.uploadUI.setHeaderTitle(
+                    selectedFiles.length === 1 ? 'UPLOADING DOCUMENT' : 'UPLOADING DOCUMENTS',
+                    'phase-upload'
+                );
+                window.uploadUI.setTitle(selectedFiles.length === 1
+                    ? `Uploading ${selectedFiles[0].name}…`
+                    : `Uploading ${selectedFiles.length} Documents…`);
+                window.uploadUI.setSubtitle('Sending straight to storage…');
                 window.uploadUI.setProgressFillClass('phase-upload');
-
-                const thumbContainer = document.getElementById('upload-banner-thumb');
-                if (thumbContainer) {
-                    thumbContainer.innerHTML = '<i class="bi bi-file-earmark-text-fill upload-thumb-icon" style="font-size: 1.8rem; color: var(--primary);"></i>';
-                }
-
-                // Wire banner cancel button to abort this XHR
-                const cancelBtn = document.getElementById('upload-banner-cancel');
-                if (cancelBtn) {
-                    const cancelHandler = (evt) => {
-                        evt.stopPropagation();
-                        if (window._activeDocumentUploadXhr) {
-                            window._activeDocumentUploadXhr.abort();
-                            window._activeDocumentUploadXhr = null;
-                            if (window.uploadUI) {
-                                window.uploadUI.hide();
-                            }
-                        }
-                    };
-                    cancelBtn.addEventListener('click', cancelHandler, { once: true });
-                }
+                window.uploadUI.setAggregateProgress(0, 'Uploading 0%');
             }
 
-            // Immediately dismiss upload view and navigate to My Library
+            const progressByFile = new Map();
+            const onProgress = (ev) => {
+                const detail = ev.detail || {};
+                if (!detail.clientUploadId) return;
+                progressByFile.set(detail.clientUploadId, {
+                    loaded: detail.loaded || 0,
+                    total: detail.total || 0,
+                });
+                let loaded = 0;
+                let total = 0;
+                progressByFile.forEach((p) => { loaded += p.loaded; total += p.total; });
+                const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+                if (window.uploadUI) window.uploadUI.setAggregateProgress(pct, `Uploading ${pct}%`);
+            };
+            window.addEventListener('resumable-upload-progress', onProgress);
+
+            const completed = [];
+            try {
+                // One file, one document - same shape as the classic flow.
+                for (let index = 0; index < selectedFiles.length; index++) {
+                    const file = selectedFiles[index];
+                    const titleInput = document.querySelector(`.file-title-input[data-index="${index}"]`);
+                    const descInput = document.querySelector(`.file-desc-input[data-index="${index}"]`);
+
+                    const response = await window.resumableUpload.start(file, {
+                        kind: 'document',
+                        document: {
+                            target: 'new',
+                            title: titleInput ? titleInput.value.trim() : '',
+                            description: descInput ? descInput.value.trim() : '',
+                            category: category,
+                            academic_unit: academicUnit,
+                            academic_level: academicLevel,
+                            academic_year: academicYear,
+                            semester: semester,
+                            tags: tags,
+                        },
+                    });
+                    completed.push(response);
+                }
+            } catch (err) {
+                console.error('[DocumentUpload] transfer failed:', err);
+                if (window.uploadUI) {
+                    window.uploadUI.clearAggregateProgress();
+                    window.uploadUI.showError(err && err.message ? err.message : 'Upload failed', false);
+                }
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = originalBtnHtml;
+                return;
+            } finally {
+                window.removeEventListener('resumable-upload-progress', onProgress);
+            }
+
+            // The bytes are in the bucket and the documents exist. Preview,
+            // thumbnail, OCR and indexing keep running in the background.
+            if (window.uploadUI) {
+                window.uploadUI.setHeaderTitle('DOCUMENTS UPLOADED', 'phase-published');
+                window.uploadUI.setTitle(completed.length === 1
+                    ? 'Document uploaded!'
+                    : `${completed.length} documents uploaded!`);
+                window.uploadUI.setSubtitle('Processing in the background — carry on, we will keep working');
+                window.uploadUI.setProgressFillClass('phase-published');
+                window.uploadUI.setAggregateProgress(100, 'Uploaded ✓');
+                window.uploadUI.clearAggregateProgress();
+                setTimeout(() => {
+                    if (window.uploadUI) window.uploadUI.hide();
+                }, 4000);
+            }
+
+            // The user does not wait for processing: go to the library.
             if (window.htmx) {
                 window.htmx.ajax('GET', '{% url "documents:my_library" %}', {
                     target: '#page-content-target',
@@ -837,141 +888,7 @@
                     pushUrl: true
                 });
             }
-
-            const startTime = Date.now();
-            xhr.upload.addEventListener('progress', function(event) {
-                if (event.lengthComputable && window.uploadUI) {
-                    const percentComplete = (event.loaded / event.total) * 100;
-                    const elapsed = (Date.now() - startTime) / 1000;
-                    const speed = elapsed > 0 ? event.loaded / elapsed : 0;
-                    const remaining = speed > 0 ? (event.total - event.loaded) / speed : 0;
-
-                    window.uploadUI.handleUploadProgress({
-                        loaded: event.loaded,
-                        total: event.total,
-                        percent: percentComplete,
-                        speed: speed,
-                        estimatedTimeRemaining: remaining
-                    });
-                }
-            });
-
-            xhr.addEventListener('load', function() {
-                window._activeDocumentUploadXhr = null;
-                let data = null;
-                try {
-                    data = JSON.parse(xhr.responseText);
-                } catch (err) {
-                    console.error('Failed to parse upload response:', err);
-                }
-
-                if (xhr.status >= 200 && xhr.status < 300 && data && data.success) {
-                    // Update persistent upload banner to processing phase
-                    if (window.uploadUI) {
-                        window.uploadUI.setHeaderTitle('PROCESSING DOCUMENT', 'phase-transcoding');
-                        window.uploadUI.setTitle('Processing document…');
-                        window.uploadUI.setSubtitle('Generating preview and indexing search…');
-                        window.uploadUI.setProgressFillClass('phase-transcoding');
-                        window.uploadUI.updateProgress(65);
-                        window.uploadUI.updateMiniText('Processing…');
-                    }
-
-                    // Background tracking of Celery tasks
-                    if (data.task_ids && data.task_ids.length > 0) {
-                        trackBackgroundTasks(data.task_ids, selectedFiles.length);
-                    } else {
-                        finishUploadBanner(selectedFiles.length);
-                    }
-                } else {
-                    const errorMsg = data?.error || `Upload failed (Status ${xhr.status})`;
-                    if (window.uploadUI) {
-                        window.uploadUI.showError(errorMsg, false);
-                    }
-                    alert('Upload failed: ' + errorMsg);
-                    uploadBtn.disabled = false;
-                    uploadBtn.innerHTML = originalBtnHtml;
-                }
-            });
-
-            xhr.addEventListener('error', function() {
-                window._activeDocumentUploadXhr = null;
-                if (window.uploadUI) {
-                    window.uploadUI.showError('Network error during upload', false);
-                }
-                alert('Upload failed due to network error');
-                uploadBtn.disabled = false;
-                uploadBtn.innerHTML = originalBtnHtml;
-            });
-
-            xhr.open('POST', '{% url "documents:upload" %}', true);
-            if (csrfToken) {
-                xhr.setRequestHeader('X-CSRFToken', csrfToken);
-            }
-            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            xhr.send(formData);
         });
-    }
-    
-    function trackBackgroundTasks(taskIds, fileCount) {
-        let completedTasks = 0;
-        const totalTasks = taskIds.length;
-        let pollCount = 0;
-        const maxPolls = 120; // 2 minutes max
-
-        const interval = setInterval(() => {
-            pollCount++;
-            Promise.all(taskIds.map(taskId => 
-                fetch('/documents/upload/progress/?task_id=' + taskId)
-                    .then(response => response.json())
-                    .catch(() => ({ status: 'PENDING' }))
-            )).then(results => {
-                completedTasks = results.filter(r => r.status === 'SUCCESS').length;
-                const hasFailure = results.some(r => r.status === 'FAILURE');
-
-                if (window.uploadUI) {
-                    const pct = 65 + Math.round((completedTasks / totalTasks) * 35);
-                    window.uploadUI.updateProgress(Math.min(99, pct));
-                }
-
-                if (completedTasks === totalTasks || pollCount >= maxPolls) {
-                    clearInterval(interval);
-                    finishUploadBanner(fileCount);
-                } else if (hasFailure) {
-                    clearInterval(interval);
-                    if (window.uploadUI) {
-                        window.uploadUI.showError('Document processing completed with warnings');
-                    }
-                }
-            });
-        }, 1000);
-
-        window.uploadProgressInterval = interval;
-    }
-
-    function finishUploadBanner(fileCount) {
-        if (window.uploadUI) {
-            window.uploadUI.setHeaderTitle('DOCUMENT READY', 'phase-published');
-            window.uploadUI.setTitle(fileCount === 1 ? 'Document ready!' : 'All documents ready!');
-            window.uploadUI.setSubtitle('Your documents are live in your library');
-            window.uploadUI.setProgressFillClass('phase-published');
-            window.uploadUI.updateProgress(100);
-            window.uploadUI.updateMiniText('Document ready! ✓');
-
-            setTimeout(() => {
-                if (window.uploadUI) {
-                    window.uploadUI.hide();
-                }
-            }, 3500);
-
-            // If user is currently on library or home page, trigger HTMX refresh
-            const libraryContainer = document.querySelector('.my-library-content') || document.querySelector('.documents-repository-content');
-            if (libraryContainer && window.htmx) {
-                window.htmx.ajax('GET', window.location.pathname, {
-                    target: '#page-content-target',
-                    swap: 'innerHTML'
-                });
-            }
-        }
     }
     
     // Cancel button

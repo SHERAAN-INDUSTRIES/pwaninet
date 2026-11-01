@@ -1265,8 +1265,8 @@
     </script>
 
     <!-- Preload critical CSS -->
-    <link rel="preload" href="{% static 'css/custom.css' %}?v={{ app_version }}-{{ app_build }}" as="style">
-    <link rel="preload" href="{% static 'css/postcard.css' %}?v={{ app_version }}-{{ app_build }}" as="style">
+    <link rel="preload" href="{% static 'css/custom.css' %}" as="style">
+    <link rel="preload" href="{% static 'css/postcard.css' %}" as="style">
     <link rel="preload" href="{% static 'css/bootstrap.min.css' %}" as="style">
     <link rel="preload" href="{% static 'css/bootstrap-icons.css' %}" as="style">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1328,16 +1328,16 @@
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
     <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
-    <link rel="stylesheet" href="{% static 'css/custom.css' %}?v={{ app_version }}-{{ app_build }}">
-    <link rel="stylesheet" href="{% static 'css/postcard.css' %}?v={{ app_version }}-{{ app_build }}">
+    <link rel="stylesheet" href="{% static 'css/custom.css' %}">
+    <link rel="stylesheet" href="{% static 'css/postcard.css' %}">
     <link rel="stylesheet" href="{% static 'css/people-modal.css' %}">
     <link rel="stylesheet" href="{% static 'css/comments.css' %}">
-    <link rel="stylesheet" href="{% static 'css/media-picker.css' %}?v={{ app_version }}-{{ app_build }}-20261019-rail1">
+    <link rel="stylesheet" href="{% static 'css/media-picker.css' %}">
     <link rel="stylesheet" href="{% static 'css/profile.css' %}">
-    <link rel="stylesheet" href="{% static 'notifications/css/notifications.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'notifications/css/notifications.css' %}">
     <link rel="stylesheet" href="{% static 'css/downloads/offline_media_viewer.css' %}">
-    <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261019-1">
-    <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}?v=2">
+    <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}">
+    <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}">
     {% block extra_css %}{% endblock %}
     <script src="{% static 'js/htmx.min.js' %}"></script>
     <script>
@@ -1356,7 +1356,7 @@
         // Snapshots keyed by URL persist across deployments unless explicitly cleared.
         (function evictStaleHtmxSnapshots() {
             try {
-                var SW_CSS_VERSION = '{{ app_version }}-{{ app_build }}'; // bound to dynamic app release version
+                var SW_CSS_VERSION = '{{ static_fingerprint|default:app_version }}-{{ app_build }}'; // tracks the deployed static tree
                 var storedVersion = sessionStorage.getItem('htmx_css_version');
                 if (storedVersion !== SW_CSS_VERSION) {
                     // Clear all htmx history entries from localStorage
@@ -1404,7 +1404,7 @@
     <script defer src="{% static 'js/lazy-load-images.js' %}"></script>
 
     <!-- Video Manager - replaces auto_video_play.js -->
-    <script defer src="{% static 'js/video-manager.js' %}?v={{ app_version }}-{{ app_build }}-20261019-rail1"></script>
+    <script defer src="{% static 'js/video-manager.js' %}"></script>
     <script defer src="{% static 'js/liquid-glass.js' %}"></script>
 
     <!-- Global Audio Manager -->
@@ -1443,10 +1443,10 @@
     <script defer src="{% static 'js/whats-new-modal.js' %}"></script>
 
     <!-- Comment System - Phase 2 Threaded Comments -->
-    <script defer src="{% static 'js/comments/comment-api.js' %}?v={{ app_version }}-{{ app_build }}-20261019-rail1"></script>
-    <script defer src="{% static 'js/comments/comment-renderer.js' %}?v={{ app_version }}-{{ app_build }}-20261019-rail1"></script>
-    <script defer src="{% static 'js/comments/comment-manager.js' %}?v={{ app_version }}-{{ app_build }}-20261019-rail1"></script>
-    <script defer src="{% static 'js/media-picker/media-picker.js' %}?v={{ app_version }}-{{ app_build }}-20261008-direct2"></script>
+    <script defer src="{% static 'js/comments/comment-api.js' %}"></script>
+    <script defer src="{% static 'js/comments/comment-renderer.js' %}"></script>
+    <script defer src="{% static 'js/comments/comment-manager.js' %}"></script>
+    <script defer src="{% static 'js/media-picker/media-picker.js' %}"></script>
 
     <script>
         // Synchronously detect standalone PWA mode early to prevent safe area layout shifts
@@ -2445,7 +2445,7 @@
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
       data-user-id="{{ request.user.id|default:'' }}"
       data-user-username="{{ request.user.username|default:'' }}"
-      data-user-avatar="{% if request.user.is_authenticated and request.user.profile_pic %}{{ request.user.profile_pic.url }}{% else %}/static/images/default-avatar.png{% endif %}"
+      data-user-avatar="{% if request.user.is_authenticated and request.user.profile_pic %}{{ request.user.profile_pic.url }}{% else %}{% static 'images/default-avatar.png' %}{% endif %}"
       data-user-name="{% if request.user.is_authenticated %}{{ request.user.get_full_name|default:request.user.username }}{% endif %}"
       data-app-version="{{ app_version }}"
       data-app-build="{{ app_build }}"
@@ -2890,20 +2890,20 @@
                     <div class="modal-body p-3 pt-2" id="globalShareModalBody">
                         <input type="hidden" name="post_id" id="globalSharePostId" value="">
 
-                        <!-- Live Search Friends & Groups -->
+                        <!-- Search recent conversations or profile targets -->
                         <div class="position-relative mb-3">
                             <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 13px;"></i>
                             <input type="text"
                                    id="globalShareSearchInput"
                                    class="form-control rounded-pill ps-5 bg-light border-0"
-                                   placeholder="{% trans 'Search friends or groups...' %}"
+                                   placeholder="{% trans 'Search recent conversations...' %}"
                                    style="font-size: 13px; height: 38px;">
                         </div>
 
-                        <!-- Top Section: In-Site Friends & Groups Horizontal Tray (TikTok Style) -->
+                        <!-- Top Section: Recent conversations are the primary in-site share target -->
                         <div class="share-tray-section mb-3">
                             <div class="d-flex align-items-center justify-content-between px-1 mb-2">
-                                <span class="small fw-semibold text-muted text-uppercase" style="font-size: 11px; letter-spacing: 0.5px;">{% trans "Send on vasto" %}</span>
+                                <span class="small fw-semibold text-muted text-uppercase" id="globalShareTrayLabel" style="font-size: 11px; letter-spacing: 0.5px;">{% trans "Recent conversations" %}</span>
                                 <span id="globalShareTargetStatus" class="small text-primary fw-medium" style="font-size: 11px;"></span>
                             </div>
                             <div class="share-tray-carousel-wrapper position-relative">
@@ -2932,6 +2932,19 @@
                                     <i class="bi bi-chevron-left" style="font-size: 11px;"></i>
                                 </button>
                                 <div class="d-flex gap-3 overflow-x-auto pb-2 px-1" id="globalShareActionChips" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">
+                                    <!-- 0. Share to messages -->
+                                    <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareMessagesBtn" title="{% trans 'Share to messages' %}" aria-label="{% trans 'Share to messages' %}">
+                                        <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
+                                            <i class="bi bi-chat-dots fs-5 text-dark"></i>
+                                        </div>
+                                        <span class="share-action-label small text-muted">{% trans "Messages" %}</span>
+                                    </button>
+                                    <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareProfilesBtn" title="{% trans 'Share to profiles' %}" aria-label="{% trans 'Share to profiles' %}">
+                                        <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
+                                            <i class="bi bi-person-plus fs-5 text-dark"></i>
+                                        </div>
+                                        <span class="share-action-label small text-muted">{% trans "Profiles" %}</span>
+                                    </button>
                                     <!-- 0. Repost Action Chip -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareRepostBtn" title="{% trans 'Repost' %}" aria-label="{% trans 'Repost' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
@@ -3387,7 +3400,7 @@
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <div class="d-flex align-items-center gap-2 min-w-0">
                                 <a href="#" id="fsRailAuthorProfileLink" class="text-decoration-none flex-shrink-0">
-                                    <img src="/static/images/default-avatar.png" id="fsRailAuthorAvatar" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" alt="">
+                                    <img src="{% static 'images/default-avatar.png' %}" id="fsRailAuthorAvatar" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" alt="">
                                 </a>
                                 <div class="min-w-0">
                                     <div class="d-flex align-items-center gap-1">
@@ -3674,10 +3687,10 @@
     <script src="{% static 'js/upload/native_upload.js' %}"></script>
 
     <script type="module">
-        import { uploadManager } from '{% static "js/upload/upload_manager.js" %}?v=20261016-02';
-        import { uploadUI } from '{% static "js/upload/upload_ui.js" %}?v=20261016-02';
-        import { draftManager } from '{% static "js/upload/indexeddb_manager.js" %}?v=20261016-02';
-        import { uploadEvents } from '{% static "js/upload/upload_events.js" %}?v=20261016-02';
+        import { uploadManager } from '{% static "js/upload/upload_manager.js" %}';
+        import { uploadUI } from '{% static "js/upload/upload_ui.js" %}';
+        import { draftManager } from '{% static "js/upload/indexeddb_manager.js" %}';
+        import { uploadEvents } from '{% static "js/upload/upload_events.js" %}';
 
         import { downloadManager } from '{% static "js/downloads/download_manager.js" %}';
         import { downloadUI } from '{% static "js/downloads/download_ui.js" %}';
@@ -4116,7 +4129,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
     <!-- Global WebSocket Connection for Real-time Notifications -->
     {% if request.user.is_authenticated %}
-    {% verbatim %}
     <script>
     // Global notification WebSocket connection
     let globalNotificationsSocket = null;
@@ -4330,7 +4342,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
         const title = data.banner_title || data.sender_display_name || data.sender_name || 'New Message';
         const body = data.banner_body || data.message_preview || 'Sent you a message';
-        const avatar = data.sender_avatar || data.conversation_avatar || '/static/images/web-app-manifest-192x192-rounded.png';
+        const avatar = data.sender_avatar || data.conversation_avatar || '{% static 'images/web-app-manifest-192x192-rounded.png' %}';
         const thumb = data.thumbnail_url || null;
         const targetUrl = data.target_url || (`/messaging/conversation/${convId}/`);
         const isGroup = data.conversation_type === 'group';
@@ -4368,7 +4380,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
         banner.innerHTML = `
             <div style="position: relative; flex-shrink: 0;">
-                <img src="${escapeStr(avatar)}" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(37,99,235,0.2);" onerror="this.src='/static/images/web-app-manifest-192x192-rounded.png'">
+                <img src="${escapeStr(avatar)}" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(37,99,235,0.2);" onerror="this.src='{% static 'images/web-app-manifest-192x192-rounded.png' %}'">
                 <span style="position: absolute; bottom: -2px; right: -2px; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; border: 2px solid var(--bg-card, #fff);">
                     <i class="bi ${isGroup ? 'bi-people-fill' : 'bi-chat-dots-fill'}"></i>
                 </span>
@@ -4536,7 +4548,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(notification.title || 'New Message', {
                 body: notification.body || notification.message || notification.summary,
-                icon: notification.icon || notification.actor_avatar || '/static/images/vastomonochrome.png'
+                icon: notification.icon || notification.actor_avatar || '{% static 'images/vastomonochrome.png' %}'
             });
         }
 
@@ -4569,7 +4581,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
             animation: slideInNotifToast 0.35s cubic-bezier(0.4, 0, 0.2, 1);
         `;
 
-        const avatarSrc = notification.actor_avatar || notification.icon || '/static/images/web-app-manifest-192x192-rounded.png';
+        const avatarSrc = notification.actor_avatar || notification.icon || '{% static 'images/web-app-manifest-192x192-rounded.png' %}';
         const titleText = notification.title || 'vasto';
         const bodyText = notification.body || notification.message || notification.summary || 'You have a new notification';
         const thumbSrc = notification.thumbnail_url || notification.image || (notification.metadata && (notification.metadata.thumbnail_url || notification.metadata.image_url));
@@ -4577,7 +4589,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
         toast.innerHTML = `
             <div class="toast-avatar" style="flex-shrink: 0; width: 42px; height: 42px;">
-                <img src="${avatarSrc}" alt="" style="width: 42px; height: 42px; border-radius: 50% !important; object-fit: cover; border: 1.5px solid var(--border, #e2e8f0);" onerror="this.src='/static/images/web-app-manifest-192x192-rounded.png'">
+                <img src="${avatarSrc}" alt="" style="width: 42px; height: 42px; border-radius: 50% !important; object-fit: cover; border: 1.5px solid var(--border, #e2e8f0);" onerror="this.src='{% static 'images/web-app-manifest-192x192-rounded.png' %}'">
             </div>
             <div class="toast-content" style="flex: 1; min-width: 0;">
                 <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary, #0f172a); margin: 0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${titleText}</div>
@@ -4717,7 +4729,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
     // Connect when page loads
     document.addEventListener('DOMContentLoaded', function() {
-        // User is authenticated if we're in this script block (wrapped in {% if request.user.is_authenticated %})
+        // User is authenticated if we're in this script block (wrapped in an is_authenticated check)
 
         // Start polling as fallback initially
         startNotificationCountPolling();
@@ -4741,7 +4753,6 @@ window.addEventListener('beforeinstallprompt', (e) => {
         }
     });
     </script>
-    {% endverbatim %}
     <!-- Push Notification Soft-Prompt Bottom Sheet (Web & PWA) -->
     {% include 'partials/push_notification_bottom_sheet.html' %}
     <script src="{% static 'js/notifications/push-subscription.js' %}"></script>
@@ -5894,6 +5905,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
         var sentTargets = new Set();
         var searchDebounceTimer = null;
         var activeShareMode = 'post';
+        var shareTargetMode = 'conversations';
+        var cachedConversations = null;
 
         function renderShareTargets(query) {
             var tray = document.getElementById('globalShareTargetsTray');
@@ -5927,7 +5940,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
                 return '<div class="share-target-item" data-key="' + key + '" data-type="' + target.type + '" data-id="' + (target.id || '') + '" data-username="' + (target.username || '') + '">' +
                     '<div class="share-target-avatar-wrap">' +
-                        '<img src="' + escapeHtml(target.avatar || '/static/images/default-avatar.png') + '" alt="' + escapeHtml(target.name) + '" class="share-target-avatar" onerror="this.src=\'/static/images/default-avatar.png\'">' +
+                        '<img src="' + escapeHtml(target.avatar || '{% static 'images/default-avatar.png' %}') + '" alt="' + escapeHtml(target.name) + '" class="share-target-avatar" onerror="this.src=\'{% static 'images/default-avatar.png' %}\'">' +
                         badgeHtml +
                     '</div>' +
                     '<div class="share-target-name" title="' + escapeHtml(target.name) + '">' + escapeHtml(target.name) + '</div>' +
@@ -5942,6 +5955,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
         function loadTargets() {
             var tray = document.getElementById('globalShareTargetsTray');
+            shareTargetMode = 'profiles';
             if (cachedTargets) {
                 var searchInput = document.getElementById('globalShareSearchInput');
                 renderShareTargets(searchInput ? searchInput.value : '');
@@ -5985,6 +5999,125 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 }
             });
         }
+
+        function loadMessageConversations() {
+            var tray = document.getElementById('globalShareTargetsTray');
+            if (!tray) return;
+            shareTargetMode = 'conversations';
+            var trayLabel = document.getElementById('globalShareTrayLabel');
+            var searchInput = document.getElementById('globalShareSearchInput');
+            if (trayLabel) trayLabel.textContent = 'Recent conversations';
+            if (searchInput) searchInput.placeholder = 'Search recent conversations...';
+            if (cachedConversations) {
+                renderMessageConversations(searchInput ? searchInput.value : '');
+                return;
+            }
+            tray.innerHTML = '<div class="text-center py-3 text-muted small w-100"><div class="spinner-border spinner-border-sm text-primary me-1" role="status"></div>Loading conversations...</div>';
+            fetch('/messaging/v1/conversations/?ordering=-last_message_at', {
+                headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(function (res) {
+                if (!res.ok) throw new Error('Unable to load conversations');
+                return res.json();
+            })
+            .then(function (data) {
+                cachedConversations = Array.isArray(data) ? data : (data.results || []);
+                renderMessageConversations(searchInput ? searchInput.value : '');
+            })
+            .catch(function (err) {
+                console.error('[Share Conversations Fetch Error]', err);
+                tray.innerHTML = '<div class="text-center py-3 text-danger small w-100">Unable to load conversations.</div>';
+            });
+        }
+
+        function renderMessageConversations(query) {
+            var tray = document.getElementById('globalShareTargetsTray');
+            if (!tray) return;
+            var normalizedQuery = (query || '').trim().toLowerCase();
+            var conversations = (cachedConversations || []).filter(function (conversation) {
+                var members = conversation.members || [];
+                var name = conversation.name || members.map(function (member) {
+                    return member.user ? (member.user.first_name || member.user.username) : '';
+                }).filter(Boolean).join(', ') || ('Conversation #' + conversation.id);
+                conversation._shareName = name;
+                return !normalizedQuery || name.toLowerCase().indexOf(normalizedQuery) !== -1;
+            });
+                if (!conversations.length) {
+                    tray.innerHTML = '<div class="text-center py-3 text-muted small w-100">' +
+                        (normalizedQuery ? 'No matching conversations found.' : 'Start a conversation before sharing a post.') +
+                        '</div>';
+                    return;
+                }
+                tray.innerHTML = conversations.map(function (conversation) {
+                    var name = conversation._shareName;
+                    return '<button type="button" class="btn btn-light text-start rounded-3 p-2 flex-shrink-0 share-message-conversation-btn" data-conversation-id="' +
+                        escapeHtml(conversation.id) + '" style="min-width: 180px; max-width: 230px;">' +
+                        '<i class="bi bi-chat-dots text-primary me-2"></i><span class="small fw-semibold">' +
+                        escapeHtml(name) + '</span></button>';
+                }).join('');
+        }
+
+        document.addEventListener('click', function (e) {
+            var messagesBtn = e.target.closest('#globalShareMessagesBtn');
+            var profilesBtn = e.target.closest('#globalShareProfilesBtn');
+            if (messagesBtn || profilesBtn) {
+                if (!window.isAuthenticated) {
+                    if (typeof window.showGuestAuthPrompt === 'function') {
+                        window.showGuestAuthPrompt({title: 'Sign in to share to messages', subtitle: 'Sign in to send this post in a conversation.', icon: 'bi-chat-dots'});
+                    }
+                    return;
+                }
+                if (messagesBtn) {
+                    loadTargets();
+                } else {
+                    shareTargetMode = 'profiles';
+                    var trayLabel = document.getElementById('globalShareTrayLabel');
+                    var searchInput = document.getElementById('globalShareSearchInput');
+                    if (trayLabel) trayLabel.textContent = 'Share to profiles and groups';
+                    if (searchInput) {
+                        searchInput.value = '';
+                        searchInput.placeholder = 'Search friends or groups...';
+                    }
+                    loadMessageConversations();
+                }
+                var statusEl = document.getElementById('globalShareTargetStatus');
+                if (statusEl) statusEl.textContent = messagesBtn ? 'Choose a conversation' : 'Choose a profile or group';
+                return;
+            }
+
+            var conversationBtn = e.target.closest('.share-message-conversation-btn');
+            if (!conversationBtn || !activePostId) return;
+            conversationBtn.disabled = true;
+            conversationBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+            fetch('/messaging/api/share-post/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({
+                    conversation_id: conversationBtn.dataset.conversationId,
+                    post_share_id: activePostId
+                })
+            })
+            .then(function (res) {
+                return res.json().then(function (data) {
+                    if (!res.ok) throw new Error(data.error || 'Unable to share post');
+                    return data;
+                });
+            })
+            .then(function () {
+                showFeedback('Post shared to messages!', 'success');
+                conversationBtn.innerHTML = '<i class="bi bi-check2 text-success me-1"></i> Sent';
+            })
+            .catch(function (err) {
+                console.error('[Share Post Message Error]', err);
+                conversationBtn.disabled = false;
+                conversationBtn.innerHTML = '<i class="bi bi-chat-dots text-primary me-2"></i> Try again';
+                showFeedback(err.message || 'Unable to share post', 'danger');
+            });
+        });
 
         // ── 1-Tap Send on vasto Handler ──
         document.addEventListener('click', function (e) {
@@ -6102,7 +6235,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 clearTimeout(searchDebounceTimer);
                 var val = e.target.value;
                 searchDebounceTimer = setTimeout(function () {
-                    renderShareTargets(val);
+                    if (shareTargetMode === 'conversations') {
+                        renderMessageConversations(val);
+                    } else {
+                        renderShareTargets(val);
+                    }
                 }, 120);
             }
         });
@@ -6385,7 +6522,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 if (traySection) traySection.classList.remove('d-none');
                 if (trayDivider) trayDivider.classList.remove('d-none');
                 sentTargets = new Set();
-                loadTargets();
+                loadMessageConversations();
             }
 
             // Setup Repost Action Chip

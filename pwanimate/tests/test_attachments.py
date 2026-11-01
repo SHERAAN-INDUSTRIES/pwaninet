@@ -374,12 +374,21 @@ class ChatAttachmentIntegrationTestCase(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
 
-    def _upload(self, content=PDF_MAGIC, name='doc.pdf', ct='application/pdf'):
+    def _upload(self, content=PDF_MAGIC, name='doc.pdf', ct='application/pdf', processed=True):
         self.client.force_authenticate(user=self.user)
         f = make_file(name, content, ct)
         resp = self.client.post(UPLOAD_URL, {'file': f}, format='multipart')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        return resp.json()['id']
+        att_id = resp.json()['id']
+        if processed:
+            # Uploads are queued for processing. The chat path refuses a
+            # turn while an attachment is still being read, so the test
+            # starts from the state the product produces once the worker
+            # has finished.
+            PwanimateAttachment.objects.filter(id=att_id).update(
+                processing_status="ready"
+            )
+        return att_id
 
     def _make_mock_orchestrator(self):
         mock_orch = MagicMock()
@@ -498,7 +507,14 @@ class ProviderMultimodalCapabilityTestCase(TestCase):
         f = make_file('photo.jpg', JPEG_MAGIC, 'image/jpeg')
         resp = self.client.post(UPLOAD_URL, {'file': f}, format='multipart')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        return resp.json()['id']
+        att_id = resp.json()['id']
+        # An upload is queued for its vision pass; the chat path refuses a
+        # turn while that is still running. Move it to the finished state so
+        # the test reaches the behaviour it is actually about.
+        PwanimateAttachment.objects.filter(id=att_id).update(
+            processing_status="ready"
+        )
+        return att_id
 
     def test_groq_raises_config_error_for_images(self):
         from pwanimate.ai.providers.groq import GroqLLMProvider

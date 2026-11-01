@@ -116,6 +116,10 @@ def transcribe_audio_file(audio_path: str, model_size: str = "tiny") -> str:
         logger.warning("faster-whisper not installed; skipping audio transcription")
         return ""
 
+    from pwaninet.compat import patch_av_metadata_errors
+
+    patch_av_metadata_errors()
+
     try:
         cpu_threads = min(2, max(1, (os.cpu_count() or 1) // 2))
         logger.info("Initializing faster-whisper model '%s' on CPU (int8, %d threads)...", model_size, cpu_threads)

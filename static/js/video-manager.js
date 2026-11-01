@@ -762,6 +762,11 @@
         try {
             // Sync all video elements across feed and overlays (excluding carousel preview videos and messaging videos)
             document.querySelectorAll('video').forEach(vid => {
+                if (vid.classList.contains('reel-ambient-video')) {
+                    // The blurred letterbox filler is a silent copy — always muted.
+                    vid.muted = true;
+                    return;
+                }
                 if (vid.classList.contains('reels-carousel-video') || vid.closest('.reels-carousel-shelf')) {
                     vid.muted = true;
                     return;
@@ -1108,8 +1113,10 @@
         video.dataset.wantsAutoplay = 'true';
 
         // STRICT: Pause ALL other video elements across feed, fullscreen, and modals
+        // (the blurred letterbox filler is excluded — it is driven by the reel
+        //  it belongs to and must never own playback or trigger the reel HUD)
         document.querySelectorAll('video').forEach(otherVid => {
-            if (otherVid !== video && !otherVid.paused) {
+            if (otherVid !== video && !otherVid.paused && !otherVid.classList.contains('reel-ambient-video')) {
                 try {
                     otherVid.pause();
                     delete otherVid.dataset.wantsAutoplay;
@@ -1431,6 +1438,9 @@
         const video = snapItem.querySelector('video');
         if (!video) return;
 
+        // Free the blurred-fill copy along with the reel itself.
+        detachAmbientFill(snapItem);
+
         const hasActiveMedia = video._hlsInstance || video.currentSrc || video.getAttribute('src') || video.querySelector('source') || video.dataset.isWarmed === 'true';
         if (!hasActiveMedia) return;
 
@@ -1539,6 +1549,14 @@
             }
         });
 
+        // 1b. Release the blurred-fill copy of every reel that is no longer the
+        //     active one — only the active reel keeps a second decoder alive.
+        items.forEach((item, idx) => {
+            if (idx !== newActiveIndex) {
+                detachAmbientFill(item);
+            }
+        });
+
         // 2. Warm N-1 (previous) if exists - kept strictly paused
         if (reelSlotEngine.previousIndex !== -1) {
             const prevItem = items[reelSlotEngine.previousIndex];
@@ -1592,6 +1610,8 @@
                     }
                 }
                 playVideo(activeVid, true);
+                // Blurred fill for the letterbox band (mobile fullscreen only)
+                attachAmbientFill(activeItem);
                 syncMuteButtons(isGlobalMuted);
                 const vinyl = activeItem.querySelector('.reel-vinyl-disc');
                 if (vinyl) vinyl.classList.add('is-playing');
@@ -2173,6 +2193,12 @@
             snapItem.dataset.videoWidth = card.dataset.videoWidth;
             snapItem.dataset.videoHeight = card.dataset.videoHeight;
         }
+        // Duration drives the blurred-fill decision: a long video would mean a
+        // second, full download of the source just to blur it.
+        const cardDuration = parseInt(card.dataset.videoDuration || video.dataset.videoDuration || '0', 10);
+        if (!isNaN(cardDuration) && cardDuration > 0) {
+            snapItem.dataset.videoDuration = cardDuration;
+        }
         if (card.classList.contains('landscape-video-container') || card.closest('.landscape-video-container') || card.querySelector('.landscape-video-container') || card.dataset.mediaOrientation === 'landscape') {
             snapItem.dataset.mediaOrientation = 'landscape';
         }
@@ -2196,6 +2222,26 @@
                        ${hlsUrl ? `data-hls-url="${hlsUrl}"` : ''}
                        data-video-url="${videoSrc}">
                 </video>
+
+                <!-- Live blurred copy of the reel: fills the letterbox band above and
+                     below a portrait reel so the player reads as one full-bleed
+                     surface. The main video keeps its FULL width (nothing is
+                     cropped) — only the empty space is filled. Rendered AFTER the
+                     main video on purpose: snapItem.querySelector('video') must
+                     keep resolving to the main reel. -->
+                <div class="reel-ambient-video-wrap" aria-hidden="true" data-ambient-post-id="${postId}">
+                    <div class="reel-ambient-video-scale">
+                        <div class="reel-ambient-video-layer">
+                            <video class="reel-ambient-video"
+                                   muted
+                                   loop
+                                   playsinline
+                                   preload="none"
+                                   data-ambient-post-id="${postId}"
+                                   data-video-url="${videoSrc}"></video>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Tap Hitbox for play/pause HUD and heart burst -->
                 <button type="button"
@@ -3042,6 +3088,153 @@
         }
     }
 
+    // ============================================================================
+    // LIVE BLURRED FILL (LETTERBOX FILLER) FOR THE MOBILE FULLSCREEN PLAYER
+    // ---------------------------------------------------------------------------
+    // A portrait reel keeps its FULL width inside the full-screen stage, which
+    // leaves a band above and below. That band is filled with a second, muted
+    // copy of the SAME video, blurred and scaled up, so the surface reads as
+    // one full-bleed reel instead of "video + padding".
+    //
+    // Rules that keep this cheap and safe:
+    //  - only the ACTIVE reel ever gets a live copy (one extra decoder max)
+    //  - mobile only: on desktop the reel card fills the stage, nothing to fill
+    //  - long videos (> 120s) keep the cheap static poster fill, so the filler
+    //    never triggers a second download of a whole long-form video
+    //  - the copy is muted forever and is ignored by the global audio manager
+    //  - the copy is excluded from every global video sweep (mute sync, pause
+    //    all, playback state, auto-scroll) so it can never take over the reel
+    // ============================================================================
+
+    /**
+     * Fill mode switch, live-editable from the console:
+     *   window.VASTO_REEL_FILL_MODE = 'live'   → live blurred copy (default)
+     *   window.VASTO_REEL_FILL_MODE = 'auto'   → live copy for MP4 reels only (HLS keeps the poster)
+     *   window.VASTO_REEL_FILL_MODE = 'poster' → never live copy
+     */
+    function getAmbientFillMode() {
+        const mode = (typeof window !== 'undefined' && window.VASTO_REEL_FILL_MODE) || 'live';
+        return mode === 'live' || mode === 'auto' || mode === 'poster' ? mode : 'live';
+    }
+
+    function getAmbientFillVideo(snapItem) {
+        if (!snapItem) return null;
+        return snapItem.querySelector('video.reel-ambient-video');
+    }
+
+    function getAmbientFillWrap(snapItem) {
+        if (!snapItem) return null;
+        return snapItem.querySelector('.reel-ambient-video-wrap');
+    }
+
+    /**
+     * Attach the blurred copy and lock it to the main reel's playback.
+     * Called for the active reel only.
+     */
+    function attachAmbientFill(snapItem) {
+        const ambient = getAmbientFillVideo(snapItem);
+        const main = snapItem ? snapItem.querySelector('video.fullscreen-reel-video') : null;
+        if (!ambient || !main) return;
+
+        // Desktop stage: the reel card already fills the area — no fill needed.
+        if (typeof window !== 'undefined' && window.innerWidth >= 992) {
+            detachAmbientFill(snapItem);
+            return;
+        }
+
+        const mode = getAmbientFillMode();
+        if (mode === 'poster') return;
+
+        const isHls = !!(main.dataset && main.dataset.hlsUrl);
+
+        // Duration guard: the filler is a SECOND copy of the source. Never pull
+        // a whole long-form video just to blur it — long videos keep the
+        // (cheap, static) poster fill instead.
+        const duration = parseInt((snapItem.dataset && snapItem.dataset.videoDuration) || '0', 10);
+        if (!isNaN(duration) && duration > 120) return;
+
+        // 'auto' keeps HLS reels on the poster fill (a second HLS session would
+        // double the segment traffic on mobile data). 'live' uses the MP4
+        // fallback for the filler, which is cheap for short reels.
+        if (mode === 'auto' && isHls) return;
+
+        const src = ambient.dataset.videoUrl;
+        if (!src) return;
+
+        // 1. Wire the listeners ONCE per element (the media can be attached and
+        //    detached repeatedly as the reel scrolls in and out of the window).
+        if (ambient.dataset.ambientWired !== 'true') {
+            ambient.dataset.ambientWired = 'true';
+
+            ambient.addEventListener('loadeddata', () => {
+                const wrap = getAmbientFillWrap(snapItem);
+                if (wrap) wrap.classList.add('is-live');
+                syncAmbientFill(snapItem);
+                if (main && !main.paused) {
+                    ambient.play().catch(() => {});
+                }
+            });
+
+            // Lock the copy to the main playback.
+            main.addEventListener('play', () => {
+                ambient.play().catch(() => {});
+                syncAmbientFill(snapItem);
+            });
+            main.addEventListener('pause', () => {
+                ambient.pause();
+            });
+            main.addEventListener('seeked', () => syncAmbientFill(snapItem));
+            main.addEventListener('timeupdate', () => {
+                if (ambient.paused) return;
+                if (Math.abs(ambient.currentTime - main.currentTime) > 0.3) {
+                    try { ambient.currentTime = main.currentTime; } catch (_) {}
+                }
+            });
+        }
+
+        // 2. Attach the media (only for the active reel → one extra decoder).
+        if (ambient.dataset.ambientAttached !== 'true') {
+            ambient.dataset.ambientAttached = 'true';
+            ambient.muted = true;
+            ambient.src = src;
+            try { ambient.load(); } catch (_) {}
+        }
+
+        syncAmbientFill(snapItem);
+        if (!main.paused) {
+            ambient.play().catch(() => {});
+        }
+    }
+
+    /** Re-align the blurred copy with the main reel. */
+    function syncAmbientFill(snapItem) {
+        const ambient = getAmbientFillVideo(snapItem);
+        const main = snapItem ? snapItem.querySelector('video.fullscreen-reel-video') : null;
+        if (!ambient || !main) return;
+        if (ambient.dataset.ambientAttached !== 'true') return;
+        if (ambient.readyState < 1) return;
+        if (Math.abs(ambient.currentTime - main.currentTime) > 0.25) {
+            try { ambient.currentTime = main.currentTime; } catch (_) {}
+        }
+    }
+
+    /** Release the blurred copy (decoder + network) for a reel that scrolled away. */
+    function detachAmbientFill(snapItem) {
+        const ambient = getAmbientFillVideo(snapItem);
+        if (!ambient) return;
+        try { ambient.pause(); } catch (_) {}
+        const wrap = getAmbientFillWrap(snapItem);
+        if (wrap) wrap.classList.remove('is-live');
+        if (ambient.dataset.ambientAttached === 'true') {
+            ambient.dataset.ambientAttached = 'false';
+            try {
+                ambient.removeAttribute('src');
+                ambient.src = '';
+                ambient.load();
+            } catch (_) {}
+        }
+    }
+
     function updateFullscreenNavButtons(target) {
         const viewport = document.getElementById('reelsSnapViewport');
         const navPrev = document.getElementById('reelsNavPrev');
@@ -3707,6 +3900,11 @@
 
         // Pause active fullscreen video
         pauseAllVideos();
+
+        // Release every blurred-fill copy (decoders + network) on close.
+        if (viewport) {
+            Array.from(viewport.children).forEach(item => detachAmbientFill(item));
+        }
 
         if (state.fullscreenObserver) {
             state.fullscreenObserver.disconnect();
@@ -5738,6 +5936,8 @@
         document.addEventListener('play', function(event) {
             const video = event.target;
             if (video.tagName !== 'VIDEO') return;
+            // The blurred letterbox filler never owns playback state.
+            if (video.classList.contains('reel-ambient-video')) return;
 
             if (state.currentPlayingVideo && state.currentPlayingVideo !== video) {
                 pauseVideo(state.currentPlayingVideo);
@@ -5755,6 +5955,8 @@
         document.addEventListener('pause', function(event) {
             const video = event.target;
             if (video.tagName !== 'VIDEO') return;
+            // The blurred letterbox filler never owns playback state.
+            if (video.classList.contains('reel-ambient-video')) return;
 
             const card = video.closest('.reel-card-container, .reel-post-card, .reels-snap-item');
             if (card) {
@@ -5768,6 +5970,8 @@
         document.addEventListener('ended', function(event) {
             const video = event.target;
             if (video.tagName !== 'VIDEO') return;
+            // The blurred letterbox filler never drives reel navigation.
+            if (video.classList.contains('reel-ambient-video')) return;
             if (!isAutoScrollEnabled || !state.isFullScreenActive) return;
             if (video.closest('.reels-carousel-shelf')) return;
 
@@ -5781,6 +5985,9 @@
         document.addEventListener('timeupdate', function(event) {
             const video = event.target;
             if (video.tagName !== 'VIDEO') return;
+            // The blurred letterbox filler is a copy — it must never drive
+            // reel navigation (it is in sync with the main reel by design).
+            if (video.classList.contains('reel-ambient-video')) return;
             if (!isAutoScrollEnabled || !state.isFullScreenActive) return;
             if (!video.loop || !video.duration) return;
             if (video.closest('.reels-carousel-shelf')) return;

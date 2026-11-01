@@ -260,6 +260,9 @@
                {% if hls_url %}data-hls-url="{{ hls_url }}"{% endif %}
                {% if feed_video %}data-video-url="{{ feed_video.url }}"{% endif %}
                data-post-id="{{ post.share_id }}"
+               data-video-duration="{{ post.video_duration|default:'' }}"
+               data-video-width="{{ post.video_width|default:'' }}"
+               data-video-height="{{ post.video_height|default:'' }}"
                data-autoplay="true">
             {% if not hls_url and feed_video %}
             <source src="{{ feed_video.url }}" type="video/mp4">

@@ -23,6 +23,12 @@ QUESTION_REGEX = re.compile(
 )
 
 
+# A heading longer than this is treated as content in its own right, so a
+# document made only of headings (a title page, slide-style pages, a scan
+# whose only text is a title) is still indexed and findable.
+HEADING_AS_CONTENT_MIN_TOKENS = 20
+
+
 def estimate_tokens(text: str) -> int:
     """
     Deterministic token estimation for prose, tables, and code.
@@ -343,6 +349,24 @@ class StructureAwareChunker:
                 # Flush existing buffer since a new section has started
                 flush_buffer(force_new=True)
                 active_heading = raw_text.lstrip('#').strip()
+                # A heading can BE the content: a title page, a slide-style
+                # page, or a scan whose only text is a title. Without this the
+                # whole document would vanish (0 chunks) and be invisible to
+                # retrieval. Short headings stay as section context only.
+                heading_tokens = estimate_tokens(active_heading)
+                if heading_tokens >= HEADING_AS_CONTENT_MIN_TOKENS:
+                    chunks.append(
+                        ChunkData(
+                            chunk_index=chunk_idx,
+                            content=active_heading,
+                            chunk_type="heading",
+                            page_number=page_num,
+                            section_heading=active_heading,
+                            metadata={"source_format": doc.format, "from_heading": True},
+                            token_count=heading_tokens,
+                        )
+                    )
+                    chunk_idx += 1
                 continue
 
             # 2. Table Handling

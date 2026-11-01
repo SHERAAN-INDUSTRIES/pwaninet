@@ -460,34 +460,25 @@
                 const blob = await new Promise(resolve => cropCanvas.toBlob(resolve, 'image/jpeg', 0.95));
                 if (!blob) throw new Error('Failed to generate cropped image.');
 
-                // Upload
-                const formData = new FormData();
-                formData.append('image', blob, 'timetable_cropped.jpg');
-                if (this.options.programmeId) formData.append('programme_id', this.options.programmeId);
-                if (this.options.yearNum) formData.append('academic_level', this.options.yearNum);
-                if (this.options.semNum) formData.append('semester', this.options.semNum);
-
-                // Get CSRF Token
-                let csrfToken = '';
-                const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
-                if (csrfInput) csrfToken = csrfInput.value;
-                else {
-                    const match = document.cookie.match(/csrftoken=([^;]+)/);
-                    if (match) csrfToken = match[1];
+                // Upload - straight to the bucket through the shared engine.
+                // The crop is a small blob, but the same direct path keeps
+                // every upload in the app on one mechanism.
+                if (!window.resumableUpload || typeof window.resumableUpload.start !== 'function') {
+                    throw new Error('The upload engine is not ready yet. Please refresh and try again.');
                 }
 
-                const response = await fetch('/documents/academic/timetable/upload/', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrfToken,
-                        'X-Requested-With': 'XMLHttpRequest',
+                const file = new File([blob], 'timetable_cropped.jpg', { type: 'image/jpeg' });
+                const result = await window.resumableUpload.start(file, {
+                    kind: 'timetable',
+                    timetable: {
+                        programme: this.options.programmeId || '',
+                        academic_level: this.options.yearNum || '',
+                        semester: this.options.semNum || '',
+                        change_summary: this.options.changeSummary || '',
                     },
-                    body: formData,
                 });
 
-                const result = await response.json();
-
-                if (response.ok && result.success) {
+                if (result && result.success !== false) {
                     this.close();
                     if (typeof this.options.onComplete === 'function') {
                         this.options.onComplete(result);
@@ -500,7 +491,7 @@
                         }
                     }
                 } else {
-                    alert((result && result.error) || 'Failed to process timetable. Please try again.');
+                    alert((result && result.detail) || 'Failed to process timetable. Please try again.');
                     if (this.processingScrim) {
                         this.processingScrim.classList.add('d-none');
                     }

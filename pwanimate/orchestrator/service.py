@@ -52,6 +52,35 @@ from pwanimate.tools.selector import LLMToolSelector
 
 logger = logging.getLogger(__name__)
 
+# The one user-facing sentence for "the vision route could not serve this
+# image". Said plainly rather than hidden: if Spark Vision is down, the
+# student should be told Spark Vision is down.
+SPARK_VISION_UNAVAILABLE_NOTICE = (
+    "Spark Vision is down and didn't respond, so I could not look at your image. "
+    "Please try again in a little while."
+)
+
+
+def _vision_fallback_instruction(system_instruction: Optional[str]) -> str:
+    """Tell the model exactly what to say when the image could not be read."""
+    return (
+        (system_instruction or "").rstrip()
+        + "\n\nImage fallback notice: "
+        + SPARK_VISION_UNAVAILABLE_NOTICE
+        + " Answer the user's text and available context only, and tell them this plainly."
+    )
+
+
+def _vision_unavailable_warning() -> Dict[str, str]:
+    """Kept for callers that want a machine-readable marker. The chat no
+    longer renders a banner for this: the model reports it in its answer
+    (once, and only when the question actually depends on the image)."""
+    return {
+        "code": "spark_vision_unavailable",
+        "title": "Spark Vision is down",
+        "message": SPARK_VISION_UNAVAILABLE_NOTICE,
+    }
+
 # Patterns that indicate purely conversational pleasantries without substantive search intent
 CONVERSATIONAL_PATTERNS = [
     r"^(hi|hello|hey|hiya|howdy)(\s+(there|Spark|friend))?[\s\.\!\?]*$",
@@ -226,6 +255,10 @@ def extract_attachment_text(
                             included_indices.add(chunk.chunk_index)
                         if remaining <= 200:
                             break
+                    # Close the page-scoped block explicitly: the supplementary
+                    # section below reuses the same "[page N]" labels, so the
+                    # model must be able to tell where the viewed page ends.
+                    lines.append("[END OF CURRENT PAGE CONTEXT]")
 
             # 2. For whole-book summary queries (or supplementary context), include opening + sampled/ranked chunks
             if remaining > 200:
@@ -256,7 +289,7 @@ def extract_attachment_text(
                     )
                     supplementary = sorted(ranked[:5], key=lambda chunk: chunk.chunk_index)
 
-                if supplementary and included_indices:
+                if supplementary:
                     lines.append("[ADDITIONAL DOCUMENT CONTEXT]")
                 for chunk in supplementary:
                     page = f"page {chunk.page_number}" if chunk.page_number else "page not specified"
@@ -370,6 +403,104 @@ class PwanimateOrchestrator:
             att_mime = getattr(att, "mime_type", "application/octet-stream")
 
             if att_type == "image":
+                # The image was analysed ONCE at upload. Later turns reuse
+                # that description as context instead of paying for (and
+                # waiting on) another vision pass on the same image.
+                stored_summary = (getattr(att, "vision_summary", "") or "").strip()
+                if stored_summary:
+                    doc_blocks.append(
+                        f'<attachment_context id="{att_id}" filename="{att_name}" '
+                        'type="image" analysed="once">\n'
+                        f"  <title>{att_name}</title>\n"
+                        "  <content>\n"
+                        "[IMAGE ANALYSIS — captured once when the image was uploaded; "
+                        "this description is the image's context]\n"
+                        f"{stored_summary}\n"
+                        "  </content>\n"
+                        "</attachment_context>"
+                    )
+                    continue
+
+                # The analysis failed earlier. The student decides what
+                # happens to the image: keep it in the context (so they can
+                # reuse it) or drop it. Until they choose, it is offered.
+                stored_error = (getattr(att, "vision_error", "") or "").strip()
+                if stored_error:
+                    policy = (getattr(att, "vision_context_policy", "") or "ask").strip().lower()
+                    if policy == "drop":
+                        doc_blocks.append(
+                            f'<attachment_context id="{att_id}" filename="{att_name}" '
+                            'type="image" analysed="failed">\n'
+                            f"  <title>{att_name}</title>\n"
+                            "  <content>\n"
+                            f"{stored_error} The student chose not to keep this image, so it is "
+                            "not available. Answer from the rest of the context, and only mention "
+                            "the image if the question depends on it.\n"
+                            "  </content>\n"
+                            "</attachment_context>"
+                        )
+                        continue
+                    if policy == "keep":
+                        # The student wants to reuse the image: send it again
+                        # so the vision route can pick it up.
+                        data_bytes = getattr(att, "data_bytes", None)
+                        if not data_bytes and hasattr(att, "file") and att.file:
+                            try:
+                                att.file.seek(0)
+                                data_bytes = att.file.read()
+                                att.file.seek(0)
+                            except Exception as e:
+                                logger.warning("Could not read bytes for image attachment %s: %s", att_id, e)
+                        image_attachments.append(
+                            AttachmentData(
+                                id=att_id,
+                                name=att_name,
+                                mime_type=att_mime,
+                                attachment_type="image",
+                                data_bytes=data_bytes,
+                                url=getattr(att, "url", f"/api/Spark/attachments/{att_id}/view/"),
+                            )
+                        )
+                        continue
+                    # 'ask': send it once more (the vision route may have
+                    # recovered) and let the student decide afterwards.
+                    data_bytes = getattr(att, "data_bytes", None)
+                    if not data_bytes and hasattr(att, "file") and att.file:
+                        try:
+                            att.file.seek(0)
+                            data_bytes = att.file.read()
+                            att.file.seek(0)
+                        except Exception as e:
+                            logger.warning("Could not read bytes for image attachment %s: %s", att_id, e)
+                    image_attachments.append(
+                        AttachmentData(
+                            id=att_id,
+                            name=att_name,
+                            mime_type=att_mime,
+                            attachment_type="image",
+                            data_bytes=data_bytes,
+                            url=getattr(att, "url", f"/api/Spark/attachments/{att_id}/view/"),
+                        )
+                    )
+                    continue
+
+                # Still being analysed by the upload task. Sending it here
+                # would analyse it a second time and bill it twice, so it is
+                # left out of the payload and the student is told.
+                if (getattr(att, "processing_status", "") or "") in {"pending", "processing"}:
+                    doc_blocks.append(
+                        f'<attachment_context id="{att_id}" filename="{att_name}" '
+                        'type="image" analysed="in_progress">\n'
+                        f"  <title>{att_name}</title>\n"
+                        "  <content>\n"
+                        "This image is still being read by Spark. Its contents are not "
+                        "available yet, so answer without it and say the image is still "
+                        "being processed if the question depends on it.\n"
+                        "  </content>\n"
+                        "</attachment_context>"
+                    )
+                    continue
+
                 data_bytes = getattr(att, "data_bytes", None)
                 if not data_bytes and hasattr(att, "file") and att.file:
                     try:
@@ -835,6 +966,7 @@ class PwanimateOrchestrator:
         self,
         request: OrchestrationRequest,
         on_progress: Optional[Callable[[str], None]] = None,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> OrchestrationResponse:
         """
         Execute an end-to-end orchestration turn.
@@ -912,7 +1044,8 @@ class PwanimateOrchestrator:
                     on_progress("searching_documents")
             elif tool_route.tool_name == "group_announcements" and on_progress:
                 on_progress("searching_posts")
-            response = self._run_tool(request, query, tool_route, t_start, on_progress=on_progress)
+            response = self._run_tool(request, query, tool_route, t_start, on_progress=on_progress, on_token=on_token)
+            self._record_usage(request, response)
             return self._append_friend_post_updates(response, request.user, friend_post_updates)
 
         # 4. Conversational turns can skip platform retrieval after tool choice.
@@ -920,7 +1053,8 @@ class PwanimateOrchestrator:
             request.task == "general" or self.is_conversational_intent(query)
         )
         if is_conversational:
-            response = self._run_conversational(request, query, t_start)
+            response = self._run_conversational(request, query, t_start, on_token=on_token)
+            self._record_usage(request, response)
             return self._append_friend_post_updates(response, request.user, friend_post_updates)
 
         # 5. Standard / Attachment / Context RAG
@@ -930,8 +1064,103 @@ class PwanimateOrchestrator:
             t_start,
             source_override=retrieval_sources,
             on_progress=on_progress,
+            on_token=on_token,
         )
+        self._record_usage(request, response)
         return self._append_friend_post_updates(response, request.user, friend_post_updates)
+
+    @staticmethod
+    def _request_metadata(request) -> Dict[str, Any]:
+        """
+        Gateway metadata for this turn: the engine's ordered chain (if any),
+        the caller's tier rank and the offering they explicitly asked for.
+
+        The tier rank is what lets the router withhold paid models from a
+        free-tier student's chain; the offering is the premium capability the
+        student selected.
+        """
+        meta: Dict[str, Any] = {}
+        try:
+            meta.update(request.engine_metadata())
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            meta.update(request.billing_metadata())
+        except Exception:  # noqa: BLE001 - billing must never break a turn
+            pass
+        if getattr(request, "request_id", None):
+            meta["request_id"] = request.request_id
+        meta["prompt_version"] = "2026-10-26.1"
+        meta["context_version"] = "2.1"
+        return meta
+
+    @staticmethod
+    def _first_image_id(attachments) -> Optional[str]:
+        for attachment in attachments or []:
+            if (getattr(attachment, "attachment_type", "") or "") == "image":
+                return str(getattr(attachment, "id", "") or "")
+        return None
+
+    @staticmethod
+    def _first_image_policy(attachments) -> str:
+        for attachment in attachments or []:
+            if (getattr(attachment, "attachment_type", "") or "") == "image":
+                return (getattr(attachment, "vision_context_policy", "") or "ask").strip().lower()
+        return "ask"
+
+    @staticmethod
+    def _remember_vision_failure(attachments) -> None:
+        """
+        Stop re-sending an image that could not be analysed.
+
+        The failure is recorded on the attachment, so the next turn carries a
+        short note instead of the image: no repeated vision call, no repeated
+        "Spark Vision is down" announcement.
+        """
+        for attachment in attachments or []:
+            if (getattr(attachment, "attachment_type", "") or "") != "image":
+                continue
+            try:
+                attachment.vision_error = SPARK_VISION_UNAVAILABLE_NOTICE
+                attachment.save(update_fields=["vision_error"])
+            except Exception:  # noqa: BLE001 - best effort, never break the turn
+                logger.debug("Could not record the vision failure on %s", attachment)
+
+    @staticmethod
+    def _record_usage(request, response):
+        """
+        Record this turn's real usage (model + provider token counts) into the
+        billing ledger, so the quota the student sees is the quota we enforce.
+
+        Never fatal: accounting must not break a chat turn.
+        """
+        try:
+            from pwanimate.ai.vision_images import image_will_be_sent
+            from pwanimate.billing.models import UsageKind
+            from pwanimate.billing.services import UsageService
+
+            # Count the images that actually reached the provider. An image
+            # that was already analysed at upload is represented by its
+            # stored description, so it was not sent and must not be
+            # charged as an image.
+            images = sum(
+                1
+                for attachment in (getattr(request, "attachments", None) or [])
+                if image_will_be_sent(attachment)
+            )
+            UsageService.record_turn(
+                user=getattr(request, "user", None),
+                provider=getattr(response, "provider", "") or "",
+                model_id=getattr(response, "model", "") or "",
+                prompt_tokens=int(getattr(response, "prompt_tokens", 0) or 0),
+                completion_tokens=int(getattr(response, "completion_tokens", 0) or 0),
+                total_tokens=int(getattr(response, "total_tokens", 0) or 0),
+                images=images,
+                kind=UsageKind.IMAGE if images else UsageKind.CHAT,
+                source="chat",
+            )
+        except Exception:  # noqa: BLE001 - accounting must never break a turn
+            logger.warning("[BILLING] usage recording failed", exc_info=True)
 
     @staticmethod
     def _append_friend_post_updates(response, user, updates):
@@ -958,18 +1187,31 @@ class PwanimateOrchestrator:
         response.metadata["friend_post_updates_count"] = len(updates)
         return response
 
+    def _generate(self, llm_request: LLMRequest, on_token: Optional[Callable[[str], None]] = None):
+        """Single LLM call site: streams tokens when a callback is provided."""
+        if on_token is not None:
+            return self.gateway.generate_stream(llm_request, on_token)
+        return self.gateway.generate(llm_request)
+
     def _run_conversational(
         self,
         request: OrchestrationRequest,
         query: str,
         t_start: float,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> OrchestrationResponse:
         """Handle pure conversational dialogue turns without retrieval or tools."""
         messages = list(request.history) + [ChatMessage(role="user", content=query)]
 
         context_pkg = None
         if request.user_context:
-            context_pkg = ContextPackage(query=query, user_context=request.user_context)
+            context_pkg = ContextPackage(
+                query=query,
+                user_context=request.user_context,
+                conversation_memory=request.conversation_memory,
+            )
+        elif request.conversation_memory:
+            context_pkg = ContextPackage(query=query, conversation_memory=request.conversation_memory)
 
         source_warnings = self._collect_source_warnings(request)
         base_instruction = self._with_local_time(get_system_instruction("conversational"), request)
@@ -992,10 +1234,11 @@ class PwanimateOrchestrator:
             model=request.model,
             temperature=request.temperature,
             max_tokens=effective_max_tokens,
+            metadata=self._request_metadata(request),
         )
 
         t_gen = time.perf_counter()
-        llm_response = self.gateway.generate(llm_request)
+        llm_response = self._generate(llm_request, on_token)
         gen_time_ms = round((time.perf_counter() - t_gen) * 1000.0, 2)
         total_time_ms = round((time.perf_counter() - t_start) * 1000.0, 2)
 
@@ -1031,6 +1274,10 @@ class PwanimateOrchestrator:
             "total_output_tokens": total_output_tokens,
             "max_output_tokens": max_output_tokens,
             "study_mode": bool(request.study_mode),
+            "prompt_version": "2026-10-26.1",
+            "context_version": "2.1",
+            "memory_count": len(request.conversation_memory),
+            "memory_trace": request.conversation_memory,
         }
         if source_warnings:
             metadata["warnings"] = source_warnings
@@ -1060,6 +1307,7 @@ class PwanimateOrchestrator:
         tool_route: ToolRoute,
         t_start: float,
         on_progress: Optional[Callable[[str], None]] = None,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> OrchestrationResponse:
         """Handle high-confidence deterministic domain tool execution."""
         t_tool = time.perf_counter()
@@ -1128,6 +1376,14 @@ class PwanimateOrchestrator:
 
         sources_summary = self._build_sources_summary(context_pkg.items)
 
+        # Write actions propose; the student confirms. The proposal travels
+        # back to the client so it can render a confirm/cancel card.
+        pending_actions: List[Dict[str, Any]] = []
+        if tool_result.success and isinstance(tool_result.data, dict):
+            action_data = tool_result.data.get("action")
+            if isinstance(action_data, dict):
+                pending_actions.append(action_data)
+
         messages = list(request.history) + [ChatMessage(role="user", content=query)]
 
         source_warnings = self._collect_source_warnings(request)
@@ -1154,6 +1410,7 @@ class PwanimateOrchestrator:
             model=request.model,
             temperature=request.temperature,
             max_tokens=effective_max_tokens,
+            metadata=self._request_metadata(request),
         )
 
         if (
@@ -1167,7 +1424,47 @@ class PwanimateOrchestrator:
             on_progress("devouring_context" if tool_result.success and tool_result.data else "thinking")
 
         t_gen = time.perf_counter()
-        llm_response = self.gateway.generate(llm_request)
+        llm_response = None
+        vision_text_fallback = False
+        has_image_attachments = any(
+            getattr(attachment, "attachment_type", "") == "image"
+            for attachment in (getattr(request, "attachments", None) or [])
+        )
+        try:
+            llm_response = self._generate(llm_request, on_token)
+        except AIGatewayError as vision_error:
+            if not has_image_attachments:
+                raise
+            # No image-capable model was available. The free tier is never
+            # denied service, so answer from the text context instead of
+            # failing the turn — and say plainly that the image was not read.
+            logger.warning(
+                "Pwanimate tool route could not serve the image; retrying text-only: %s",
+                type(vision_error).__name__,
+            )
+            self._remember_vision_failure(getattr(request, "attachments", None))
+            vision_text_fallback = True
+            text_only_instruction = _vision_fallback_instruction(llm_request.system_instruction)
+            text_request = LLMRequest(
+                task=llm_request.task,
+                messages=llm_request.messages,
+                context=llm_request.context,
+                system_instruction=text_only_instruction,
+                provider=llm_request.provider,
+                model=llm_request.model,
+                temperature=llm_request.temperature,
+                max_tokens=llm_request.max_tokens,
+                attachments=[],
+                metadata=llm_request.metadata,
+            )
+            llm_response = self._generate(text_request, on_token)
+            llm_response.metadata.update({
+                "vision_route": "text_fallback",
+                "vision_text_fallback": True,
+                "vision_fallback_error": type(vision_error).__name__,
+                "vision_attachment_id": self._first_image_id(getattr(request, "attachments", None)),
+                "vision_policy": self._first_image_policy(getattr(request, "attachments", None)),
+            })
         gen_time_ms = round((time.perf_counter() - t_gen) * 1000.0, 2)
         total_time_ms = round((time.perf_counter() - t_start) * 1000.0, 2)
 
@@ -1209,6 +1506,7 @@ class PwanimateOrchestrator:
             "total_output_tokens": total_output_tokens,
             "max_output_tokens": max_output_tokens,
             "study_mode": bool(request.study_mode),
+            "pending_actions": pending_actions,
         }
         if source_warnings:
             metadata["warnings"] = source_warnings
@@ -1229,6 +1527,8 @@ class PwanimateOrchestrator:
             metadata=metadata,
             quota_info=quota_info,
             finish_reason=llm_response.finish_reason,
+            # No banner: the model says it in the answer, once, and only
+            # when the question actually depends on the image.
             warnings=source_warnings,
         )
 
@@ -1239,6 +1539,7 @@ class PwanimateOrchestrator:
         t_start: float,
         source_override: Optional[List[str]] = None,
         on_progress: Optional[Callable[[str], None]] = None,
+        on_token: Optional[Callable[[str], None]] = None,
     ) -> OrchestrationResponse:
         """Handle knowledge/retrieval-augmented dialogue turns."""
         # 0. Resolve any attachments active in the Right Context Rail (including open page numbers)
@@ -1379,6 +1680,7 @@ class PwanimateOrchestrator:
             ),
         )
         context_pkg: ContextPackage = self.context_engine.build_context(context_req)
+        context_pkg.conversation_memory = list(request.conversation_memory)
         if attachment_context:
             context_pkg.attachment_context = attachment_context
 
@@ -1420,7 +1722,10 @@ class PwanimateOrchestrator:
             temperature=request.temperature,
             max_tokens=effective_max_tokens,
             attachments=image_attachments,
-            metadata={"required_capability": "image"} if is_multimodal_turn else {},
+            metadata={
+                **request.engine_metadata(),
+                **({"required_capability": "image"} if is_multimodal_turn else {}),
+            },
         )
 
         if on_progress:
@@ -1436,17 +1741,13 @@ class PwanimateOrchestrator:
                     "Pwanimate vision route failed; retrying text-only through the normal model chain: %s",
                     type(vision_error).__name__,
                 )
+                self._remember_vision_failure(image_attachments)
                 vision_text_fallback = True
                 text_only_messages = [
                     ChatMessage(role=message.role, content=message.content)
                     for message in messages
                 ]
-                text_only_instruction = (
-                    (llm_request.system_instruction or "").rstrip()
-                    + "\n\nImage fallback notice: Image analysis is unavailable for this response. "
-                    "Do not claim to have seen or analyzed any attached image. Answer the user's text "
-                    "and available text context only, and clearly mention that the image was not analyzed."
-                )
+                text_only_instruction = _vision_fallback_instruction(llm_request.system_instruction)
                 text_request = LLMRequest(
                     task=llm_request.task,
                     messages=text_only_messages,
@@ -1456,7 +1757,7 @@ class PwanimateOrchestrator:
                     model=request.model,
                     temperature=llm_request.temperature,
                     max_tokens=llm_request.max_tokens,
-                    metadata={},
+                    metadata=self._request_metadata(request),
                     attachments=[],
                 )
                 llm_response = self.gateway.generate(text_request)
@@ -1465,12 +1766,17 @@ class PwanimateOrchestrator:
                     "vision_route": "text_fallback",
                     "vision_text_fallback": True,
                     "vision_fallback_error": type(vision_error).__name__,
+                    "vision_attachment_id": self._first_image_id(image_attachments),
+                    "vision_policy": self._first_image_policy(image_attachments),
                     "fallback_used": True,
                     "original_provider": "gemini",
                     "original_model": getattr(settings, "PWANIMATE_VISION_MODEL", "gemini-3.8-flash"),
                 })
         else:
-            llm_response = self.gateway.generate(llm_request)
+            # Text turns stream when the caller supplied a token callback.
+            # Multimodal turns stay non-streaming in v1 (vision→text fallback
+            # correctness first; the client degrades to final-render UX).
+            llm_response = self._generate(llm_request, on_token)
         if is_multimodal_turn:
             if not vision_text_fallback:
                 llm_response.metadata["vision_route"] = "fallback" if llm_response.provider != "gemini" else "primary"
@@ -1517,6 +1823,19 @@ class PwanimateOrchestrator:
             "total_output_tokens": total_output_tokens,
             "max_output_tokens": max_output_tokens,
             "study_mode": bool(request.study_mode),
+            "prompt_version": "2026-10-26.1",
+            "context_version": "2.1",
+            "memory_count": len(request.conversation_memory),
+            "memory_trace": request.conversation_memory,
+            "retrieval_trace": [
+                {
+                    "source": result.source.value if hasattr(result.source, "value") else str(result.source),
+                    "object_id": str(result.object_id),
+                    "score": round(float(result.score), 4),
+                    "citation": result.citation,
+                }
+                for result in retrieval_resp.results[:50]
+            ],
         }
         if source_warnings:
             metadata["warnings"] = source_warnings
@@ -1536,6 +1855,8 @@ class PwanimateOrchestrator:
             metadata=metadata,
             quota_info=quota_info,
             finish_reason=llm_response.finish_reason,
+            # No banner: the model says it in the answer, once, and only
+            # when the question actually depends on the image.
             warnings=source_warnings,
         )
 
