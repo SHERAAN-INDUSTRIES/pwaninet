@@ -106,3 +106,10 @@ AXES_ENABLED = False
 # Celery configuration for local development
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
 CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+
+# OAuth/OIDC - Allow HTTP redirect URIs in local development
+OAUTH2_PROVIDER = {
+    **OAUTH2_PROVIDER,
+    'ALLOWED_REDIRECT_URI_SCHEMES': ['http', 'https'],
+    'OIDC_ISS_ENDPOINT': 'http://127.0.0.1:8000/o',
+}

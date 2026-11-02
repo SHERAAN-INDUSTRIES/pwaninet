@@ -198,6 +198,9 @@ The site is now running at `http://127.0.0.1:8000/`. The admin panel is at `/adm
 
 - [Documentation index](docs/README.md) — Overview of all documentation
 - [Site overview](docs/site-overview.md) — Architecture, app map, data and files
+- [Vasto–Workspaces OIDC provider guide](docs/integrations/vasto-workspaces-oidc-provider.md) — Vasto provider configuration, client registration, consent, keys, and local testing
+
+React frontend setup and integration documentation are maintained separately by the frontend team.
 - [Developer guide](docs/developer-guide.md) — Detailed setup and contribution guide
 - [Site owner guide](docs/site-owner-guide.md) — End-to-end walkthrough of the platform
 - [App-by-app guides](docs/apps/README.md) — Detailed guides for each Django app

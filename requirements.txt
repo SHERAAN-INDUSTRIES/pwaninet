@@ -36,6 +36,7 @@ django
 django-axes
 django-cors-headers
 django-filter
+django-oauth-toolkit
 django-stubs
 django-stubs-ext
 djangorestframework

@@ -178,3 +178,9 @@ WHITENOISE_MAX_AGE = 31536000
 
 # Set immutable flag on static files for zero-revalidation browser caching
 WHITENOISE_IMMUTABLE_FILE_TEST = lambda path, url: True
+
+# OAuth/OIDC - Enforce HTTPS-only redirect URIs in production
+OAUTH2_PROVIDER = {
+    **OAUTH2_PROVIDER,
+    'ALLOWED_REDIRECT_URI_SCHEMES': ['https'],
+}
