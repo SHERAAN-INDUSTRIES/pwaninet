@@ -148,7 +148,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Configure the local PostgreSQL values in `.env`: `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT`. The checked-in Compose file publishes PostgreSQL at host port 5432, but `.env.example` currently lists 5433. For the Compose configuration as checked in, set `DB_PORT=5432` (or make the Compose mapping and `.env` agree). Start PostgreSQL and Redis:
+Configure the local PostgreSQL values in `.env`: `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST=127.0.0.1`, and `DB_PORT=5432`. The checked-in Compose file publishes PostgreSQL on host port 5432. If you change the Compose mapping or use another PostgreSQL service, set `DB_PORT` to its published port. Using `127.0.0.1` avoids `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4. Start PostgreSQL and Redis:
 
 ```sh
 docker compose up -d db redis

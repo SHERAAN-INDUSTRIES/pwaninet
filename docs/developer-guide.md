@@ -140,7 +140,7 @@ DB_NAME=vasto
 DB_USER=vasto
 DB_PASSWORD=local_password
 DB_HOST=127.0.0.1
-DB_PORT=5433
+DB_PORT=5432
 
 # Redis
 REDIS_URL=redis://127.0.0.1:6379/1
@@ -205,10 +205,10 @@ docker compose up -d db redis
 ```
 
 This starts:
-- **PostgreSQL** with pgvector extension on host port 5433 (container port 5432)
+- **PostgreSQL** with pgvector extension on host port 5432 (container port 5432)
 - **Redis** on port 6379
 
-The PostgreSQL host port defaults to 5433 to avoid conflicts with a system PostgreSQL server. If you change `DB_PORT` in `.env`, Compose and Django both use that port.
+The checked-in Compose file publishes PostgreSQL on host port 5432. Set `DB_PORT` to the port published by your PostgreSQL service; the Compose mapping is currently fixed at `5432:5432`, so changing only `.env` does not change the Compose port. Use `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4.
 
 ### Verify services are running
 

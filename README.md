@@ -141,6 +141,21 @@ Vasto was formerly known as Pwaninet. The service domain (pwaninet.app), app ide
    python -m pip install -r requirements.txt
    ```
 
+   OAuth support is provided by the `django-oauth-toolkit` distribution (pinned
+   in `requirements.txt`). Its Python import path is `oauth2_provider`; do not
+   install a separate distribution named `oauth2_provider`. To verify the
+   dependency after installation:
+
+   ```bash
+   python -m pip show django-oauth-toolkit
+   python manage.py shell --settings=pwaninet.settings.local -c "from oauth2_provider.urls import metadata_urlpatterns; print(f'Loaded {len(metadata_urlpatterns)} OAuth metadata routes')"
+   ```
+
+   If `pip show oauth2_provider` reports a separately installed distribution,
+   remove that conflicting package and reinstall the project dependencies. If
+   the environment has been used for other projects, creating a fresh `.venv`
+   is the safest option.
+
 4. **Configure environment**
 
    ```bash
@@ -149,7 +164,11 @@ Vasto was formerly known as Pwaninet. The service domain (pwaninet.app), app ide
 
    Edit `.env` with your local values. Key variables:
    - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — PostgreSQL credentials
-   - `DB_HOST=127.0.0.1`, `DB_PORT=5433` — local database connection
+   - `DB_HOST=127.0.0.1`, `DB_PORT=5432` — local connection to the PostgreSQL
+     service started by the checked-in Compose file. Use the actual published
+     port if you connect to a different PostgreSQL server. Use `127.0.0.1`
+     rather than `localhost` to avoid connecting over IPv6 when PostgreSQL only
+     accepts IPv4.
    - `REDIS_URL=redis://127.0.0.1:6379/1` — cache
    - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0` — Celery broker
    - `SECRET_KEY` — generate a fresh Django secret key

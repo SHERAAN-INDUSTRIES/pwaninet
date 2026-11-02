@@ -68,7 +68,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set local PostgreSQL values in `.env` (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`) and keep credentials local. The current `docker-compose.yml` publishes PostgreSQL on host port **5432**, while `.env.example` currently says `DB_PORT=5433`. For the checked-in Compose file, set `DB_PORT=5432` unless you change the Compose port mapping. This mismatch is a repository configuration inconsistency to resolve separately.
+Set local PostgreSQL values in `.env` (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`) and keep credentials local. The checked-in `docker-compose.yml` and `.env.example` both use host port **5432**. Keep `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4. If you change the Compose port mapping or connect to another PostgreSQL service, make `DB_PORT` match that service's published port.
 
 Start the local database and Redis:
 
@@ -236,7 +236,7 @@ The OAuth Application, user, database, and signing key used for development must
 | Consent does not appear | The matching Workspaces user/application/scopes already have a valid grant and provider policy is `auto`, or the application has skip authorization enabled. | Check only the relevant local user's grants and that Application's `skip_authorization=False`. Revoke only the local test grant if first-consent testing is needed. |
 | A callback says authorization transaction is invalid/expired | Workspaces transactions are bound to the initiating browser session, expire after 10 minutes, and are single-use. | Restart from `/api/auth/vasto/start/` in the same browser session. Do not refresh/replay an old callback. |
 | Browser appears to share or overwrite a login between local apps | Cookies share hostname scope across ports; earlier use of identical cookie names can collide. | Use `127.0.0.1` consistently and the distinct local cookie names: `pwaninet_local_sessionid` for Vasto and `workspaces_sessionid` for Workspaces. Clear stale `localhost`/`127.0.0.1` cookies if needed. |
-| Local DB connection refuses | Compose currently maps host port 5432 but `.env.example` lists 5433. | Set `DB_PORT=5432` for the checked-in Compose file, or make the Compose mapping and `.env` agree. |
+| Local DB connection refuses | The database service is stopped, or `.env` uses a host/port that does not match the PostgreSQL service. | Start PostgreSQL and Redis with `docker compose up -d db redis`; use `DB_HOST=127.0.0.1` and the published Compose port (`DB_PORT=5432` by default). |
 
 ## Related documentation
 
