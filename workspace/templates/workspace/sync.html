@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}vasto Workspace{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card border-0 shadow-sm mx-auto" style="max-width: 720px;">
+        <div class="card-body p-4 p-md-5">
+            <h1 class="h3 mb-3">Connect to vasto Workspace</h1>
+            <p class="lead">Do you want to sync your vasto account to vasto Workspace?</p>
+            <p class="text-secondary">
+                vasto Workspace is a separate system reached through its own REST API.
+                This page is only the entry point; no account data is synced yet.
+            </p>
+
+            <div id="btn">
+
+            </div>
+                <script>
+
+                    let isSynced = localStorage.getItem('vasto_workspace');
+                    if (isSynced) {
+                        window.location.href = "http://localhost:3000/";
+                    }
+                    else{
+                        const syncB = document.getElementById("btn")
+                        const BtSync = document.createElement=`
+                        <button type="button" id="vasto-workspace-sync-btn" class="btn btn-primary">
+                            Sync
+                        </button>`
+                        syncB.innerHTML=BtSync
+                    }
+                    
+                </script>
+        
+                
+                <script>
+                    const url = "http://127.0.0.1:8001"
+                    const syncBtn = document.getElementById('vasto-workspace-sync-btn');
+                    syncBtn.addEventListener('click', async () => {
+                        syncBtn.disabled = true;
+                        syncBtn.textContent = 'Syncing...';
+                        try {
+                            const response = await fetch("url", {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': '{{ csrf_token }}'
+                                },
+                                body: JSON.stringify({
+                                    user_id: '{{ user_id }}',
+                                    session_key: '{{ session_key }}'
+                                })
+                            });
+                            if (response.ok) {
+                                syncBtn.textContent = 'Synced!';
+                                syncBtn.disabled = true;
+                                const data = await response.json();
+                                localStorage.setItem('vasto_workspace_synced', data.synced);
+                                localStorage.setItem('vasto_workspace', true)
+                                window.location.href = "http://localhost:3000/?user_id={{ user_id }}&session_key={{ session_key }}";
+                            } else {
+                                syncBtn.textContent = 'Sync failed';
+                            }
+                        } catch (error) {
+                            console.error('Error syncing:', error);
+                            syncBtn.textContent = 'Sync failed';
+                        }
+                    });
+                </script>
+        
+
+            <form method="post" action="{% url 'workspace:dismiss' %}" class="mt-3">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary">Dismiss / Not now</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

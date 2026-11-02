@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'pwanimate.billing',
     'admin_dashboard',
     'uploads',
+    'workspace',
 ]
 
 MIDDLEWARE = [
@@ -117,6 +118,7 @@ TEMPLATES = [
                 'pwaninet.context_processors.session_identity',
                 'groups.context_processors.groups_nav_context',
                 'messaging.context_processors.messaging_nav_context',
+                'workspace.context_processors.workspace_notification',
             ],
         },
     }
@@ -191,6 +193,9 @@ LOGIN_URL = 'login_direct'
 LOGIN_REDIRECT_URL = 'posts:home'
 LOGOUT_REDIRECT_URL = 'users:logout'
 AUTH_USER_MODEL = 'users.User'
+
+# vasto Workspace (external system) — configure per environment.
+VASTO_WORKSPACE_BASE_URL = os.environ.get('VASTO_WORKSPACE_BASE_URL', '')
 
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',

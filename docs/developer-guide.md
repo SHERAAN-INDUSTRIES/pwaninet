@@ -100,11 +100,99 @@ Use `--skip-containers` only when PostgreSQL and Redis are already running and c
 
 The first setup creates `.env` from `.env.example` and generates a local Django `SECRET_KEY`. Existing `.env` files are retained. The database and cache settings are set up for the checked-in Compose services. Optional AI provider keys can be added to `.env` if you plan to use those features; basic local setup does not require them.
 
+<<<<<<< HEAD
 Keep `.env` private and do not commit it. Do not copy production secrets or another developer's OIDC signing key into your local environment. The signing key is stored outside the repository under `~/.config/vasto/keys/`.
 
 ## 5. Starting services
 
 The bootstrap starts PostgreSQL and Redis for you. To confirm they are running, from the Vasto repository root use:
+=======
+```bash
+cp .env.example .env
+```
+
+### Edit `.env`
+
+Open `.env` in your editor. The file contains placeholder values for local development. Key variables:
+
+```bash
+# Database
+DB_NAME=vasto
+DB_USER=vasto
+DB_PASSWORD=local_password
+DB_HOST=127.0.0.1
+DB_PORT=5432
+
+# Redis
+REDIS_URL=redis://127.0.0.1:6379/1
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+
+# Django
+SECRET_KEY=<generate-a-fresh-random-string>
+DEBUG=True
+
+# Optional: AI providers (leave blank to use mock providers)
+GEMINI_API_KEY=
+GROQ_API_KEY=
+OPENROUTER_API_KEY=
+
+# Optional: Web search providers
+TAVILY_API_KEY=
+BRAVE_API_KEY=
+SERPER_API_KEY=
+
+# Optional: Cloudflare R2 storage
+USE_S3=0
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT_URL=
+R2_CUSTOM_DOMAIN=
+
+# Optional: Push notifications
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+FIREBASE_CREDENTIALS_PATH=
+
+# Optional: Email
+EMAIL_HOST=
+EMAIL_PORT=
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=
+```
+
+### Generating a SECRET_KEY
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+```
+
+### Important
+
+- **Never commit `.env`** — it is listed in `.gitignore`.
+- **Never reuse a production SECRET_KEY** in local development.
+- **Leave AI provider keys blank** if you don't have them. Pwanimate will use mock providers.
+- The local email backend prints emails to the console; no SMTP server needed for basic development.
+
+---
+
+## 5. Starting services
+
+### Start PostgreSQL and Redis
+
+```bash
+docker compose up -d db redis
+```
+
+This starts:
+- **PostgreSQL** with pgvector extension on host port 5432 (container port 5432)
+- **Redis** on port 6379
+
+The checked-in Compose file publishes PostgreSQL on host port 5432. Set `DB_PORT` to the port published by your PostgreSQL service; the Compose mapping is currently fixed at `5432:5432`, so changing only `.env` does not change the Compose port. Use `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4.
+
+### Verify services are running
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 ```bash
 docker compose ps

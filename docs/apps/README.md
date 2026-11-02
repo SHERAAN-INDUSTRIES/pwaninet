@@ -16,5 +16,6 @@ Each guide describes a first-party Django app registered by the project. The cod
 | `releases` | Release notes, version metadata, and update information | [Releases](releases.md) |
 | `admin_dashboard` | Staff dashboard and user feedback | [Admin dashboard](admin-dashboard.md) |
 | `messaging` | Direct messaging code, currently frozen behind gates | [Messaging](messaging.md) |
+| `workspace` | Account sync entry point for the external vasto Workspace system | [Workspace](workspace.md) |
 
 Project-wide settings, URL mounting, Channels, and Celery are documented in the [site overview](../site-overview.md) and [developer guide](../developer-guide.md).

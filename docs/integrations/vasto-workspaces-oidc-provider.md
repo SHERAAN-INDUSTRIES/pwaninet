@@ -65,7 +65,11 @@ From the Vasto repository root, run the complete setup script:
 ./scripts/setup-dev.sh
 ```
 
+<<<<<<< HEAD
 The script reuses an activated or existing compatible Python environment and creates `.venv` only if none is found. It then prepares `.env`, starts PostgreSQL and Redis, creates or validates the persistent Vasto signing key, checks and migrates the database, selects or creates an admin owner, and registers the local Workspaces OAuth client. For non-interactive use, pass `--developer YOUR_IDENTIFIER --owner-username YOUR_VASTO_ADMIN_USERNAME`. Use `--skip-containers` only when PostgreSQL and Redis are already managed separately.
+=======
+Set local PostgreSQL values in `.env` (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`) and keep credentials local. The checked-in `docker-compose.yml` and `.env.example` both use host port **5432**. Keep `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4. If you change the Compose port mapping or connect to another PostgreSQL service, make `DB_PORT` match that service's published port.
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 Once setup finishes, start Vasto at the browser-facing loopback address. The command below uses `.venv`; if the script reused another environment, use its printed server command:
 
@@ -228,7 +232,11 @@ The OAuth Application, user, database, and signing key used for development must
 | Consent does not appear | The matching Workspaces user/application/scopes already have a valid grant and provider policy is `auto`, or the application has skip authorization enabled. | Check only the relevant local user's grants and that Application's `skip_authorization=False`. Revoke only the local test grant if first-consent testing is needed. |
 | A callback says authorization transaction is invalid/expired | Workspaces transactions are bound to the initiating browser session, expire after 10 minutes, and are single-use. | Restart from `/api/auth/vasto/start/` in the same browser session. Do not refresh/replay an old callback. |
 | Browser appears to share or overwrite a login between local apps | Cookies share hostname scope across ports; earlier use of identical cookie names can collide. | Use `127.0.0.1` consistently and the distinct local cookie names: `pwaninet_local_sessionid` for Vasto and `workspaces_sessionid` for Workspaces. Clear stale `localhost`/`127.0.0.1` cookies if needed. |
+<<<<<<< HEAD
 | Local DB connection refuses | PostgreSQL is unreachable using the current `.env` values. | Check that the Compose `db` service is running and that `DB_HOST` and `DB_PORT` match its published address. The checked-in example uses host port `5432`. |
+=======
+| Local DB connection refuses | The database service is stopped, or `.env` uses a host/port that does not match the PostgreSQL service. | Start PostgreSQL and Redis with `docker compose up -d db redis`; use `DB_HOST=127.0.0.1` and the published Compose port (`DB_PORT=5432` by default). |
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 ## Related documentation
 

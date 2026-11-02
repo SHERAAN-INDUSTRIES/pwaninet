@@ -184,15 +184,48 @@ You do not need to know Django or create a Python environment yourself. The scri
    ./scripts/setup-dev.sh
    ```
 
+<<<<<<< HEAD
 3. Follow the prompts. Choose a short developer identifier, such as your username. Select an existing Vasto staff account to own the local Workspaces client, or leave the owner prompt blank to create a Vasto superuser. If you create one, the script asks you to set its password. The owner is a Vasto account; you will use a Vasto account to sign in during testing.
 4. Wait for the script to finish. It reuses an activated environment, or searches this repository for an existing Python environment named `.venv`, `venv`, or `env` (and a unique other environment). It creates `.venv` only if it cannot find one. It installs dependencies into the selected environment, prepares `.env`, starts the database and Redis, checks or creates the local signing key, applies migrations, and registers the Workspaces client. The client credentials are saved outside the repository with private file permissions.
 5. Start the Vasto web server. The command below is for the default `.venv`; if the script selected another environment, copy the exact start command it printed at the end:
+=======
+   OAuth support is provided by the `django-oauth-toolkit` distribution (pinned
+   in `requirements.txt`). Its Python import path is `oauth2_provider`; do not
+   install a separate distribution named `oauth2_provider`. To verify the
+   dependency after installation:
+
+   ```bash
+   python -m pip show django-oauth-toolkit
+   python manage.py shell --settings=pwaninet.settings.local -c "from oauth2_provider.urls import metadata_urlpatterns; print(f'Loaded {len(metadata_urlpatterns)} OAuth metadata routes')"
+   ```
+
+   If `pip show oauth2_provider` reports a separately installed distribution,
+   remove that conflicting package and reinstall the project dependencies. If
+   the environment has been used for other projects, creating a fresh `.venv`
+   is the safest option.
+
+4. **Configure environment**
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
    ```bash
    .venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
    ```
 
+<<<<<<< HEAD
    Leave this terminal open while testing. Vasto is now available at `http://127.0.0.1:8000/` and its admin page is at `http://127.0.0.1:8000/admin/`.
+=======
+   Edit `.env` with your local values. Key variables:
+   - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — PostgreSQL credentials
+   - `DB_HOST=127.0.0.1`, `DB_PORT=5432` — local connection to the PostgreSQL
+     service started by the checked-in Compose file. Use the actual published
+     port if you connect to a different PostgreSQL server. Use `127.0.0.1`
+     rather than `localhost` to avoid connecting over IPv6 when PostgreSQL only
+     accepts IPv4.
+   - `REDIS_URL=redis://127.0.0.1:6379/1` — cache
+   - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0` — Celery broker
+   - `SECRET_KEY` — generate a fresh Django secret key
+   - AI provider keys (optional for basic functionality): `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 For a repeatable setup where you already know the values, replace the prompts with:
 
