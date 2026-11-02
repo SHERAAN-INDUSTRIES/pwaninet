@@ -654,14 +654,14 @@ class GoogleRedirectViewTest(TestCase):
 
         cache.clear()
 
-    def _redirect_post(self, credential, csrf_token='csrf-token-123', client=None):
+    def _redirect_post(self, credential, csrf_token='csrf-token-123', client=None, state=None):
         http_client = client or Client()
         http_client.cookies['g_csrf_token'] = csrf_token
+        data = {'credential': credential, 'g_csrf_token': csrf_token}
+        if state is not None:
+            data['state'] = state
         with mock_jwks():
-            return http_client.post(
-                self.url,
-                data={'credential': credential, 'g_csrf_token': csrf_token},
-            ), http_client
+            return http_client.post(self.url, data=data), http_client
 
     def test_g_csrf_mismatch_rejected(self):
         from users.services import google_auth_service
@@ -695,6 +695,58 @@ class GoogleRedirectViewTest(TestCase):
         self.assertFalse(user.has_usable_password())
         self.assertEqual(str(client.session['_auth_user_id']), str(user.id))
         self.assertTrue(GoogleAccount.objects.filter(sub='redir-new-1', user=user).exists())
+
+    def test_login_page_keeps_google_callback_uri_fixed_and_signs_continuation(self):
+        from urllib.parse import urlencode, urlparse
+        from django.core import signing
+        from importlib import import_module
+        from django.conf import settings
+
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client', 'response_type': 'code',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'scope': 'openid profile email', 'state': 'workspace-state', 'nonce': 'workspace-nonce',
+            'code_challenge': 'challenge', 'code_challenge_method': 'S256',
+        })
+        response = self.client.get(self.login_url + '?' + urlencode({'next': oauth_url}))
+        self.assertEqual(response.status_code, 200)
+        context = response.context
+        self.assertEqual(urlparse(context['google_login_uri']).path, self.url)
+        self.assertEqual(urlparse(context['google_login_uri']).query, '')
+        handle = signing.loads(
+            context['google_login_state'],
+            salt='users.google_login_continuation', max_age=900,
+        )
+        continuation = import_module(settings.SESSION_ENGINE).SessionStore(session_key=handle)
+        self.assertEqual(continuation.get('_google_login_next'), oauth_url)
+
+    def test_known_google_user_returns_to_safe_oauth_continuation(self):
+        from urllib.parse import urlencode
+
+        user = User.objects.create_user(username='redirnext', email='redirnext@example.com',
+                                        password='x')
+        GoogleAccount.objects.create(user=user, sub='redir-next-sub',
+                                     email='redirnext@example.com', email_verified=True)
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client', 'response_type': 'code',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'scope': 'openid', 'state': 'st', 'nonce': 'no',
+            'code_challenge': 'cc', 'code_challenge_method': 'S256',
+        })
+        client = Client()
+        client.cookies['g_csrf_token'] = 'csrf-token-123'
+        from django.core import signing
+        from users.views import _make_google_login_state
+        google_state = _make_google_login_state(oauth_url)
+        with mock_jwks():
+            response = client.post(
+                self.url,
+                data={'credential': mint_token(sub='redir-next-sub', email='redirnext@example.com'),
+                      'g_csrf_token': 'csrf-token-123', 'state': google_state},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, oauth_url)
+        self.assertEqual(str(client.session['_auth_user_id']), str(user.id))
 
     def test_known_sub_logs_in(self):
         user = User.objects.create_user(username='redirknown', email='redirknown@example.com',
@@ -739,15 +791,29 @@ class GoogleRedirectViewTest(TestCase):
         confirm_and_enable_two_factor(owner, pyotp.TOTP(secret).now())
         GoogleAccount.objects.create(user=owner, sub='redir-2fa-sub',
                                      email='redirtfa@example.com', email_verified=True)
+        from django.core import signing
+        from urllib.parse import urlencode
+
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client', 'response_type': 'code',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'scope': 'openid profile email', 'state': 'google-workspaces-state',
+            'nonce': 'google-workspaces-nonce', 'code_challenge': 'challenge',
+            'code_challenge_method': 'S256',
+        })
+        from users.views import _make_google_login_state
+        google_state = _make_google_login_state(oauth_url)
         response, client = self._redirect_post(
-            mint_token(sub='redir-2fa-sub', email='redirtfa@example.com'))
+            mint_token(sub='redir-2fa-sub', email='redirtfa@example.com'), state=google_state)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('login_2fa_challenge'))
+        self.assertEqual(client.session['_2fa_next'], oauth_url)
         self.assertNotIn('_auth_user_id', client.session)
         UserTwoFactor.objects.filter(user=owner).update(last_used_timestep=None)
         challenge = client.post(reverse('login_2fa_challenge'),
                                 {'code': pyotp.TOTP(secret).now()})
         self.assertEqual(challenge.status_code, 302)
+        self.assertEqual(challenge.url, oauth_url)
         self.assertEqual(str(client.session['_auth_user_id']), str(owner.id))
 
     def test_invalid_token_bounces_to_login(self):

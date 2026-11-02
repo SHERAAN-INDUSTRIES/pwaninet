@@ -1335,6 +1335,82 @@ class Phase3SecurityTest(TestCase):
         confirm_and_enable_two_factor(self.enrolled_user, code)
         self.recovery_codes = generate_recovery_codes(self.enrolled_user)
 
+    def test_failed_password_login_preserves_oauth_authorization_request(self):
+        from urllib.parse import urlencode
+
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'response_type': 'code',
+            'scope': 'openid profile email',
+            'state': 'state-value',
+            'nonce': 'nonce-value',
+            'code_challenge': 'challenge-value',
+            'code_challenge_method': 'S256',
+        })
+        login_url = reverse('login') + '?' + urlencode({'next': oauth_url})
+        page = self.client.get(login_url)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.context['next'], oauth_url)
+
+        failed = self.client.post(reverse('login'), {
+            'username': 'phase3_unenrolled', 'password': 'wrong-password', 'next': oauth_url,
+        })
+        self.assertEqual(failed.status_code, 200)
+        self.assertEqual(failed.context['next'], oauth_url)
+
+        success = self.client.post(reverse('login'), {
+            'username': 'phase3_unenrolled', 'password': 'TestPassword123!', 'next': oauth_url,
+        })
+        self.assertRedirects(success, oauth_url, fetch_redirect_response=False)
+
+    def test_two_factor_flow_preserves_oauth_request_and_rejects_unsafe_next(self):
+        from urllib.parse import urlencode
+        import pyotp
+
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client', 'response_type': 'code',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'scope': 'openid profile email', 'state': 's1', 'nonce': 'n1',
+            'code_challenge': 'c1', 'code_challenge_method': 'S256',
+        })
+        challenge = self.client.post(reverse('login'), {
+            'username': 'phase3_enrolled', 'password': 'TestPassword123!', 'next': oauth_url,
+        })
+        self.assertRedirects(challenge, reverse('login_2fa_challenge'), fetch_redirect_response=False)
+        self.assertEqual(self.client.session['_2fa_next'], oauth_url)
+        self.client.post(reverse('login_2fa_challenge'), {'code': '000000'})
+        self.assertEqual(self.client.session['_2fa_next'], oauth_url)
+        self.tf.refresh_from_db()
+        self.tf.last_used_timestep = None
+        self.tf.save(update_fields=['last_used_timestep'])
+        completed = self.client.post(reverse('login_2fa_challenge'), {
+            'code': pyotp.TOTP(self.secret).now(),
+        })
+        self.assertRedirects(completed, oauth_url, fetch_redirect_response=False)
+
+        anonymous = Client()
+        unsafe = anonymous.get(reverse('login') + '?' + urlencode({'next': 'https://evil.example/'}))
+        self.assertEqual(unsafe.status_code, 200)
+        self.assertEqual(unsafe.context['next'], '')
+
+    def test_recovery_code_login_preserves_oauth_authorization_request(self):
+        from urllib.parse import urlencode
+
+        oauth_url = '/o/authorize/?' + urlencode({
+            'client_id': 'workspaces-client', 'response_type': 'code',
+            'redirect_uri': 'http://localhost:8001/api/auth/vasto/callback/',
+            'scope': 'openid profile email', 'state': 's-recovery', 'nonce': 'n-recovery',
+            'code_challenge': 'cc-recovery', 'code_challenge_method': 'S256',
+        })
+        self.client.post(reverse('login'), {
+            'username': 'phase3_enrolled', 'password': 'TestPassword123!', 'next': oauth_url,
+        })
+        response = self.client.post(reverse('login_2fa_challenge'), {
+            'code': self.recovery_codes[0],
+        })
+        self.assertRedirects(response, oauth_url, fetch_redirect_response=False)
+
     def test_unenrolled_user_logs_in_directly(self):
         """User without 2FA authenticates and logs in immediately."""
         resp = self.client.post(reverse('login'), {

@@ -2,6 +2,7 @@ import datetime
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
+from urllib.parse import urlencode
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login, logout
 from django.http import JsonResponse, HttpResponse
@@ -53,6 +54,28 @@ from .filters import UserFilter, FollowFilter
 logger = logging.getLogger('users.auth')
 
 
+def _safe_login_next(request, candidate):
+    """Return a same-host continuation URL, rejecting unsafe redirects."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    candidate = (candidate or '').strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return candidate
+    return ''
+
+
+def _login_url_with_next(request, candidate, **extra_params):
+    """Build a login URL while safely retaining an optional continuation."""
+    params = {key: value for key, value in extra_params.items() if value is not None}
+    safe_next = _safe_login_next(request, candidate)
+    if safe_next:
+        params['next'] = safe_next
+    url = reverse('login')
+    return f'{url}?{urlencode(params)}' if params else url
+
+
 def get_client_ip(request):
     """Safely extract the client IP address from the request."""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -68,6 +91,12 @@ def register_view(request):
     """
     if request.user.is_authenticated:
         return redirect('posts:home')
+
+    # Signup can be entered while completing an OAuth authorization. Keep that
+    # same-host continuation through account creation and the subsequent login.
+    next_url = _safe_login_next(
+        request, request.POST.get('next') or request.GET.get('next')
+    )
 
     ref_token = request.GET.get('ref') or request.session.get('invite_token')
     inviter_username = request.session.get('inviter_username')
@@ -118,7 +147,7 @@ def register_view(request):
 
                 request.session['registered_username'] = user.email or user.username
                 messages.success(request, f"Welcome to vasto, @{user.username}! Your account has been created successfully. Sign in using your username or email.")
-                return redirect('login')
+                return redirect(_login_url_with_next(request, next_url))
             else:
                 msg_warn = f"[AUTH-REGISTER] Validation failed for username='{submitted_username}', IP={ip}. Errors: {form.errors.as_json()}"
                 print(msg_warn, flush=True)
@@ -134,6 +163,7 @@ def register_view(request):
 
     return render(request, 'users/register.html', {
         'form': form,
+        'next': next_url,
         'inviter_username': inviter_username,
         'invite_token': ref_token,
         'google_login_enabled': bool(settings.GOOGLE_LOGIN_ENABLED and settings.GOOGLE_WEB_CLIENT_ID),
@@ -170,14 +200,23 @@ class PwaniLoginView(LoginView):
             _settings.GOOGLE_LOGIN_ENABLED and _settings.GOOGLE_WEB_CLIENT_ID
         )
         context['google_web_client_id'] = _settings.GOOGLE_WEB_CLIENT_ID
+        next_url = _safe_login_next(
+            self.request, context.get('next') or self.request.GET.get('next')
+        )
+        context['next'] = next_url
         context['google_login_uri'] = self.request.build_absolute_uri(
             reverse('users:google_redirect')
         )
+        # GIS requires login_uri to exactly match a configured Google redirect URI.
+        # Keep the authorization URL server-side; the GIS state field carries only
+        # a signed, short-lived reference, never Workspaces OAuth parameters.
+        context['google_login_state'] = _make_google_login_state(next_url)
         return context
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            return redirect('posts:home')
+            next_url = _safe_login_next(request, request.GET.get('next'))
+            return redirect(next_url or 'posts:home')
         # If user has an active, unexpired 2FA challenge and didn't explicitly request a fresh login, auto-resume
         if request.method == 'GET' and request.GET.get('fresh') != '1' and request.session.get('_2fa_pending_user_id'):
             import time as _time
@@ -205,8 +244,11 @@ class PwaniLoginView(LoginView):
             self.request.session['_2fa_pending_user_id'] = user.pk
             self.request.session['_2fa_pending_ts'] = int(_time.time())
             self.request.session['_2fa_backend'] = getattr(user, 'backend', 'users.backends.CaseInsensitiveAuthBackend')
-            next_url = self.request.POST.get('next', '') or self.request.GET.get('next', '') or self.get_success_url()
-            self.request.session['_2fa_next'] = next_url
+            next_url = (self.request.POST.get('next', '') or self.request.GET.get('next', '')
+                        or self.get_success_url())
+            self.request.session['_2fa_next'] = (
+                _safe_login_next(self.request, next_url) or reverse('posts:home')
+            )
             device_id = self.request.POST.get('device_id')
             if device_id:
                 self.request.session['_2fa_device_id'] = device_id
@@ -270,15 +312,17 @@ def login_2fa_challenge_view(request):
         return redirect('login')
 
     if int(_time.time()) - pending_ts > _2FA_CHALLENGE_TIMEOUT:
+        next_url = _safe_login_next(request, request.session.get('_2fa_next', ''))
         _clear_2fa_pending(request)
         messages.error(request, 'Your authentication session expired. Please log in again.')
-        return redirect('login')
+        return redirect(_login_url_with_next(request, next_url))
 
     try:
         pending_user = User.objects.get(pk=pending_user_id)
     except User.DoesNotExist:
+        next_url = _safe_login_next(request, request.session.get('_2fa_next', ''))
         _clear_2fa_pending(request)
-        return redirect('login')
+        return redirect(_login_url_with_next(request, next_url))
 
     ip = get_client_ip(request)
 
@@ -295,6 +339,7 @@ def login_2fa_challenge_view(request):
 
     # Rate-limit
     if attempts >= _2FA_MAX_ATTEMPTS:
+        next_url = _safe_login_next(request, request.session.get('_2fa_next', ''))
         _clear_2fa_pending(request)
         request.session.pop('_google_pending_link', None)
         request.session.pop('_google_pending_link_sub', None)
@@ -304,7 +349,7 @@ def login_2fa_challenge_view(request):
         )
         logger.warning(msg)
         messages.error(request, 'Too many incorrect attempts. Please log in again.')
-        return redirect('login')
+        return redirect(_login_url_with_next(request, next_url))
 
     # Try TOTP first, then recovery code
     used_recovery_code = False
@@ -331,7 +376,7 @@ def login_2fa_challenge_view(request):
         })
 
     # ── Success: complete the login ───────────────────────────────────────────
-    next_url = request.session.get('_2fa_next', '/')
+    next_url = _safe_login_next(request, request.session.get('_2fa_next', ''))
     device_id = request.POST.get('device_id') or request.session.get('_2fa_device_id')
     backend = request.session.get('_2fa_backend', 'users.backends.CaseInsensitiveAuthBackend')
     if device_id:
@@ -836,16 +881,60 @@ _GOOGLE_AUTH_BACKEND = 'users.backends.CaseInsensitiveAuthBackend'
 
 def _google_safe_next(request, data=None):
     """Return a validated `next` URL or '' — open redirects are rejected."""
-    from django.utils.http import url_has_allowed_host_and_scheme
-
     candidate = ''
     if data and data.get('next'):
         candidate = data.get('next')
     if not candidate:
         candidate = request.POST.get('next', '') or request.GET.get('next', '')
-    if candidate and url_has_allowed_host_and_scheme(candidate, allowed_hosts={request.get_host()}):
-        return candidate
-    return ''
+    return _safe_login_next(request, candidate)
+
+
+_GOOGLE_CONTINUATION_KEY = '_google_login_next'
+_GOOGLE_CONTINUATION_SALT = 'users.google_login_continuation'
+_GOOGLE_CONTINUATION_TTL = 900
+
+
+def _make_google_login_state(next_url):
+    """Store next server-side and return an opaque, signed GIS button state."""
+    if not next_url:
+        return ''
+    from importlib import import_module
+    from django.conf import settings as _settings
+    from django.core import signing
+
+    session_engine = import_module(_settings.SESSION_ENGINE)
+    continuation = session_engine.SessionStore()
+    continuation[_GOOGLE_CONTINUATION_KEY] = next_url
+    continuation.set_expiry(_GOOGLE_CONTINUATION_TTL)
+    continuation.save()
+    return signing.dumps(
+        continuation.session_key, salt=_GOOGLE_CONTINUATION_SALT, compress=True
+    )
+
+
+def _google_redirect_safe_next(request):
+    """Consume GIS state as an opaque continuation handle, separate from OAuth state."""
+    from importlib import import_module
+    from django.conf import settings as _settings
+    from django.core import signing
+
+    token = request.POST.get('state', '')
+    if token:
+        try:
+            handle = signing.loads(
+                token, salt=_GOOGLE_CONTINUATION_SALT, max_age=_GOOGLE_CONTINUATION_TTL
+            )
+        except signing.BadSignature:
+            return ''
+        if not isinstance(handle, str):
+            return ''
+        session_engine = import_module(_settings.SESSION_ENGINE)
+        continuation = session_engine.SessionStore(session_key=handle)
+        candidate = continuation.get(_GOOGLE_CONTINUATION_KEY, '')
+        continuation.delete()
+        return _safe_login_next(request, candidate)
+    # Retain compatibility with an explicitly supplied local continuation.
+    return _google_safe_next(request)
 
 
 def _google_request_data(request):
@@ -1036,7 +1125,11 @@ def google_complete_view(request):
     from users.services import google_auth_service
 
     if request.user.is_authenticated:
-        return JsonResponse({'status': 'ok', 'redirect': reverse('posts:home')})
+        return JsonResponse({
+            'status': 'ok',
+            'redirect': _google_safe_next(request, _google_request_data(request))
+                or reverse('posts:home'),
+        })
     if not _settings.GOOGLE_LOGIN_ENABLED:
         return JsonResponse({'status': 'error', 'message': 'Google sign-in is currently unavailable.'}, status=403)
 
@@ -1224,8 +1317,9 @@ def _google_complete_login_redirect(request, target_user, link_record=None):
     from django.contrib.auth import login as auth_login
     from users.services import two_factor_service
 
+    next_url = _google_safe_next(request) or reverse('posts:home')
     if two_factor_service.is_two_factor_enabled(target_user):
-        _stash_google_2fa_challenge(request, target_user, reverse('posts:home'),
+        _stash_google_2fa_challenge(request, target_user, next_url,
                                     link_record=link_record)
         return redirect('login_2fa_challenge')
 
@@ -1243,7 +1337,7 @@ def _google_complete_login_redirect(request, target_user, link_record=None):
                 'link_method': link_record['link_method'],
             },
         )
-    return redirect('posts:home')
+    return redirect(next_url)
 
 
 @require_http_methods(["POST"])
@@ -1263,38 +1357,41 @@ def google_redirect_view(request):
     from users.models import GoogleAccount, User
     from users.services import google_auth_service
 
-    login_url = reverse('login')
+    next_url = _google_redirect_safe_next(request)
+    def login_bounce(**params):
+        return redirect(_login_url_with_next(request, next_url, **params))
+
     if request.user.is_authenticated:
-        return redirect('posts:home')
+        return redirect(next_url or 'posts:home')
     if not _settings.GOOGLE_LOGIN_ENABLED:
         messages.error(request, 'Google sign-in is currently unavailable.')
-        return redirect(login_url)
+        return login_bounce()
     if not google_auth_service.google_complete_allowed(request):
         logger.warning(
             "[SECURITY-RATELIMIT] BLOCKED: Google redirect rate limit exceeded for "
             f"IP={google_auth_service.get_rate_limit_ip(request)}"
         )
         messages.error(request, 'Too many sign-in attempts. Please wait a few minutes and try again.')
-        return redirect(login_url)
+        return login_bounce()
 
     cookie_token = request.COOKIES.get('g_csrf_token', '')
     body_token = request.POST.get('g_csrf_token', '')
     if not cookie_token or not body_token or not _hmac.compare_digest(cookie_token, body_token):
         logger.warning("[SECURITY-GOOGLE] Redirect login rejected: g_csrf_token mismatch")
         messages.error(request, 'Google sign-in could not be verified. Please try again.')
-        return redirect(login_url)
+        return login_bounce()
 
     credential = (request.POST.get('credential') or '').strip()
     if not credential:
         messages.error(request, 'No Google credential was received. Please try again.')
-        return redirect(login_url)
+        return login_bounce()
 
     try:
         claims = google_auth_service.verify_google_id_token(credential)
     except google_auth_service.GoogleVerificationError as exc:
         logger.warning(f"[SECURITY-GOOGLE] Redirect token verification failed ({exc.code})")
         messages.error(request, 'This Google sign-in is invalid or has expired. Please try again.')
-        return redirect(login_url)
+        return login_bounce()
 
     sub = claims.get('sub', '')
     google_email = (claims.get('email') or '').lower()
@@ -1304,7 +1401,7 @@ def google_redirect_view(request):
         linked_user = existing_link.user
         if not linked_user.is_active:
             messages.error(request, 'This account is disabled.')
-            return redirect(login_url)
+            return login_bounce()
         from django.utils import timezone as _timezone
 
         existing_link.last_login_at = _timezone.now()
@@ -1327,7 +1424,7 @@ def google_redirect_view(request):
                 f"An account ({email_owner.username}) already uses this email address. "
                 "Sign in with your password below to link Google sign-in.",
             )
-            return redirect(f"{login_url}?google_link=1")
+            return login_bounce(google_link='1')
 
     outcome, google_user = _create_google_user_account(claims, sub, google_email)
     if outcome == 'sub_exists':
@@ -1341,10 +1438,10 @@ def google_redirect_view(request):
             f"An account ({owner.username}) already uses this email address. "
             "Sign in with your password below to link Google sign-in.",
         )
-        return redirect(f"{login_url}?google_link=1")
+        return login_bounce(google_link='1')
     if outcome != 'created':
         messages.error(request, 'Could not create your account right now. Please try again.')
-        return redirect(login_url)
+        return login_bounce()
 
     new_user = google_user
     ref_token = request.session.get('invite_token')

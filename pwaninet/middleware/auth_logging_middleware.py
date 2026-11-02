@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 logger = logging.getLogger('users.auth')
 
@@ -34,7 +35,12 @@ class AuthLoggingMiddleware:
             if response.status_code == 403:
                 resp_msg += " (403 FORBIDDEN - CSRF or Permission verification failed!)"
             elif response.status_code == 302:
-                resp_msg += f" (REDIRECT -> {response.get('Location', '')})"
+                location = response.get('Location', '')
+                parsed_location = urlsplit(location)
+                safe_location = parsed_location.path or '/'
+                if parsed_location.scheme and parsed_location.netloc:
+                    safe_location = f'{parsed_location.scheme}://{parsed_location.netloc}{safe_location}'
+                resp_msg += f" (REDIRECT -> {safe_location})"
             print(resp_msg, flush=True)
             logger.info(resp_msg)
 

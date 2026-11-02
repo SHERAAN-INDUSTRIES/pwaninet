@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from oauth2_provider.urls import metadata_urlpatterns
 
 # Configure Django Admin Branding
 admin.site.site_header = "vasto Administration"
@@ -371,6 +372,10 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    # OAuth 2.0 / OpenID Connect Provider
+    path('o/', include('oauth2_provider.urls')),
+    # RFC 8414 metadata at root (for issuer /o)
+    path('.well-known/oauth-authorization-server/', include(metadata_urlpatterns)),
     # Push Notification API routes
     path('api/push/vapid-public-key/', notification_views.VapidPublicKeyView.as_view(), name='vapid_public_key'),
     path('api/push/subscribe/', notification_views.SubscribeView.as_view(), name='push_subscribe'),

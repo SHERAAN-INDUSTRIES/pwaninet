@@ -66,6 +66,7 @@ serve*.sh
 *firebase*.json
 *adminsdk*.json
 firebase-adminsdk.json
+.secrets/
 # Allow Android client google-services.json for CI/CD builds
 !android/app/google-services.json
 

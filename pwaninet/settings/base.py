@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django_filters',
     'drf_spectacular',
     'rest_framework.authtoken',
+    'oauth2_provider',
     'axes',
     'courses',
     'users',
@@ -186,6 +187,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 150 * 1024 * 1024  # 150MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 150 * 1024 * 1024  # 150MB
 
 # Auth settings
+LOGIN_URL = 'login_direct'
 LOGIN_REDIRECT_URL = 'posts:home'
 LOGOUT_REDIRECT_URL = 'users:logout'
 AUTH_USER_MODEL = 'users.User'
@@ -284,6 +286,79 @@ REST_FRAMEWORK = {
     'DEFAULT_VERSION': 'v1',
     'ALLOWED_VERSIONS': ['v1'],
     'VERSION_PARAM': 'version',
+}
+
+# OAuth2 Provider Configuration
+OAUTH2_PROVIDER = {
+    # Scopes
+    'SCOPES': {
+        'openid': 'OpenID Connect identity',
+        'profile': 'User profile information',
+        'email': 'User email address',
+    },
+
+    # Token Lifetimes
+    'ACCESS_TOKEN_EXPIRE_SECONDS': 7200,  # 2 hours
+    'REFRESH_TOKEN_EXPIRE_SECONDS': 2592000,  # 30 days
+    'AUTHORIZATION_CODE_EXPIRE_SECONDS': 600,  # 10 minutes
+
+    # Refresh Token Settings
+    'ROTATE_REFRESH_TOKEN': True,
+    'REFRESH_TOKEN_REUSE_PROTECTION': True,
+    'REFRESH_TOKEN_GRACE_PERIOD_SECONDS': 0,
+
+    # PKCE Settings
+    'PKCE_REQUIRED': True,
+    'COMPLIANT_BCP_RFC9700_PKCE_METHOD': True,
+    'COMPLIANT_BCP_RFC9700_PKCE_REQUIRED': True,
+
+    # Redirect URI Settings
+    'ALLOWED_REDIRECT_URI_SCHEMES': ['https'],
+    'COMPLIANT_BCP_RFC9700_REDIRECT_URI_SCHEME': True,
+    'COMPLIANT_BCP_RFC9700_REDIRECT_URI_MATCHING': True,
+    'ALLOW_URI_WILDCARDS': False,
+
+    # Grant Type Restrictions
+    'COMPLIANT_BCP_RFC9700_IMPLICIT_GRANT': True,
+    'COMPLIANT_BCP_RFC9700_PASSWORD_GRANT': True,
+
+    # Access Token Transport
+    'COMPLIANT_BCP_RFC9700_ACCESS_TOKEN_TRANSPORT': True,
+
+    # Authorization Response Issuer
+    'COMPLIANT_BCP_RFC9700_AUTHZ_RESPONSE_ISS': True,
+
+    # OIDC Settings
+    'OIDC_ENABLED': True,
+    'OIDC_RSA_PRIVATE_KEY': os.environ.get('OIDC_RSA_PRIVATE_KEY') or (
+        open(BASE_DIR / '.secrets' / 'oidc_rsa_private.pem').read()
+        if (BASE_DIR / '.secrets' / 'oidc_rsa_private.pem').exists()
+        else None
+    ),
+    'OIDC_ISS_ENDPOINT': 'https://pwaninet.app/o',
+    'OIDC_COMPLIANT_SCOPE_CLAIMS': True,
+
+    # Explicit Response Types and Grant Types
+    'OAUTH2_RESPONSE_TYPES_SUPPORTED': ["code"],
+    'OIDC_RESPONSE_TYPES_SUPPORTED': ["code"],
+    'OAUTH2_GRANT_TYPES_SUPPORTED': ["authorization_code", "refresh_token"],
+
+    # Token Endpoint Authentication Metadata
+    'OAUTH_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED': ['client_secret_basic'],
+    'OAUTH2_REVOCATION_ENDPOINT_AUTH_METHODS_SUPPORTED': ['client_secret_basic'],
+    'OAUTH2_INTROSPECTION_ENDPOINT_AUTH_METHODS_SUPPORTED': ['client_secret_basic'],
+
+    # Consent Behavior
+    'REQUEST_APPROVAL_PROMPT': 'auto',
+
+    # Login URL for authorization (use Vasto's login route)
+    'LOGIN_URL': 'login_direct',
+
+    # Custom Validator
+    'OAUTH2_VALIDATOR_CLASS': 'users.validators.CustomOAuth2Validator',
+
+    # RFC 9700 Config Validation Gates
+    'COMPLIANT_BCP_RFC9700_REFRESH_TOKEN': True,
 }
 
 # JWT Settings

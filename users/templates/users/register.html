@@ -444,6 +444,7 @@
 
                         <form method="POST" action="{% url 'users:register' %}" id="registerForm" novalidate>
                             {% csrf_token %}
+                            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
                             {% for field in form %}
                                 <div class="mb-2">
@@ -503,7 +504,7 @@
 
                         <div class="text-center">
                             <p class="mb-0 text-muted">Already have an account?</p>
-                            <a href="{% url 'login' %}" data-bypass-htmx="true" class="fw-bold text-primary text-decoration-none">Sign in</a>
+                            <a href="{% url 'login' %}{% if next %}?next={{ next|urlencode }}{% endif %}" data-bypass-htmx="true" class="fw-bold text-primary text-decoration-none">Sign in</a>
                         </div>
                     </div>
                 </div>

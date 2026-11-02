@@ -166,6 +166,7 @@
 
                         <form method="POST" action="{% url 'login' %}" id="loginForm" novalidate>
                             {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ next }}">
                             <input type="hidden" name="device_id" id="device_id_field">
 
                             {% for field in form %}
@@ -206,7 +207,7 @@
 
                         <div class="text-center">
                             <p class="mb-0 text-muted">{% trans "New to vasto?" %}</p>
-                            <a href="{% url 'users:register' %}" data-bypass-htmx="true" class="fw-bold text-primary text-decoration-none">{% trans "Create an account" %}</a>
+                            <a href="{% url 'users:register' %}{% if next %}?next={{ next|urlencode }}{% endif %}" data-bypass-htmx="true" class="fw-bold text-primary text-decoration-none">{% trans "Create an account" %}</a>
                         </div>
                     </div>
                 </div>
