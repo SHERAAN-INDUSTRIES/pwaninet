@@ -112,87 +112,130 @@ Vasto was formerly known as Pwaninet. The service domain (pwaninet.app), app ide
 
 ### Prerequisites
 
-- Python 3.11+
-- Docker with Compose plugin
-- Node.js (only for Capacitor/Android development)
-- Android Studio + Android SDK (only for Android development)
+- Linux or macOS. Windows 10/11 users should use Ubuntu on WSL 2.
+- Git, OpenSSL, and Python 3.11 or newer for Vasto. For both Vasto and Workspaces, use Python 3.12–3.14.
+- Docker with Docker Compose v2. Docker must be running for Vasto's PostgreSQL and Redis services.
+- Node.js and Android Studio are only needed for mobile/Android development.
 
-### Setup
+### Install prerequisites for your operating system
 
-1. **Clone the repository**
+Run only the instructions for your computer. After installing these tools, the Vasto and Workspaces setup commands below are the same in a Bash terminal.
 
-   ```bash
-   git clone <repository-url>
-   cd vasto
+#### Ubuntu
+
+Open Terminal and install the basic tools:
+
+```bash
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-pip openssl
+```
+
+Check `python3 --version`. For the complete Vasto + Workspaces setup, install Python 3.12, 3.13, or 3.14; Ubuntu 22.04 may have an older default Python. Install Docker Engine and the Compose plugin by following [Docker's Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then make sure your account can run Docker commands using [Docker's Linux post-install instructions](https://docs.docker.com/engine/install/linux-postinstall/).
+
+#### Fedora
+
+Open Terminal and install the basic tools:
+
+```bash
+sudo dnf install -y git python3 python3-pip openssl
+```
+
+Check `python3 --version`. For the complete Vasto + Workspaces setup, use Python 3.12, 3.13, or 3.14. Install Docker Engine and Compose by following [Docker's Fedora instructions](https://docs.docker.com/engine/install/fedora/), start the Docker service, and follow [Docker's Linux post-install instructions](https://docs.docker.com/engine/install/linux-postinstall/) so your account can run Docker commands.
+
+#### macOS
+
+Install Apple's command line tools if needed, then install Git and Python with [Homebrew](https://brew.sh/):
+
+```bash
+xcode-select --install
+brew install git python@3.12 openssl
+```
+
+Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), open it, and wait until Docker reports that it is running. Python 3.12 is supported for both repositories.
+
+#### Windows 10/11
+
+Native Windows setup is not currently supported or verified. There is no PowerShell bootstrap, and the Vasto script requires Bash, Linux-style Python environment paths, and Unix file-permission and key-file operations. Docker Desktop alone does not make that script runnable from PowerShell. Use Ubuntu in WSL 2 for the complete Vasto + Workspaces setup:
+
+1. Open PowerShell as Administrator and install WSL with Ubuntu:
+
+   ```powershell
+   wsl --install -d Ubuntu
    ```
 
-2. **Create and activate a virtual environment**
+   Restart Windows if prompted, then open Ubuntu from the Start menu and create its Linux username and password. See [Microsoft's WSL installation guide](https://learn.microsoft.com/en-us/windows/wsl/install) if Windows asks for an update or the command is unavailable.
+2. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). In Docker Desktop settings, enable the WSL 2 engine and WSL integration for Ubuntu. Follow [Docker's WSL setup guide](https://docs.docker.com/desktop/features/wsl/).
+3. In the Ubuntu terminal (not PowerShell), install tools:
 
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   # or: .venv\Scripts\Activate.ps1  # Windows PowerShell
+   sudo apt update
+   sudo apt install -y git python3 python3-venv python3-pip openssl
    ```
+4. Keep both repositories inside the WSL Linux home folder, such as `~/projects`, rather than under `/mnt/c`. Run all setup and server commands from the Ubuntu terminal. Check that Ubuntu has Python 3.12–3.14 and that `docker compose version` works before continuing.
 
-3. **Install dependencies**
+### Set up Vasto step by step
+
+You do not need to know Django or create a Python environment yourself. The script installs the Python packages and performs the Django setup for you.
+
+1. Open a terminal in the Vasto repository's top-level folder. This is the folder containing this README and `scripts/`.
+2. Start Docker Desktop or your Docker service, then run:
 
    ```bash
-   python -m pip install --upgrade pip
-   python -m pip install -r requirements.txt
+   ./scripts/setup-dev.sh
    ```
 
-4. **Configure environment**
+3. Follow the prompts. Choose a short developer identifier, such as your username. Select an existing Vasto staff account to own the local Workspaces client, or leave the owner prompt blank to create a Vasto superuser. If you create one, the script asks you to set its password. The owner is a Vasto account; you will use a Vasto account to sign in during testing.
+4. Wait for the script to finish. It reuses an activated environment, or searches this repository for an existing Python environment named `.venv`, `venv`, or `env` (and a unique other environment). It creates `.venv` only if it cannot find one. It installs dependencies into the selected environment, prepares `.env`, starts the database and Redis, checks or creates the local signing key, applies migrations, and registers the Workspaces client. The client credentials are saved outside the repository with private file permissions.
+5. Start the Vasto web server. The command below is for the default `.venv`; if the script selected another environment, copy the exact start command it printed at the end:
 
    ```bash
-   cp .env.example .env
+   .venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
    ```
 
-   Edit `.env` with your local values. Key variables:
-   - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — PostgreSQL credentials
-   - `DB_HOST=127.0.0.1`, `DB_PORT=5433` — local database connection
-   - `REDIS_URL=redis://127.0.0.1:6379/1` — cache
-   - `CELERY_BROKER_URL=redis://127.0.0.1:6379/0` — Celery broker
-   - `SECRET_KEY` — generate a fresh Django secret key
-   - AI provider keys (optional for basic functionality): `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`
+   Leave this terminal open while testing. Vasto is now available at `http://127.0.0.1:8000/` and its admin page is at `http://127.0.0.1:8000/admin/`.
 
-5. **Start PostgreSQL and Redis**
+For a repeatable setup where you already know the values, replace the prompts with:
+
+```bash
+./scripts/setup-dev.sh --developer YOUR_IDENTIFIER --owner-username YOUR_VASTO_ADMIN_USERNAME
+```
+
+If you have several nonstandard environments in the repository, activate the one you want before running setup. Setup stops with an instruction to activate the one you want and rerun the script. Use `--skip-containers` only if PostgreSQL and Redis are already running and configured for this Vasto checkout. The setup script does not delete or reset your database or replace an existing signing key.
+
+### Set up Workspaces and test sign-in
+
+To test the Vasto sign-in integration, keep Vasto running and open a second terminal.
+
+1. Go to the top-level folder of the Workspaces repository (the folder containing its README and `scripts/`).
+2. Run the Workspaces setup script, using the same identifier you chose for Vasto if you need to select the credentials file explicitly:
 
    ```bash
-   docker compose up -d db redis
+   ./scripts/setup-dev.sh --credentials-file ~/.config/vasto-workspaces/YOUR_IDENTIFIER-local.env
    ```
 
-6. **Run migrations**
+   This reuses an activated or existing compatible Python environment (creating `.venv` only if none is found), installs Workspaces dependencies, imports the client credentials without printing the secret, prepares its own database, applies migrations, and checks the running Vasto provider. If you are using one generated credentials file, you can run `./scripts/setup-dev.sh` with no options and let it find the file or prompt you.
+3. When setup reports success, start Workspaces. This command uses the default `.venv`; if the script reused a differently named environment, use the exact server command it printed:
 
    ```bash
-   python manage.py migrate --settings=pwaninet.settings.local
+   .venv/bin/python workspace/manage.py runserver 127.0.0.1:8001
    ```
 
-7. **Create an admin account**
+4. Open `http://127.0.0.1:8001/api/auth/vasto/start/` in a browser and sign in to Vasto. The first sign-in may ask you to approve the Workspaces access request.
 
-   ```bash
-   python manage.py createsuperuser --settings=pwaninet.settings.local
-   ```
+You only need the setup scripts for environment, credentials, database migrations, registration, and provider checks. For a normal login test, start both servers and use the browser. The servers run in separate terminals; leave both terminals open while testing.
 
-8. **Start the development server**
+Start Celery only when you are developing background jobs. Open another terminal in Vasto and run:
 
-   ```bash
-   python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
-   ```
+```bash
+export DJANGO_SETTINGS_MODULE=pwaninet.settings.local
+celery -A pwaninet worker -l info
+```
 
-9. **Start Celery (in a separate terminal)**
+Celery Beat is optional for scheduled tasks:
 
-   ```bash
-   export DJANGO_SETTINGS_MODULE=pwaninet.settings.local
-   celery -A pwaninet worker -l info
-   ```
-
-10. **Start Celery Beat (optional, for scheduled tasks)**
-
-    ```bash
-    celery -A pwaninet beat -l info
-    ```
-
-The site is now running at `http://127.0.0.1:8000/`. The admin panel is at `/admin/`. API documentation is at `/api/docs/`.
+```bash
+celery -A pwaninet beat -l info
+```
 
 ## Documentation
 
@@ -285,3 +328,7 @@ vasto/
 - vasto is an independent project. It is not an official Pwani University service or assignment unless confirmed in writing.
 
 For detailed setup instructions, see the [developer guide](docs/developer-guide.md).
+
+## Local developer bootstrap for Workspaces
+
+The [step-by-step setup above](#set-up-vasto-step-by-step) covers the complete local Vasto and Workspaces flow, including the commands to start both servers and test sign-in. The Vasto setup script registers one client per developer identifier and saves its credentials to `~/.config/vasto-workspaces/YOUR_IDENTIFIER-local.env`. The Workspaces setup script imports that file and runs the live provider check. Keep the client secret in the backend environment; never put it in React configuration.
