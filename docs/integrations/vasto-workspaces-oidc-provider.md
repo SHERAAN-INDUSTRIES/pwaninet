@@ -65,11 +65,11 @@ From the Vasto repository root, run the complete setup script:
 ./scripts/setup-dev.sh
 ```
 
-<<<<<<< HEAD
 The script reuses an activated or existing compatible Python environment and creates `.venv` only if none is found. It then prepares `.env`, starts PostgreSQL and Redis, creates or validates the persistent Vasto signing key, checks and migrates the database, selects or creates an admin owner, and registers the local Workspaces OAuth client. For non-interactive use, pass `--developer YOUR_IDENTIFIER --owner-username YOUR_VASTO_ADMIN_USERNAME`. Use `--skip-containers` only when PostgreSQL and Redis are already managed separately.
-=======
+
+To start the same sign-in from Vasto's **Workspace sync** dialog, set Vasto's `VASTO_WORKSPACE_BASE_URL` to the Workspaces backend origin (local: `http://127.0.0.1:8001`). The dialog then navigates the browser to the backend authorization-start endpoint. Workspaces completes OIDC and creates its own session; Vasto does not send its user ID or session key to the frontend.
+
 Set local PostgreSQL values in `.env` (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`) and keep credentials local. The checked-in `docker-compose.yml` and `.env.example` both use host port **5432**. Keep `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4. If you change the Compose port mapping or connect to another PostgreSQL service, make `DB_PORT` match that service's published port.
->>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 Once setup finishes, start Vasto at the browser-facing loopback address. The command below uses `.venv`; if the script reused another environment, use its printed server command:
 
@@ -175,7 +175,7 @@ Vasto configures only these scopes for this integration:
 | `profile` | Profile claims allowed by the provider's scope-aware OIDC behavior. |
 | `email` | Email-related claims. |
 
-`users/validators.py` supplies `preferred_username`, `email`, `email_verified`, `given_name`, and `family_name` as additional claims. With `OIDC_COMPLIANT_SCOPE_CLAIMS=True` and the Authorization Code response (which includes an access token), profile/email claims are returned by UserInfo rather than copied into the ID token. The toolkit's subject claim is present in the signed ID token and UserInfo. Workspaces verifies `iss` and `sub` from the signed ID token, then obtains `preferred_username`, `email`, and `email_verified` from UserInfo and confirms its `sub` matches. The current Workspaces mapping does not store `given_name` or `family_name`.
+`users/validators.py` supplies `preferred_username`, `email`, `email_verified`, `given_name`, `family_name`, and the absolute `picture` URL as additional claims. With `OIDC_COMPLIANT_SCOPE_CLAIMS=True` and the Authorization Code response (which includes an access token), profile/email claims are returned by UserInfo rather than copied into the ID token. The toolkit's subject claim is present in the signed ID token and UserInfo. Workspaces verifies `iss` and `sub` from the signed ID token, then obtains the profile claims from UserInfo and confirms its `sub` matches.
 
 | Claim | Source used by Workspaces | Scope / handling |
 |---|---|---|
@@ -184,9 +184,10 @@ Vasto configures only these scopes for this integration:
 | `preferred_username` | UserInfo | Profile claim; used for the local username snapshot. |
 | `email` | UserInfo | Email claim; may be empty. |
 | `email_verified` | UserInfo | Email claim; Workspaces stores `true` only for Boolean `true`. |
-| `given_name`, `family_name` | Can be supplied by Vasto | Not consumed or persisted by current Workspaces code. |
+| `given_name`, `family_name` | UserInfo | Copied into the local Workspaces user's first and last name. |
+| `picture` | UserInfo | Stored as the Vasto profile-picture URL and returned by Workspaces `/api/auth/me/`. |
 
-`sub` is the stable provider identity. Workspaces maps a person by the pair `(issuer, subject)`, never by email or username alone. Profile image, bio, institution/school, course/programme, and other student profile data are not part of the Workspaces identity contract yet.
+`sub` is the stable provider identity. Workspaces maps a person by the pair `(issuer, subject)`, never by email or username alone. Bio, institution/school, course/programme, and other student profile data are not part of the Workspaces identity contract yet.
 
 ## Login, consent, and grants
 
@@ -232,11 +233,7 @@ The OAuth Application, user, database, and signing key used for development must
 | Consent does not appear | The matching Workspaces user/application/scopes already have a valid grant and provider policy is `auto`, or the application has skip authorization enabled. | Check only the relevant local user's grants and that Application's `skip_authorization=False`. Revoke only the local test grant if first-consent testing is needed. |
 | A callback says authorization transaction is invalid/expired | Workspaces transactions are bound to the initiating browser session, expire after 10 minutes, and are single-use. | Restart from `/api/auth/vasto/start/` in the same browser session. Do not refresh/replay an old callback. |
 | Browser appears to share or overwrite a login between local apps | Cookies share hostname scope across ports; earlier use of identical cookie names can collide. | Use `127.0.0.1` consistently and the distinct local cookie names: `pwaninet_local_sessionid` for Vasto and `workspaces_sessionid` for Workspaces. Clear stale `localhost`/`127.0.0.1` cookies if needed. |
-<<<<<<< HEAD
-| Local DB connection refuses | PostgreSQL is unreachable using the current `.env` values. | Check that the Compose `db` service is running and that `DB_HOST` and `DB_PORT` match its published address. The checked-in example uses host port `5432`. |
-=======
-| Local DB connection refuses | The database service is stopped, or `.env` uses a host/port that does not match the PostgreSQL service. | Start PostgreSQL and Redis with `docker compose up -d db redis`; use `DB_HOST=127.0.0.1` and the published Compose port (`DB_PORT=5432` by default). |
->>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
+| Local DB connection refuses | PostgreSQL is stopped or unreachable with the current `.env` host/port values. | Start PostgreSQL and Redis with `docker compose up -d db redis`; use `DB_HOST=127.0.0.1` and the published Compose port (`DB_PORT=5432` by default). |
 
 ## Related documentation
 

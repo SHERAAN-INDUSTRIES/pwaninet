@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from oauth2_provider.urls import metadata_urlpatterns
+from workspace.views import VastoWorkspaceAuthorizationView
 
 # Configure Django Admin Branding
 admin.site.site_header = "vasto Administration"
@@ -373,6 +374,7 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     # OAuth 2.0 / OpenID Connect Provider
+    path('o/authorize/', VastoWorkspaceAuthorizationView.as_view(), name='vasto_workspace_authorize'),
     path('o/', include('oauth2_provider.urls')),
     # RFC 8414 metadata at root (for issuer /o)
     path('.well-known/oauth-authorization-server/', include(metadata_urlpatterns)),

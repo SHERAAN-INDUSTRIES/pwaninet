@@ -3,22 +3,25 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
+from oauth2_provider.views.base import AuthorizationView
 
 from .models import WorkspaceSyncState
+
+
+class VastoWorkspaceAuthorizationView(AuthorizationView):
+    """Use Vasto's Workspace connection page for the OAuth consent step."""
+
+    template_name = "workspace/sync.html"
 
 
 @login_required
 @require_GET
 def workspace_sync(request):
-    state, _ = WorkspaceSyncState.objects.get_or_create(user=request.user)
+    workspace_base_url = getattr(settings, "VASTO_WORKSPACE_BASE_URL", "").rstrip("/")
     context = {
-        "user_id": request.user.pk,
-        "user_email": request.user.email,
-        # This is passed to the external workspace handoff; only send it over
-        # HTTPS to a trusted origin.
-        "session_key": request.session.session_key,
-        "is_synced": state.is_synced,
-        "workspace_base_url": getattr(settings, "VASTO_WORKSPACE_BASE_URL", ""),
+        "workspace_authorization_url": (
+            f"{workspace_base_url}/api/auth/vasto/start/" if workspace_base_url else ""
+        ),
     }
     return render(request, "workspace/sync.html", context)
 

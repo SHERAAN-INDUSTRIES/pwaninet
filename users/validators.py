@@ -22,4 +22,10 @@ class CustomOAuth2Validator(OAuth2Validator):
             'given_name': request.user.first_name,
             'family_name': request.user.last_name,
         }
+        profile_picture = getattr(request.user, 'profile_pic', None)
+        if profile_picture:
+            try:
+                claims['picture'] = request.build_absolute_uri(profile_picture.url)
+            except (OSError, ValueError):
+                claims['picture'] = ''
         return claims

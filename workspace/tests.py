@@ -16,15 +16,22 @@ class WorkspaceSyncViewTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_sync_page_renders_account_and_session_values(self):
-        response = self.client.get(reverse("workspace:sync"))
+    def test_sync_page_links_to_workspaces_authorization(self):
+        with self.settings(VASTO_WORKSPACE_BASE_URL="http://127.0.0.1:8001"):
+            response = self.client.get(reverse("workspace:sync"))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "workspace/sync.html")
-        self.assertEqual(response.context["user_id"], self.user.pk)
-        self.assertEqual(response.context["session_key"], self.client.session.session_key)
-        self.assertContains(response, str(self.user.pk))
-        self.assertContains(response, self.client.session.session_key)
+        self.assertContains(response, 'href="http://127.0.0.1:8001/api/auth/vasto/start/"')
+        self.assertNotContains(response, "session_key")
+
+    def test_sync_page_explains_when_workspace_is_not_configured(self):
+        with self.settings(VASTO_WORKSPACE_BASE_URL=""):
+            response = self.client.get(reverse("workspace:sync"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "workspace/sync.html")
+        self.assertContains(response, "VASTO_WORKSPACE_BASE_URL")
 
     def test_sync_page_requires_authentication(self):
         self.client.logout()

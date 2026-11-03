@@ -61,8 +61,10 @@ class WorkspacesOAuthConsentTests(TestCase):
 
         consent = self.client.get(self.authorization_url)
         self.assertEqual(consent.status_code, 200)
-        self.assertTemplateUsed(consent, 'oauth2_provider/authorize.html')
-        self.assertContains(consent, 'Authorize')
+        self.assertTemplateUsed(consent, 'workspace/sync.html')
+        self.assertContains(consent, 'Authorize Vasto Workspace?')
+        self.assertContains(consent, 'Authorize and continue')
+        self.assertContains(consent, 'name="allow"')
 
         approval = self.client.post('/o/authorize/', {
             **self.authorization_params,
@@ -107,8 +109,8 @@ class WorkspacesOAuthConsentTests(TestCase):
 
         consent = self.client.get(self.authorization_url)
         self.assertEqual(consent.status_code, 200)
-        self.assertTemplateUsed(consent, 'oauth2_provider/authorize.html')
-        self.assertContains(consent, 'Authorize')
+        self.assertTemplateUsed(consent, 'workspace/sync.html')
+        self.assertContains(consent, 'Authorize Vasto Workspace?')
 
     def test_unexpired_matching_grant_uses_remembered_consent_under_auto_policy(self):
         self.client.force_login(self.user)

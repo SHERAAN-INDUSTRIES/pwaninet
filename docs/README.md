@@ -12,6 +12,7 @@ Everything in this `docs/` directory is developer or operator documentation and 
 - [Site owner guide](site-owner-guide.md): a guided explanation of how vasto and Pwanimate fit together, how their main flows work, and what the important libraries do.
 - [Developer setup guide](developer-guide.md): clone the repository, configure the local environment, start dependencies, run Django, and work with background services.
 - [App guides](apps/README.md): responsibilities, important models, routes, and code entry points for each installed vasto app.
+- [Vasto ↔ Workspaces route reference](integrations/vasto-workspaces-route-reference.md): Vasto Workspace sync and OIDC provider routes used by Workspaces, with caller and response behavior.
 - [Licensing and attributions working note](licensing-and-attributions.md): current project licence decision and third-party notice inventory steps.
 
 ## Pre-launch and public documentation drafts

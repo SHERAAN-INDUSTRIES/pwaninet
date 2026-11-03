@@ -1,12 +1,12 @@
 # Workspace
 
-The `workspace` app provides an in-vasto entry point for connecting an account to the separate vasto Workspace system. It records whether a user dismissed the prompt or has synced, but does not implement synchronization. The actual sync service belongs to the external Workspace system.
+The `workspace` app provides an in-Vasto entry point for connecting an account to the separate Vasto Workspace system. Dismissing the prompt is recorded in Vasto; the Workspaces backend owns OIDC identity mapping and its authenticated session.
 
 ## Routes
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/workspace/sync/` | Show the sync entry page and the account/session values intended for a future handoff. |
+| GET | `/workspace/sync/` | Show the connection dialog and link the browser to the Workspaces OIDC authorization-start endpoint. |
 | POST | `/workspace/dismiss/` | Record the user's dismissal and return to the home feed. |
 
-The Sync button is intentionally inert. The real REST integration will plug into the button handler in `workspace/templates/workspace/sync.html` and the handoff data prepared by `workspace/views.py`; that integration is to be wired manually by the maintainer. Any future transmission of the session key must use HTTPS and a trusted Workspace origin.
+The connection dialog starts the Workspaces authorization flow with a top-level browser navigation to `{VASTO_WORKSPACE_BASE_URL}/api/auth/vasto/start/`. Vasto's standard `/o/authorize/` endpoint renders this app's Vasto-branded approval screen instead of OAuth Toolkit's default screen; approving submits the validated OAuth request and redirects to Workspaces' registered callback. Workspaces handles state, nonce, PKCE, identity mapping, and its own session. Vasto user IDs and session keys are not sent to the frontend or across this handoff. Configure `VASTO_WORKSPACE_BASE_URL` as the Workspaces backend origin (for local development, `http://127.0.0.1:8001`).

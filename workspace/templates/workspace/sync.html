@@ -6,74 +6,67 @@
 <div class="container py-4">
     <div class="card border-0 shadow-sm mx-auto" style="max-width: 720px;">
         <div class="card-body p-4 p-md-5">
-            <h1 class="h3 mb-3">Connect to vasto Workspace</h1>
-            <p class="lead">Do you want to sync your vasto account to vasto Workspace?</p>
+            {% if application or error %}
+            <h1 class="h3 mb-3">Authorize Vasto Workspace?</h1>
+            <p class="lead">Vasto Workspace is requesting access to your Vasto account.</p>
             <p class="text-secondary">
-                vasto Workspace is a separate system reached through its own REST API.
-                This page is only the entry point; no account data is synced yet.
+                You are signed in as <strong>{{ request.user.get_username }}</strong>.
+                Review the requested information before continuing.
             </p>
 
-            <div id="btn">
+            {% if not error %}
+                <form id="authorizationForm" method="post">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        {% if field.is_hidden %}{{ field }}{% endif %}
+                    {% endfor %}
 
-            </div>
-                <script>
+                    <h2 class="h6">Vasto Workspace will be able to access:</h2>
+                    <ul class="mb-4">
+                        {% for scope in scopes_descriptions %}
+                            <li>{{ scope }}</li>
+                        {% empty %}
+                            <li>Basic account identity for sign-in.</li>
+                        {% endfor %}
+                    </ul>
 
-                    let isSynced = localStorage.getItem('vasto_workspace');
-                    if (isSynced) {
-                        window.location.href = "http://localhost:3000/";
-                    }
-                    else{
-                        const syncB = document.getElementById("btn")
-                        const BtSync = document.createElement=`
-                        <button type="button" id="vasto-workspace-sync-btn" class="btn btn-primary">
-                            Sync
-                        </button>`
-                        syncB.innerHTML=BtSync
-                    }
-                    
-                </script>
-        
-                
-                <script>
-                    const url = "http://127.0.0.1:8001"
-                    const syncBtn = document.getElementById('vasto-workspace-sync-btn');
-                    syncBtn.addEventListener('click', async () => {
-                        syncBtn.disabled = true;
-                        syncBtn.textContent = 'Syncing...';
-                        try {
-                            const response = await fetch("url", {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRFToken': '{{ csrf_token }}'
-                                },
-                                body: JSON.stringify({
-                                    user_id: '{{ user_id }}',
-                                    session_key: '{{ session_key }}'
-                                })
-                            });
-                            if (response.ok) {
-                                syncBtn.textContent = 'Synced!';
-                                syncBtn.disabled = true;
-                                const data = await response.json();
-                                localStorage.setItem('vasto_workspace_synced', data.synced);
-                                localStorage.setItem('vasto_workspace', true)
-                                window.location.href = "http://localhost:3000/?user_id={{ user_id }}&session_key={{ session_key }}";
-                            } else {
-                                syncBtn.textContent = 'Sync failed';
-                            }
-                        } catch (error) {
-                            console.error('Error syncing:', error);
-                            syncBtn.textContent = 'Sync failed';
-                        }
-                    });
-                </script>
-        
+                    {% if form.errors %}<div class="alert alert-danger">{{ form.errors }}</div>{% endif %}
+                    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-primary" name="allow" value="authorize">Authorize and continue</button>
+                        <button type="submit" class="btn btn-outline-secondary">Cancel</button>
+                    </div>
+                </form>
+            {% else %}
+                <div class="alert alert-danger" role="alert">
+                    <h2 class="h5">Authorization could not continue</h2>
+                    <p class="mb-0">{{ error.description|default:error.error }}</p>
+                </div>
+            {% endif %}
+            {% else %}
+            <h1 class="h3 mb-3">Connect to Vasto Workspace</h1>
+            <p class="lead">Continue to Vasto Workspace to connect your account.</p>
+            <p class="text-secondary">
+                You will confirm your Vasto account with Vasto Workspace. Your Vasto password and
+                session key are never sent to the frontend; Workspaces creates its own session
+                after authorization.
+            </p>
+
+            {% if workspace_authorization_url %}
+                <a href="{{ workspace_authorization_url }}" class="btn btn-primary">Continue to Vasto Workspace</a>
+            {% else %}
+                <p class="alert alert-warning mb-0">
+                    Vasto Workspace is not configured yet. Set <code>VASTO_WORKSPACE_BASE_URL</code>
+                    in Vasto's environment to its backend URL, then reload this page.
+                </p>
+            {% endif %}
 
             <form method="post" action="{% url 'workspace:dismiss' %}" class="mt-3">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-outline-secondary">Dismiss / Not now</button>
             </form>
+            {% endif %}
         </div>
     </div>
 </div>
