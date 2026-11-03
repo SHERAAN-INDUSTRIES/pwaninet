@@ -67,7 +67,13 @@ From the Vasto repository root, run the complete setup script:
 
 The script reuses an activated or existing compatible Python environment and creates `.venv` only if none is found. It then prepares `.env`, starts PostgreSQL and Redis, creates or validates the persistent Vasto signing key, checks and migrates the database, selects or creates an admin owner, and registers the local Workspaces OAuth client. For non-interactive use, pass `--developer YOUR_IDENTIFIER --owner-username YOUR_VASTO_ADMIN_USERNAME`. Use `--skip-containers` only when PostgreSQL and Redis are already managed separately.
 
-To start the same sign-in from Vasto's **Workspace sync** dialog, set Vasto's `VASTO_WORKSPACE_BASE_URL` to the Workspaces backend origin (local: `http://127.0.0.1:8001`). The dialog then navigates the browser to the backend authorization-start endpoint. Workspaces completes OIDC and creates its own session; Vasto does not send its user ID or session key to the frontend.
+To start the same sign-in from Vasto's **Workspace sync** dialog, set `VASTO_WORKSPACE_BASE_URL` in Vasto's repository-root `.env` to the Workspaces backend origin only:
+
+```env
+VASTO_WORKSPACE_BASE_URL=http://127.0.0.1:8001
+```
+
+Vasto appends `/api/auth/vasto/start/` to this value. Do not include that route in the setting. After changing `.env`, restart Vasto and reload `/workspace/sync/`. If the page still says the setting is not configured, confirm the running server was started from this Vasto checkout with `--settings=pwaninet.settings.local`. Workspaces completes OIDC and creates its own session; Vasto does not send its user ID or session key to the frontend.
 
 Set local PostgreSQL values in `.env` (`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`) and keep credentials local. The checked-in `docker-compose.yml` and `.env.example` both use host port **5432**. Keep `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4. If you change the Compose port mapping or connect to another PostgreSQL service, make `DB_PORT` match that service's published port.
 

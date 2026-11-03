@@ -10,6 +10,16 @@ Vasto's OIDC `sub` is the provider identity value Workspaces stores with the iss
 
 Local development normally uses Vasto at `http://127.0.0.1:8000`, Workspaces at `http://127.0.0.1:8001`, and the frontend at `http://127.0.0.1:3000`. In other environments, use the configured HTTPS origins.
 
+### Configure the Workspace authorization link
+
+In Vasto's repository-root `.env`, set the backend origin (not the full authorization route):
+
+```env
+VASTO_WORKSPACE_BASE_URL=http://127.0.0.1:8001
+```
+
+Vasto builds the Continue link by appending `/api/auth/vasto/start/`. If the sync page reports that Workspace is not configured, restart the Vasto server after editing `.env` and reload the page. The local server command is `.venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local` from the Vasto repository root.
+
 ## Workspace sync page routes
 
 ### `GET /workspace/sync/`
