@@ -2,6 +2,7 @@
 Local development settings.
 """
 from .base import *
+from pathlib import Path as _Path
 
 DEBUG = True           
 
@@ -117,3 +118,12 @@ OAUTH2_PROVIDER = {
     'ALLOWED_REDIRECT_URI_SCHEMES': ['http', 'https'],
     'OIDC_ISS_ENDPOINT': 'http://127.0.0.1:8000/o',
 }
+
+# A developer-owned signing key lives outside the checkout. The base settings
+# retain their existing environment/legacy fallback for production deployments.
+_local_oidc_key = _Path.home() / ".config" / "vasto" / "keys" / "oidc_rsa_private.pem"
+if not os.environ.get("OIDC_RSA_PRIVATE_KEY") and _local_oidc_key.is_file():
+    OAUTH2_PROVIDER = {
+        **OAUTH2_PROVIDER,
+        "OIDC_RSA_PRIVATE_KEY": _local_oidc_key.read_text(),
+    }

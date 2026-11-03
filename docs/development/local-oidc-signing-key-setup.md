@@ -1,102 +1,38 @@
-# Local Vasto OIDC signing key setup
+# Local OIDC signing key setup
 
-This guide prepares a developer-owned local Vasto provider for the Vasto–Workspaces OAuth/OIDC flow. Vasto signs OIDC ID tokens with an RSA private key using RS256. Each developer running a separate local provider should use a separate local key.
+The bootstrap commands use Bash and run directly on Linux (including Ubuntu and Fedora) and macOS. On Windows, install Ubuntu in WSL 2 and run these commands in its terminal; do not use PowerShell or Command Prompt. See the [Vasto README's operating-system setup instructions](../../README.md#install-prerequisites-for-your-operating-system).
 
-The signing key belongs only to that local Vasto instance. Keep it persistent across restarts, outside version control, and separate from production. Never copy it from another developer, send it to Workspaces, or reuse it in production. If your team has a shared development Vasto provider, that provider environment owns its key; developers using it do **not** generate or download that key.
+Run `./scripts/setup-dev.sh` from the Vasto repository root for the complete local provider setup. In addition to key handling, it reuses an activated or existing compatible Python environment (creating `.venv` only if none is available), prepares `.env`, starts PostgreSQL and Redis, checks and migrates the database, selects or creates an admin owner, and registers the local Workspaces OAuth client with a private credentials file. The script creates a persistent 4096-bit RSA signing key at `~/.config/vasto/keys/oidc_rsa_private.pem` only when neither that key nor the older `.secrets/oidc_rsa_private.pem` exists. If the older file exists, it preserves that key in the per-user location. The directory is mode 700 and the key file mode 600.
 
-## How this repository loads the key
+`pwaninet.settings.local` loads a non-empty `OIDC_RSA_PRIVATE_KEY` environment value when configured; otherwise it prefers the per-user key file. The base settings retain their existing secret-loading behavior for production and older deployments. Leave the variable blank in local `.env`; never put private key contents in `.env.example`.
 
-The current implementation is in `pwaninet/settings/base.py`:
+The local key belongs only to this developer's Vasto provider. Do not copy it from another developer, send it to Workspaces, or reuse it in production. The setup script never regenerates an existing key. If the key is invalid, the complete setup reports the parse failure and stops; repair it deliberately rather than replacing it automatically. Once Vasto is running, use the Workspaces repository's `./scripts/setup-dev.sh --credentials-file ~/.config/vasto-workspaces/YOUR_IDENTIFIER-local.env` to import credentials, migrate Workspaces, and run its live OIDC preflight. After setup, use the server command printed by the script; its Python path may differ from the `.venv` examples if an existing environment was reused.
 
-1. `python-dotenv` loads the repository-root `.env` before settings are built.
-2. `OAUTH2_PROVIDER['OIDC_RSA_PRIVATE_KEY']` uses a non-empty `OIDC_RSA_PRIVATE_KEY` environment value when provided.
-3. Otherwise, it reads the contents of `<Vasto repository>/.secrets/oidc_rsa_private.pem` if that file exists.
-4. If neither source is present, the setting is `None`.
-
-`pwaninet.settings.local` inherits the base OAuth configuration and sets the local issuer to `http://127.0.0.1:8000/o`. Django OAuth Toolkit uses the resulting `OAUTH2_PROVIDER` setting for RS256 ID-token signing. The key is traditional RSA PEM compatible with `cryptography`/Django OAuth Toolkit. No new key-path setting is part of the implementation.
-
-There is no dedicated Django management command for key creation. `.env.example` documents the file fallback. `.gitignore` excludes both `*.pem` and `.secrets/`. Do not set `OIDC_RSA_PRIVATE_KEY` to a filename: the environment variable expects the PEM **contents**, not a path. For a local developer setup, leave it empty/unset and use the ignored file fallback.
-
-## Generate a local key
-
-Run these commands from the Vasto repository root. They create a 4096-bit RSA private key in the exact path the settings load. OpenSSL's `-traditional` output is the RSA PEM format expected by this local configuration.
+To inspect key permissions and verify its PEM without displaying it:
 
 ```sh
-mkdir -p .secrets
-chmod 700 .secrets
-
-if [ -e .secrets/oidc_rsa_private.pem ]; then
-  echo "A local Vasto signing key already exists; verify it instead of overwriting it."
-else
-  openssl genrsa -traditional -out .secrets/oidc_rsa_private.pem 4096
-  chmod 600 .secrets/oidc_rsa_private.pem
-fi
+ls -ld ~/.config/vasto ~/.config/vasto/keys
+ls -l ~/.config/vasto/keys/oidc_rsa_private.pem
+openssl pkey -in ~/.config/vasto/keys/oidc_rsa_private.pem -check -noout
 ```
 
-- `mkdir -p` creates the `.secrets` directory if needed.
-- `chmod 700` restricts directory access to your account.
-- `openssl genrsa -traditional ... 4096` creates a 4096-bit RSA private key in traditional PEM form.
-- `chmod 600` restricts the key file to your account.
-
-If the file already exists, do not overwrite it or assume it belongs to you: reuse it only if you know it was generated exclusively for this local Vasto instance. If its origin is unclear, arrange a deliberate local key replacement and account for previously issued ID tokens before starting with a different key. The generation block does not overwrite an existing file.
-
-The repository's `.gitignore` excludes this path, but confirm it from the repository root before continuing:
+To confirm Django loads a valid RSA key without printing the key:
 
 ```sh
-git check-ignore -v .secrets/oidc_rsa_private.pem
-```
-
-The command should identify the ignore rule. Do not move the key to a tracked directory or remove the ignore rule. Do not paste its contents into a ticket, terminal transcript, `.env.example`, or Workspaces settings.
-
-## Verify the key file
-
-Check file permissions without displaying the key and ask OpenSSL to parse and validate it:
-
-```sh
-ls -ld .secrets
-ls -l .secrets/oidc_rsa_private.pem
-openssl pkey -in .secrets/oidc_rsa_private.pem -check -noout
-```
-
-OpenSSL should report `Key is valid`; the directory should be accessible only to your account and the file mode should be `-rw-------` (600). Common failures:
-
-- **File not found:** Run from the Vasto repository root and check that the filename matches the setting path exactly.
-- **Could not read key / invalid PEM:** Recreate a local key using the command above. Do not convert or copy a production key to work around the error.
-- **Permission denied:** Confirm the file belongs to your account and its mode is 600; confirm `.secrets` is mode 700.
-
-## Verify Django loaded and parsed the key
-
-The following Django shell command reports only booleans, key type, and key size. It never prints any part of the private key. Run it from the repository root after creating the file:
-
-```sh
-python manage.py shell --settings=pwaninet.settings.local -c '
+.venv/bin/python manage.py shell --settings=pwaninet.settings.local -c '
 from django.conf import settings
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-
 pem = settings.OAUTH2_PROVIDER.get("OIDC_RSA_PRIVATE_KEY")
-loaded = bool(pem)
-print("OIDC_RSA_PRIVATE_KEY loaded:", loaded)
-valid_pem = isinstance(pem, str) and pem.startswith("-----BEGIN ") and "-----END " in pem
-print("PEM structure valid:", valid_pem)
-if not loaded or not valid_pem:
-    raise SystemExit(1)
-try:
-    key = serialization.load_pem_private_key(pem.encode("ascii"), password=None)
-except Exception as exc:
-    print("Private key successfully parsed: False")
-    print("Parse error type:", type(exc).__name__)
-    raise SystemExit(1)
-is_rsa = isinstance(key, rsa.RSAPrivateKey)
-print("Private key successfully parsed:", is_rsa)
-print("Key type:", "RSA" if is_rsa else type(key).__name__)
-if is_rsa:
-    print("Key size:", key.key_size, "bits")
-else:
-    raise SystemExit(1)
+key = serialization.load_pem_private_key(pem.encode("ascii"), password=None)
+assert isinstance(key, rsa.RSAPrivateKey) and key.key_size >= 4096
+print("Local OIDC RSA key is loaded and valid.")
 '
 ```
 
+<<<<<<< HEAD
+The corresponding public key is published through Vasto's JWKS endpoint. Workspaces retrieves it from OIDC discovery; the private key never leaves Vasto.
+=======
 Expected output includes `OIDC_RSA_PRIVATE_KEY loaded: True`, `PEM structure valid: True`, `Private key successfully parsed: True`, `Key type: RSA`, and `Key size: 4096 bits`. If loading reports false, check that `.env` does not contain an unintended non-empty `OIDC_RSA_PRIVATE_KEY` value: a non-empty environment value takes precedence over the file.
 
 ## JWKS: publish only the public key
@@ -205,3 +141,4 @@ Key rotation is a deliberate provider operation. Plan the overlap between the ne
 ## Workspaces setup guide
 
 The Vasto Workspaces backend repository contains `docs/development/local-vasto-oidc-client-setup.md`, which covers local client registration and Workspaces configuration. Developers using a shared development Vasto provider use that provider's issued credentials and public JWKS; they do not create or copy its signing key.
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66

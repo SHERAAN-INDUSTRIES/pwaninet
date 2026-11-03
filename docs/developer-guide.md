@@ -52,80 +52,61 @@ This guide takes a new developer from a clean clone to a fully running local dev
 
 ## 2. Prerequisites
 
-### Required
+For platform-specific installation instructions for Ubuntu, Fedora, macOS, and Windows, see the [OS setup section in the README](../README.md#install-prerequisites-for-your-operating-system). The bootstrap scripts run in Bash on Linux and macOS. Native Windows setup is not supported or verified: there is no PowerShell bootstrap, and Vasto's script uses Bash, Linux-style Python environment paths, and Unix file-permission and key-file operations. On Windows, use Ubuntu in WSL 2 and run the commands inside its terminal; PowerShell and Command Prompt cannot run these scripts.
 
-| Tool | Version | Purpose |
-|---|---|---|
-| Python | 3.11 or newer | Django application runtime |
-| Git | Any recent version | Source control |
-| Docker | 24.0+ with Compose plugin | PostgreSQL and Redis containers |
+For the complete Vasto + Workspaces integration, use Python 3.12–3.14. Vasto by itself supports Python 3.11 or newer. Docker with Compose v2 must be running for Vasto's PostgreSQL and Redis containers. Workspaces uses a separate SQLite database by default.
 
-### Optional (for specific features)
-
-| Tool | Purpose |
-|---|---|
-| Node.js 18+ | Capacitor/Android development, npm scripts |
-| Android Studio + Android SDK | Building the Android app |
-| A code editor | VS Code, PyCharm, or similar |
-
-### Verifying prerequisites
+Check the tools from the terminal you will use for setup:
 
 ```bash
-python --version       # Should show 3.11+
-docker --version       # Should show 24.0+
-docker compose version  # Should show 2.0+
+python3 --version
 git --version
+docker --version
+docker compose version
 ```
-
----
 
 ## 3. Clone and setup
 
 ### Clone the repository
+
+Use the repository URL supplied by your team and open a terminal in the cloned Vasto folder:
 
 ```bash
 git clone <repository-url>
 cd vasto
 ```
 
-### Create a virtual environment
+For Windows, clone the repositories inside the Ubuntu WSL home directory (for example, `~/projects`) and run commands in the Ubuntu terminal. Do not run the Bash scripts from PowerShell or clone into `/mnt/c` for this workflow.
+
+### Run the automated setup
+
+From the Vasto repository root, run:
 
 ```bash
-python -m venv .venv
+./scripts/setup-dev.sh
 ```
 
-Activate it:
+The script reuses an activated or existing compatible Python environment and creates `.venv` only when it cannot find one. It then installs Python dependencies, starts PostgreSQL and Redis, prepares and validates the local OIDC signing key, runs Django checks and migrations, selects an active staff owner (or creates a superuser if requested), then registers the local Workspaces client and saves its credentials outside the repository. It does not reset the database or start the long-running web server. If several nonstandard Python environments are found, activate the one you want and rerun setup.
 
-**Linux/macOS:**
-```bash
-source .venv/bin/activate
-```
-
-**Windows PowerShell:**
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-**Windows CMD:**
-```cmd
-.venv\Scripts\activate.bat
-```
-
-### Install Python dependencies
+Follow the prompts for a developer identifier and client owner. For non-interactive setup, supply values directly:
 
 ```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+./scripts/setup-dev.sh --developer YOUR_IDENTIFIER --owner-username YOUR_VASTO_ADMIN_USERNAME
 ```
 
-This installs Django, DRF, Celery, Channels, pgvector, PyMuPDF, python-docx, python-pptx, boto3, pyotp, and all other Python dependencies.
-
----
+Use `--skip-containers` only when PostgreSQL and Redis are already running and configured. For the full Workspaces sign-in setup, open the Workspaces repository and follow its README after starting Vasto.
 
 ## 4. Environment configuration
 
-### Copy the environment template
+The first setup creates `.env` from `.env.example` and generates a local Django `SECRET_KEY`. Existing `.env` files are retained. The database and cache settings are set up for the checked-in Compose services. Optional AI provider keys can be added to `.env` if you plan to use those features; basic local setup does not require them.
 
+<<<<<<< HEAD
+Keep `.env` private and do not commit it. Do not copy production secrets or another developer's OIDC signing key into your local environment. The signing key is stored outside the repository under `~/.config/vasto/keys/`.
+
+## 5. Starting services
+
+The bootstrap starts PostgreSQL and Redis for you. To confirm they are running, from the Vasto repository root use:
+=======
 ```bash
 cp .env.example .env
 ```
@@ -211,57 +192,38 @@ This starts:
 The checked-in Compose file publishes PostgreSQL on host port 5432. Set `DB_PORT` to the port published by your PostgreSQL service; the Compose mapping is currently fixed at `5432:5432`, so changing only `.env` does not change the Compose port. Use `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4.
 
 ### Verify services are running
+>>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
 ```bash
 docker compose ps
 ```
 
-You should see both `db` and `redis` containers with status `running`.
-
-### Stop services
+To stop the supporting containers when you finish, run:
 
 ```bash
 docker compose down
 ```
 
-**Warning:** Do not use `docker compose down -v` unless you intentionally want to delete the local database volume and all data.
-
----
+Do not add `-v` unless you intend to delete the local database volume and its data. Docker commands work from Linux, macOS, or the Ubuntu WSL terminal after Docker is installed and running.
 
 ## 6. Database setup
 
-### Apply migrations
+The bootstrap checks database access, runs Django's system check, applies migrations, and prompts you to select or create a Vasto admin owner. You do not need to run separate migration or superuser commands during first-time setup.
+
+Optional sample data can be created through the Django admin after starting Vasto. For direct Django shell access, run this from the repository root:
 
 ```bash
-python manage.py migrate --settings=pwaninet.settings.local
+.venv/bin/python manage.py shell --settings=pwaninet.settings.local
 ```
-
-This creates all database tables, including pgvector extension and search vector fields.
-
-### Create a superuser
-
-```bash
-python manage.py createsuperuser --settings=pwaninet.settings.local
-```
-
-You will be prompted for username, email (optional), and password.
-
-### Load sample data (optional)
-
-There is no built-in sample data command. You can create test data through the Django admin at `/admin/` or by using the Django shell:
-
-```bash
-python manage.py shell --settings=pwaninet.settings.local
-```
-
----
 
 ## 7. Running the site
 
 ### Start the development server
 
+The command below assumes the default `.venv`. If setup reused an environment with another name or location, copy the exact server command printed when setup finished.
+
 ```bash
-python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
+.venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
 ```
 
 The site is now available at:
@@ -289,7 +251,7 @@ The site is now available at:
 For WebSocket support (group messaging, real-time features), use Daphne instead of `runserver`:
 
 ```bash
-python -m daphne -b 127.0.0.1 -p 8000 pwaninet.asgi:application --settings=pwaninet.settings.local
+.venv/bin/python -m daphne -b 127.0.0.1 -p 8000 pwaninet.asgi:application --settings=pwaninet.settings.local
 ```
 
 ---
@@ -300,18 +262,10 @@ Pwanimate and other features rely on Celery for background task processing.
 
 ### Start a Celery worker
 
-In a separate terminal (with virtual environment activated):
+In a separate Bash terminal. Windows developers should use the Ubuntu WSL terminal, just as they do for setup:
 
-**Linux/macOS:**
 ```bash
-export DJANGO_SETTINGS_MODULE=pwaninet.settings.local
-celery -A pwaninet worker -l info
-```
-
-**Windows PowerShell:**
-```powershell
-$env:DJANGO_SETTINGS_MODULE = "pwaninet.settings.local"
-celery -A pwaninet worker -l info
+DJANGO_SETTINGS_MODULE=pwaninet.settings.local .venv/bin/celery -A pwaninet worker -l info
 ```
 
 ### Start Celery Beat (scheduled tasks)
@@ -319,7 +273,7 @@ celery -A pwaninet worker -l info
 In another terminal:
 
 ```bash
-celery -A pwaninet beat -l info
+.venv/bin/celery -A pwaninet beat -l info
 ```
 
 Celery Beat runs scheduled jobs such as document ingestion reconciliation (every 10 minutes).
@@ -339,7 +293,7 @@ Edit source CSS, JavaScript, fonts, and interface images under `static/`. These 
 ### Collect static (for production builds)
 
 ```bash
-python manage.py collectstatic --noinput --settings=pwaninet.settings.local
+.venv/bin/python manage.py collectstatic --noinput --settings=pwaninet.settings.local
 ```
 
 This gathers all static files into `staticfiles/`. **Do not edit or commit `staticfiles/`** — it is generated.
@@ -409,7 +363,7 @@ This pipeline runs as Celery background tasks. You can monitor progress in the C
 To re-ingest all existing documents (useful after schema changes):
 
 ```bash
-python manage.py backfill_pwanimate_chunks --settings=pwaninet.settings.local
+.venv/bin/python manage.py backfill_pwanimate_chunks --settings=pwaninet.settings.local
 ```
 
 ### Web search
@@ -457,27 +411,27 @@ This opens the project in Android Studio for building and testing.
 ### Run the test suite
 
 ```bash
-python manage.py test --settings=pwaninet.settings.local
+.venv/bin/python manage.py test --settings=pwaninet.settings.local
 ```
 
 ### Run tests for a specific app
 
 ```bash
-python manage.py test pwanimate --settings=pwaninet.settings.local
-python manage.py test users --settings=pwaninet.settings.local
-python manage.py test posts --settings=pwaninet.settings.local
+.venv/bin/python manage.py test pwanimate --settings=pwaninet.settings.local
+.venv/bin/python manage.py test users --settings=pwaninet.settings.local
+.venv/bin/python manage.py test posts --settings=pwaninet.settings.local
 ```
 
 ### Run tests matching a pattern
 
 ```bash
-python manage.py test --settings=pwaninet.settings.local -k "test_name_pattern"
+.venv/bin/python manage.py test --settings=pwaninet.settings.local -k "test_name_pattern"
 ```
 
 ### System checks
 
 ```bash
-python manage.py check --settings=pwaninet.settings.local
+.venv/bin/python manage.py check --settings=pwaninet.settings.local
 ```
 
 ### Test locations
@@ -497,41 +451,41 @@ python manage.py check --settings=pwaninet.settings.local
 
 ```bash
 # System checks
-python manage.py check --settings=pwaninet.settings.local
+.venv/bin/python manage.py check --settings=pwaninet.settings.local
 
 # Make migrations (after model changes)
-python manage.py makemigrations --settings=pwaninet.settings.local
+.venv/bin/python manage.py makemigrations --settings=pwaninet.settings.local
 
 # Apply migrations
-python manage.py migrate --settings=pwaninet.settings.local
+.venv/bin/python manage.py migrate --settings=pwaninet.settings.local
 
 # Create superuser
-python manage.py createsuperuser --settings=pwaninet.settings.local
+.venv/bin/python manage.py createsuperuser --settings=pwaninet.settings.local
 
 # Django shell
-python manage.py shell --settings=pwaninet.settings.local
+.venv/bin/python manage.py shell --settings=pwaninet.settings.local
 
 # Collect static files
-python manage.py collectstatic --noinput --settings=pwaninet.settings.local
+.venv/bin/python manage.py collectstatic --noinput --settings=pwaninet.settings.local
 
 # Run tests
-python manage.py test --settings=pwaninet.settings.local
+.venv/bin/python manage.py test --settings=pwaninet.settings.local
 ```
 
 ### Celery
 
 ```bash
 # Start worker
-celery -A pwaninet worker -l info
+.venv/bin/celery -A pwaninet worker -l info
 
 # Start beat (scheduled tasks)
-celery -A pwaninet beat -l info
+.venv/bin/celery -A pwaninet beat -l info
 
 # Start worker + beat together (development)
-celery -A pwaninet worker -B -l info
+.venv/bin/celery -A pwaninet worker -B -l info
 
 # Monitor (requires Flower)
-celery -A pwaninet flower --port=5555
+.venv/bin/celery -A pwaninet flower --port=5555
 ```
 
 ### Docker
@@ -601,7 +555,7 @@ docker compose up -d --build
 
 ### Migration errors
 
-- If migrations fail, check for model inconsistencies: `python manage.py makemigrations --check --dry-run --settings=pwaninet.settings.local`
+- If migrations fail, check for model inconsistencies: `.venv/bin/python manage.py makemigrations --check --dry-run --settings=pwaninet.settings.local`
 - For pgvector issues, ensure the Docker image includes the extension
 
 ### Pwanimate not responding
@@ -613,7 +567,7 @@ docker compose up -d --build
 
 ### Static files not loading
 
-- Run `python manage.py collectstatic --noinput --settings=pwaninet.settings.local`
+- Run `.venv/bin/python manage.py collectstatic --noinput --settings=pwaninet.settings.local`
 - Check `STATIC_URL` and `STATIC_ROOT` in settings
 
 ### WebSocket not working
@@ -624,7 +578,7 @@ docker compose up -d --build
 
 ### Celery tasks not running
 
-- Ensure Celery worker is started: `celery -A pwaninet worker -l info`
+- Ensure Celery worker is started: `.venv/bin/celery -A pwaninet worker -l info`
 - Ensure Redis is running (broker)
 - Check task routing configuration in `pwaninet/settings/base.py`
 - Verify `DJANGO_SETTINGS_MODULE=pwaninet.settings.local` is set
