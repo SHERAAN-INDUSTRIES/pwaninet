@@ -119,7 +119,11 @@ urlpatterns = [
     path('api/internal/users/<int:user_id>/documents/', api_internal_views.internal_user_documents, name='internal_user_documents'),
     path('api/internal/users/<int:user_id>/institution/', api_internal_views.internal_user_institution, name='internal_user_institution'),
     path('api/internal/users/<int:user_id>/courses/', api_internal_views.internal_user_courses, name='internal_user_courses'),
+    path('api/internal/users/<int:user_id>/programmes/', api_internal_views.internal_user_programmes, name='internal_user_programmes'),
     path('api/internal/users/<int:user_id>/groups/', api_internal_views.internal_user_groups, name='internal_user_groups'),
     path('api/internal/users/<int:user_id>/notifications/', api_internal_views.internal_user_notifications, name='internal_user_notifications'),
     path('api/internal/users/<int:user_id>/conversations/', api_internal_views.internal_user_conversations, name='internal_user_conversations'),
+    path('api/internal/users/<int:user_id>/programme-units/', api_internal_views.internal_user_programme_units, name='internal_user_programme_units'),
+    path('api/internal/users/<int:user_id>/timetable/', api_internal_views.internal_user_timetable, name='internal_user_timetable'),
+    path('api/internal/users/<int:user_id>/follows/', api_internal_views.internal_user_follows, name='internal_user_follows'),
 ]

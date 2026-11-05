@@ -115,29 +115,75 @@ def internal_user_documents(request, user_id):
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        from documents.models import Document
-        documents = Document.objects.filter(user=user).select_related('institution', 'programme')
+        from documents.models import Document, DocumentFile
+        documents = (
+            Document.objects.filter(uploaded_by=user)
+            .select_related('category')
+            .prefetch_related('versions__files')
+            .order_by('-created_at')
+        )
+
+        def _serialize_file(doc_file):
+            file_url = None
+            try:
+                file_url = doc_file.file.url if doc_file.file else None
+            except Exception:
+                file_url = doc_file.storage_path or None
+            thumbnail_url = None
+            preview_url = None
+            try:
+                thumbnail_url = doc_file.file.storage.url(doc_file.thumbnail_path) if doc_file.thumbnail_path else None
+            except Exception:
+                thumbnail_url = None
+            try:
+                preview_url = doc_file.file.storage.url(doc_file.preview_path) if doc_file.preview_path else None
+            except Exception:
+                preview_url = None
+            return {
+                'id': doc_file.id,
+                'file_url': file_url,
+                'storage_path': doc_file.storage_path,
+                'storage_provider': doc_file.storage_provider,
+                'original_filename': doc_file.original_filename,
+                'mime_type': doc_file.mime_type,
+                'extension': doc_file.extension,
+                'size_bytes': doc_file.size_bytes,
+                'thumbnail_url': thumbnail_url,
+                'preview_url': preview_url,
+                'page_count': doc_file.page_count,
+                'processing_status': doc_file.processing_status,
+                'uploaded_at': doc_file.uploaded_at.isoformat() if doc_file.uploaded_at else None,
+            }
+
         data = {
             'documents': [
                 {
                     'id': doc.id,
+                    'share_id': str(doc.share_id) if doc.share_id else None,
                     'title': doc.title,
+                    'slug': doc.slug,
                     'description': doc.description,
-                    'file_url': doc.file.url if doc.file else None,
-                    'file_type': doc.file_type,
-                    'file_size': doc.file_size,
-                    'uploaded_at': doc.uploaded_at.isoformat(),
+                    'category': {
+                        'id': doc.category.id,
+                        'name': doc.category.name,
+                        'code': getattr(doc.category, 'code', ''),
+                    } if doc.category else None,
+                    'language': doc.language,
+                    'visibility': doc.visibility,
+                    'status': doc.status,
+                    'is_available': doc.is_available,
+                    'is_ai_generated': doc.is_ai_generated,
+                    'generated_format': doc.generated_format,
+                    'generated_from_message_id': doc.generated_from_message_id,
+                    'files': [
+                        _serialize_file(f)
+                        for version in doc.versions.all()
+                        if version.is_latest
+                        for f in version.files.all()
+                    ],
+                    'created_at': doc.created_at.isoformat(),
                     'updated_at': doc.updated_at.isoformat(),
-                    'category': doc.category,
-                    'tags': doc.tags,
-                    'institution': {
-                        'id': doc.institution.id,
-                        'name': doc.institution.name,
-                    } if doc.institution else None,
-                    'programme': {
-                        'id': doc.programme.id,
-                        'name': doc.programme.name,
-                    } if doc.programme else None,
+                    'published_at': doc.published_at.isoformat() if doc.published_at else None,
                 }
                 for doc in documents
             ]
@@ -235,6 +281,61 @@ def internal_user_courses(request, user_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([InternalAPIRateThrottle])
+def internal_user_programmes(request, user_id):
+    """Get user's academic programme(s)."""
+    is_valid, error = check_service_account(request)
+    if not is_valid:
+        return Response({'error': error}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = User.objects.select_related(
+            'programme__department__school',
+        ).get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    programmes = []
+    current_programme_id = None
+
+    programme = getattr(user, 'programme', None)
+    if programme:
+        current_programme_id = programme.id
+        department = getattr(programme, 'department', None)
+        institution = None
+        try:
+            institution = programme.get_institution()
+        except Exception:
+            institution = None
+        programmes.append({
+            'id': programme.id,
+            'code': programme.code,
+            'name': programme.name,
+            'slug': programme.slug,
+            'degree_type': programme.degree_type,
+            'duration_years': programme.duration_years,
+            'description': programme.description,
+            'is_active': programme.is_active,
+            'department': {
+                'id': department.id,
+                'code': department.code,
+                'name': department.name,
+            } if department else None,
+            'institution': {
+                'id': institution.id,
+                'name': institution.name,
+            } if institution else None,
+            'is_current': True,
+        })
+
+    return Response({
+        'programmes': programmes,
+        'current_programme_id': current_programme_id,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([InternalAPIRateThrottle])
 def internal_user_groups(request, user_id):
     """Get user's groups."""
     is_valid, error = check_service_account(request)
@@ -247,27 +348,35 @@ def internal_user_groups(request, user_id):
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        from groups.models import Group, GroupMembership
-        memberships = GroupMembership.objects.filter(user=user).select_related('group')
+        from groups.models import Membership, MembershipStatus
+        memberships = Membership.objects.filter(
+            user=user,
+            status=MembershipStatus.APPROVED,
+        ).select_related('group__programme', 'group__course', 'group__year')
         data = {
             'groups': [
                 {
                     'id': membership.group.id,
                     'name': membership.group.name,
                     'description': membership.group.description,
-                    'type': membership.group.type,
+                    'is_official': membership.group.is_official,
+                    'group_pic': membership.group.group_pic.url if membership.group.group_pic else None,
+                    'cover_photo': membership.group.cover_photo.url if membership.group.cover_photo else None,
                     'created_at': membership.group.created_at.isoformat(),
-                    'updated_at': membership.group.updated_at.isoformat(),
-                    'institution': {
-                        'id': membership.group.institution.id,
-                        'name': membership.group.institution.name,
-                    } if membership.group.institution else None,
                     'programme': {
                         'id': membership.group.programme.id,
+                        'code': membership.group.programme.code,
                         'name': membership.group.programme.name,
                     } if membership.group.programme else None,
+                    'course': {
+                        'id': membership.group.course.id,
+                        'name': membership.group.course.name,
+                        'code': getattr(membership.group.course, 'code', ''),
+                    } if membership.group.course else None,
+                    'year': membership.group.year.level if membership.group.year else None,
                     'role': membership.role,
-                    'joined_at': membership.joined_at.isoformat(),
+                    'status': membership.status,
+                    'joined_at': membership.joined_at.isoformat() if membership.joined_at else None,
                 }
                 for membership in memberships
             ]
@@ -294,22 +403,31 @@ def internal_user_notifications(request, user_id):
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        from notifications.models import Notification
-        notifications = Notification.objects.filter(user=user).order_by('-created_at')[:50]
+        from notifications.models import NotificationObject
+        notifications = (
+            NotificationObject.objects.filter(recipient=user)
+            .exclude(status='EXPIRED')
+            .order_by('-created_at')[:50]
+        )
         data = {
             'notifications': [
                 {
-                    'id': notif.id,
+                    'id': str(notif.id),
                     'type': notif.notification_type,
-                    'message': notif.message,
-                    'actor': {
-                        'id': notif.actor.id,
-                        'username': notif.actor.username,
-                    } if notif.actor else None,
+                    'category': notif.category,
+                    'priority': notif.priority,
+                    'title': notif.title,
+                    'summary': notif.summary,
+                    'status': notif.status,
+                    'is_read': notif.is_read,
                     'target_type': notif.target_type,
                     'target_id': notif.target_id,
-                    'is_read': notif.is_read,
+                    'context_type': notif.context_type,
+                    'context_id': notif.context_id,
+                    'metadata': notif.metadata or {},
+                    'event_count': notif.event_count,
                     'created_at': notif.created_at.isoformat(),
+                    'updated_at': notif.updated_at.isoformat() if notif.updated_at else None,
                 }
                 for notif in notifications
             ]
@@ -357,5 +475,217 @@ def internal_user_conversations(request, user_id):
     except Exception as e:
         logger.error(f"Error fetching conversations for user {user_id}: {e}")
         data = {'conversations': []}
+
+    return Response(data)
+
+
+def _academic_context_filters(user):
+    """Build ProgrammeUnit/ProgrammeTimetable filters from the user's academic context."""
+    filters = {}
+    if getattr(user, 'programme_id', None):
+        filters['programme_id'] = user.programme_id
+    if getattr(user, 'academic_level_id', None):
+        filters['academic_level_id'] = user.academic_level_id
+    if getattr(user, 'academic_year_id', None):
+        filters['academic_year_id'] = user.academic_year_id
+    if getattr(user, 'semester_id', None):
+        filters['semester_id'] = user.semester_id
+    return filters
+
+
+def _serialize_academic_level(level):
+    if not level:
+        return None
+    return {'id': level.id, 'level': level.level, 'name': level.name}
+
+
+def _serialize_academic_year(year):
+    if not year:
+        return None
+    return {'id': year.id, 'code': year.code, 'name': year.name, 'is_current': year.is_current}
+
+
+def _serialize_semester(semester):
+    if not semester:
+        return None
+    return {
+        'id': semester.id,
+        'number': semester.number,
+        'is_current': semester.is_current,
+        'academic_year': _serialize_academic_year(semester.academic_year),
+    }
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([InternalAPIRateThrottle])
+def internal_user_programme_units(request, user_id):
+    """Get programme units for the user's academic context."""
+    is_valid, error = check_service_account(request)
+    if not is_valid:
+        return Response({'error': error}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        from documents.models import ProgrammeUnit
+        filters = _academic_context_filters(user)
+        if not filters.get('programme_id'):
+            return Response({'programme_units': []})
+
+        units = (
+            ProgrammeUnit.objects.filter(**filters)
+            .select_related('academic_unit', 'academic_level', 'academic_year', 'semester')
+            .order_by('academic_unit__code')
+        )
+        data = {
+            'programme_units': [
+                {
+                    'id': unit.id,
+                    'academic_unit': {
+                        'id': unit.academic_unit.id,
+                        'code': unit.academic_unit.code,
+                        'name': unit.academic_unit.name,
+                        'slug': unit.academic_unit.slug,
+                        'description': unit.academic_unit.description,
+                        'credit_hours': unit.academic_unit.credit_hours,
+                        'is_active': unit.academic_unit.is_active,
+                    },
+                    'academic_level': _serialize_academic_level(unit.academic_level),
+                    'academic_year': _serialize_academic_year(unit.academic_year),
+                    'semester': _serialize_semester(unit.semester),
+                    'is_core': unit.is_core,
+                    'is_elective': unit.is_elective,
+                    'created_at': unit.created_at.isoformat(),
+                }
+                for unit in units
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching programme units for user {user_id}: {e}")
+        data = {'programme_units': []}
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([InternalAPIRateThrottle])
+def internal_user_timetable(request, user_id):
+    """Get active timetable(s) for the user's academic context."""
+    is_valid, error = check_service_account(request)
+    if not is_valid:
+        return Response({'error': error}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        from documents.models import ProgrammeTimetable
+        filters = _academic_context_filters(user)
+        filters['is_active'] = True
+        if not filters.get('programme_id'):
+            return Response({'timetables': []})
+
+        timetables = (
+            ProgrammeTimetable.objects.filter(**filters)
+            .select_related('academic_level', 'academic_year', 'semester', 'programme')
+            .order_by('-updated_at')
+        )
+        data = {
+            'timetables': [
+                {
+                    'id': timetable.id,
+                    'title': timetable.title,
+                    'timetable_type': timetable.timetable_type,
+                    'status': timetable.status,
+                    'revision_number': timetable.revision_number,
+                    'change_summary': timetable.change_summary,
+                    'schedule_data': timetable.schedule_data,
+                    'source_image_url': timetable.source_image.url if timetable.source_image else None,
+                    'programme': {
+                        'id': timetable.programme.id,
+                        'code': timetable.programme.code,
+                        'name': timetable.programme.name,
+                    } if timetable.programme else None,
+                    'academic_level': _serialize_academic_level(timetable.academic_level),
+                    'academic_year': _serialize_academic_year(timetable.academic_year),
+                    'semester': _serialize_semester(timetable.semester),
+                    'created_at': timetable.created_at.isoformat(),
+                    'updated_at': timetable.updated_at.isoformat() if timetable.updated_at else None,
+                }
+                for timetable in timetables
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching timetable for user {user_id}: {e}")
+        data = {'timetables': []}
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([InternalAPIRateThrottle])
+def internal_user_follows(request, user_id):
+    """Get users the given user follows, plus follow counts."""
+    is_valid, error = check_service_account(request)
+    if not is_valid:
+        return Response({'error': error}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        from users.models import Follow
+        follows = (
+            Follow.objects.filter(follower=user)
+            .select_related('followed__institution', 'followed__programme')
+            .order_by('-created_at')
+        )
+
+        def _serialize_followed(followed):
+            return {
+                'id': followed.id,
+                'username': followed.username,
+                'first_name': followed.first_name,
+                'last_name': followed.last_name,
+                'headline': followed.headline,
+                'bio': followed.bio,
+                'profile_pic': followed.profile_pic.url if followed.profile_pic else None,
+                'institution': {
+                    'id': followed.institution.id,
+                    'name': followed.institution.name,
+                } if followed.institution else None,
+                'programme': {
+                    'id': followed.programme.id,
+                    'name': followed.programme.name,
+                } if followed.programme else None,
+                'is_online': followed.is_online,
+                'last_seen': followed.last_seen.isoformat() if followed.last_seen else None,
+            }
+
+        data = {
+            'follows': [
+                {
+                    'id': follow.id,
+                    **_serialize_followed(follow.followed),
+                    'followed_at': follow.created_at.isoformat(),
+                }
+                for follow in follows
+            ],
+            'following_count': follows.count(),
+            'followers_count': Follow.objects.filter(followed=user).count(),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching follows for user {user_id}: {e}")
+        data = {'follows': [], 'following_count': 0, 'followers_count': 0}
 
     return Response(data)
