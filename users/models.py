@@ -1007,3 +1007,40 @@ class BlockedDevice(models.Model):
 
     def __str__(self):
         return f"BlockedDevice({self.user.username}, {self.device_hash[:10]}, {self.reason})"
+
+
+class ServiceAccount(models.Model):
+    """Service account for internal API authentication."""
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='service_account',
+        help_text="Django user associated with this service account"
+    )
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Service account name"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this service account is active"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this service account was created"
+    )
+    last_used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this service account was last used"
+    )
+
+    class Meta:
+        db_table = 'service_account'
+        verbose_name = "Service Account"
+        verbose_name_plural = "Service Accounts"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name

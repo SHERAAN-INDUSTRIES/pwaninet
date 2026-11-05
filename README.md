@@ -365,3 +365,57 @@ For detailed setup instructions, see the [developer guide](docs/developer-guide.
 ## Local developer bootstrap for Workspaces
 
 The [step-by-step setup above](#set-up-vasto-step-by-step) covers the complete local Vasto and Workspaces flow, including the commands to start both servers and test sign-in. The Vasto setup script registers one client per developer identifier and saves its credentials to `~/.config/vasto-workspaces/YOUR_IDENTIFIER-local.env`. The Workspaces setup script imports that file and runs the live provider check. Keep the client secret in the backend environment; never put it in React configuration.
+
+## Internal API for Workspaces Integration
+
+Vasto exposes internal REST API endpoints for Workspaces to fetch user data. These endpoints are protected by service token authentication and are intended for server-to-server communication only.
+
+### Internal API Endpoints
+
+All endpoints require `Authorization: Token <service_token>` header.
+
+- `GET /users/api/internal/users/{id}/profile/` — User profile with academic info
+- `GET /users/api/internal/users/{id}/documents/` — User's uploaded documents
+- `GET /users/api/internal/users/{id}/institution/` — User's institution details
+- `GET /users/api/internal/users/{id}/courses/` — User's enrolled courses
+- `GET /users/api/internal/users/{id}/groups/` — User's group memberships
+- `GET /users/api/internal/users/{id}/notifications/` — User's notifications
+- `GET /users/api/internal/users/{id}/conversations/` — User's conversations
+
+### Service Account Setup
+
+The setup script automatically creates a service account named `workspaces_service` and generates a `VASTO_SERVICE_TOKEN`. This token is stored in `.env` and should be copied to the Workspaces `.env` file.
+
+### Environment Variables
+
+```bash
+# Internal API Configuration
+VASTO_SERVICE_TOKEN=<generated-token>
+VASTO_INTERNAL_API_ENABLED=true
+INTERNAL_API_ALLOWED_IPS=127.0.0.1
+```
+
+### Celery and Redis
+
+Vasto uses Celery for background tasks and Redis for caching/message queuing. The setup script shows commands to start Celery worker, Beat scheduler, and Flower monitoring.
+
+```bash
+# Start Celery worker
+.venv/bin/python manage.py celery -A pwaninet worker --loglevel=info --concurrency=2
+
+# Start Celery Beat scheduler
+.venv/bin/python manage.py celery -A pwaninet beat --loglevel=info
+
+# Monitor with Flower
+.venv/bin/python manage.py flower -A pwaninet --port=5555
+```
+
+### Redis Database Allocation
+
+| Database | Purpose | Owner |
+|----------|---------|-------|
+| 0 | Celery broker/results | Pwaninet |
+| 1 | Cache + Channels | Pwaninet |
+| 2 | Django cache | Workspaces |
+| 3 | Celery broker | Workspaces |
+| 4 | Celery results | Workspaces |

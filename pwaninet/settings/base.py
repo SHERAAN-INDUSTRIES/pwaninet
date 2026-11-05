@@ -934,3 +934,8 @@ PWANIMATE_ATTACHMENTS_DIR = 'pwanimate/attachments'
 PWANIMATE_MAX_IMAGE_SIZE = int(os.environ.get('PWANIMATE_MAX_IMAGE_SIZE', 10 * 1024 * 1024))   # 10MB
 PWANIMATE_MAX_DOC_SIZE = int(os.environ.get('PWANIMATE_MAX_DOC_SIZE', 25 * 1024 * 1024))       # 25MB
 PWANIMATE_MAX_EXTRACT_CHARS = int(os.environ.get('PWANIMATE_MAX_EXTRACT_CHARS', 15000))        # 15,000 chars per attachment
+
+# Internal API for Workspaces Integration
+VASTO_SERVICE_TOKEN = os.environ.get('VASTO_SERVICE_TOKEN', '')
+VASTO_INTERNAL_API_ENABLED = os.environ.get('VASTO_INTERNAL_API_ENABLED', 'false').lower() == 'true'
+INTERNAL_API_ALLOWED_IPS = os.environ.get('INTERNAL_API_ALLOWED_IPS', '127.0.0.1').split(',')

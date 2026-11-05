@@ -1,73 +1,617 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}vasto Workspace{% endblock %}
+{% block title %}Authorize Vasto Workspace{% endblock %}
+
+{% block left_rail %}{% endblock %}
+{% block context_rail %}{% endblock %}
+{% block mobile_bottom_nav %}{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="card border-0 shadow-sm mx-auto" style="max-width: 720px;">
-        <div class="card-body p-4 p-md-5">
-            {% if application or error %}
-            <h1 class="h3 mb-3">Authorize Vasto Workspace?</h1>
-            <p class="lead">Vasto Workspace is requesting access to your Vasto account.</p>
-            <p class="text-secondary">
-                You are signed in as <strong>{{ request.user.get_username }}</strong>.
-                Review the requested information before continuing.
-            </p>
+<style>
+    /* Make the center panel full width when rails are empty */
+    .app-shell-layout {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .desktop-center-panel {
+        grid-column: 1 !important;
+        max-width: 100% !important;
+        padding: 0 1rem;
+    }
+
+    @media (min-width: 992px) {
+        .desktop-center-panel {
+            max-width: 800px !important;
+            margin: 0 auto;
+        }
+    }
+
+    .oauth-consent-page {
+        min-height: calc(100vh - var(--navbar-height, 60px));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+        background: transparent;
+    }
+
+    .oauth-content {
+        width: 100%;
+        max-width: 520px;
+        text-align: center;
+    }
+
+    .platform-logos {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2rem;
+        margin-bottom: 2.5rem;
+        position: relative;
+    }
+
+    .platform-logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+    }
+
+    .platform-logo:hover {
+        transform: scale(1.05);
+    }
+
+    .sync-icon {
+        position: relative;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sync-icon svg {
+        width: 32px;
+        height: 32px;
+        color: var(--primary, #2563eb);
+        animation: sync-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes sync-pulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 0.7;
+        }
+        50% {
+            transform: scale(1.15);
+            opacity: 1;
+        }
+    }
+
+    .sync-connector {
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--primary, #2563eb), transparent);
+        transform: translateY(-50%);
+        opacity: 0.3;
+    }
+
+    .oauth-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-dark, #0f172a);
+        margin-bottom: 0.5rem;
+        line-height: 1.3;
+    }
+
+    .oauth-subtitle {
+        font-size: 1rem;
+        color: var(--text-secondary, #64748b);
+        margin-bottom: 2rem;
+        line-height: 1.5;
+    }
+
+    .user-info {
+        margin-bottom: 2rem;
+        padding: 1rem 0;
+        border-top: 1px solid var(--border, #e2e8f0);
+        border-bottom: 1px solid var(--border, #e2e8f0);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .user-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid var(--primary, #2563eb);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-info-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary, #64748b);
+        margin-bottom: 0.25rem;
+    }
+
+    .user-info-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-dark, #0f172a);
+    }
+
+    .scopes-section {
+        margin-bottom: 2rem;
+        text-align: left;
+    }
+
+    .scopes-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-secondary, #64748b);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.75rem;
+    }
+
+    .scopes-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .scopes-list li {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        color: var(--text-dark, #0f172a);
+        font-size: 0.95rem;
+    }
+
+    .scopes-list li::before {
+        content: '✓';
+        color: var(--primary, #2563eb);
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+
+    .oauth-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (min-width: 480px) {
+        .oauth-buttons {
+            flex-direction: row;
+            justify-content: center;
+        }
+    }
+
+    .btn-authorize {
+        flex: 1;
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .btn-cancel {
+        flex: 1;
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .error-box {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        color: #ef4444;
+        font-size: 0.95rem;
+    }
+
+    .success-box {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        color: #10b981;
+        font-size: 0.95rem;
+    }
+
+    .btn-authorize:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .btn-spinner {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .dismiss-section {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border, #e2e8f0);
+    }
+
+    .dismiss-btn {
+        background: none;
+        border: none;
+        color: var(--text-secondary, #64748b);
+        font-size: 0.875rem;
+        cursor: pointer;
+        text-decoration: underline;
+        padding: 0.5rem;
+    }
+
+    .dismiss-btn:hover {
+        color: var(--text-dark, #0f172a);
+    }
+
+    [data-theme="dark"] .oauth-title {
+        color: var(--text-dark, #e4e6eb);
+    }
+
+    [data-theme="dark"] .oauth-subtitle {
+        color: var(--text-secondary, #e4e6eb);
+    }
+
+    [data-theme="dark"] .user-info-value {
+        color: var(--text-dark, #e4e6eb);
+    }
+
+    [data-theme="dark"] .scopes-list li {
+        color: var(--text-dark, #e4e6eb);
+    }
+
+    [data-theme="dark"] .user-info {
+        border-color: var(--border, #3a3b3c);
+    }
+
+    [data-theme="dark"] .dismiss-section {
+        border-color: var(--border, #3a3b3c);
+    }
+
+    @media (max-width: 480px) {
+        .platform-logo {
+            width: 56px;
+            height: 56px;
+        }
+
+        .sync-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .sync-icon svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .oauth-title {
+            font-size: 1.5rem;
+        }
+
+        .platform-logos {
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+    }
+</style>
+
+<div class="oauth-consent-page">
+    <div class="oauth-content">
+        {% if application or error %}
+            <!-- OAuth Authorization Form -->
+            <div class="platform-logos">
+                <img src="{% static 'vastologos/vasto_transparent.png' %}" alt="Vasto" class="platform-logo">
+                <div class="sync-icon">
+                    <div class="sync-connector"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                </div>
+                <img src="{% static 'vastologos/workspace_transparent.png' %}" alt="Workspaces" class="platform-logo">
+            </div>
+
+            <h1 class="oauth-title">Authorize Connection</h1>
+            <p class="oauth-subtitle">Link your Vasto account with Workspaces</p>
+
+            <div class="user-info">
+                {% if request.user.profile_pic %}
+                    <img src="{{ request.user.profile_pic.url }}" alt="{{ request.user.get_username }}" class="user-avatar">
+                {% else %}
+                    <div class="user-avatar" style="background: var(--primary-light, #dbeafe); display: flex; align-items: center; justify-content: center; color: var(--primary, #2563eb); font-size: 1.5rem; font-weight: 600;">
+                        {{ request.user.get_username|first|upper }}
+                    </div>
+                {% endif %}
+                <div>
+                    <div class="user-info-label">Signed in as</div>
+                    <div class="user-info-value">{{ request.user.get_username }}</div>
+                </div>
+            </div>
 
             {% if not error %}
-                <form id="authorizationForm" method="post">
-                    {% csrf_token %}
-                    {% for field in form %}
-                        {% if field.is_hidden %}{{ field }}{% endif %}
-                    {% endfor %}
-
-                    <h2 class="h6">Vasto Workspace will be able to access:</h2>
-                    <ul class="mb-4">
-                        {% for scope in scopes_descriptions %}
-                            <li>{{ scope }}</li>
-                        {% empty %}
-                            <li>Basic account identity for sign-in.</li>
-                        {% endfor %}
-                    </ul>
-
-                    {% if form.errors %}<div class="alert alert-danger">{{ form.errors }}</div>{% endif %}
-                    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="submit" class="btn btn-primary" name="allow" value="authorize">Authorize and continue</button>
-                        <button type="submit" class="btn btn-outline-secondary">Cancel</button>
+                {% if is_already_authorized %}
+                    <!-- Already Authorized State -->
+                    <div class="success-box" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; color: #10b981;">
+                        <strong>✓ Already Linked</strong><br>
+                        Your Vasto account is already connected to Workspaces.
                     </div>
-                </form>
+
+                    <div class="oauth-buttons">
+                        <a href="{{ workspace_authorization_url|default:'#' }}" class="btn btn-primary btn-authorize" {% if not workspace_authorization_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
+                            Open Workspaces
+                        </a>
+                        <form method="post" action="{% url 'workspace:revoke' %}" style="flex: 1;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger btn-cancel" style="width: 100%;">
+                                Revoke Access
+                            </button>
+                        </form>
+                    </div>
+                {% else %}
+                    <!-- Not Authorized State -->
+                    <form id="authorizationForm" method="post">
+                        {% csrf_token %}
+                        {% for field in form %}
+                            {% if field.is_hidden %}{{ field }}{% endif %}
+                        {% endfor %}
+
+                        <div class="scopes-section">
+                            <div class="scopes-title">Vasto Workspace will be able to access:</div>
+                            <ul class="scopes-list">
+                                {% for scope in scopes_descriptions %}
+                                    <li>{{ scope }}</li>
+                                {% empty %}
+                                    <li>Basic account identity for sign-in</li>
+                                    <li>Your profile information</li>
+                                    <li>Your academic data</li>
+                                    <li>Your documents and courses</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+
+                        {% if form.errors %}
+                            <div class="error-box">
+                                <strong>Error:</strong> {{ form.errors }}
+                            </div>
+                        {% endif %}
+                        {% if form.non_field_errors %}
+                            <div class="error-box">
+                                <strong>Error:</strong> {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+
+                        <div class="oauth-buttons">
+                            <button type="submit" class="btn btn-primary btn-authorize" name="allow" value="authorize" id="authorizeBtn">
+                                <span class="btn-text">Approve & Authorize</span>
+                                <span class="btn-spinner" style="display: none;">
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    Authorizing...
+                                </span>
+                            </button>
+                            <button type="submit" class="btn btn-outline-secondary btn-cancel">Cancel</button>
+                        </div>
+                    </form>
+                {% endif %}
             {% else %}
-                <div class="alert alert-danger" role="alert">
-                    <h2 class="h5">Authorization could not continue</h2>
-                    <p class="mb-0">{{ error.description|default:error.error }}</p>
+                <div class="error-box">
+                    <strong>Authorization Error</strong><br>
+                    {{ error.description|default:error.error }}
+                </div>
+
+                <div class="oauth-buttons">
+                    <button type="button" class="btn btn-outline-secondary btn-cancel" onclick="window.history.back()">
+                        Go Back
+                    </button>
                 </div>
             {% endif %}
-            {% else %}
-            <h1 class="h3 mb-3">Connect to Vasto Workspace</h1>
-            <p class="lead">Continue to Vasto Workspace to connect your account.</p>
-            <p class="text-secondary">
-                You will confirm your Vasto account with Vasto Workspace. Your Vasto password and
-                session key are never sent to the frontend; Workspaces creates its own session
-                after authorization.
-            </p>
+        {% else %}
+            <!-- Sync Page (No OAuth context) -->
+            <div class="platform-logos">
+                <img src="{% static 'vastologos/vasto_transparent.png' %}" alt="Vasto" class="platform-logo">
+                <div class="sync-icon">
+                    <div class="sync-connector"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                </div>
+                <img src="{% static 'vastologos/workspace_transparent.png' %}" alt="Workspaces" class="platform-logo">
+            </div>
 
-            {% if workspace_authorization_url %}
-                <a href="{{ workspace_authorization_url }}" class="btn btn-primary">Continue to Vasto Workspace</a>
+            <h1 class="oauth-title">Connect to Vasto Workspace</h1>
+            <p class="oauth-subtitle">Link your Vasto account with Workspaces</p>
+
+            <div class="user-info">
+                {% if request.user.profile_pic %}
+                    <img src="{{ request.user.profile_pic.url }}" alt="{{ request.user.get_username }}" class="user-avatar">
+                {% else %}
+                    <div class="user-avatar" style="background: var(--primary-light, #dbeafe); display: flex; align-items: center; justify-content: center; color: var(--primary, #2563eb); font-size: 1.5rem; font-weight: 600;">
+                        {{ request.user.get_username|first|upper }}
+                    </div>
+                {% endif %}
+                <div>
+                    <div class="user-info-label">Current Account</div>
+                    <div class="user-info-value">{{ request.user.get_username }}</div>
+                </div>
+            </div>
+
+            {% if is_already_authorized %}
+                <div class="success-box" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem; color: #10b981;">
+                    <strong>✓ Already Linked</strong><br>
+                    Your Vasto account is already connected to Workspaces.
+                </div>
+
+                <div class="oauth-buttons">
+                    <a href="{{ workspace_authorization_url|default:'#' }}" class="btn btn-primary btn-authorize" {% if not workspace_authorization_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
+                        Open Workspaces
+                    </a>
+                    <form method="post" action="{% url 'workspace:revoke' %}" style="flex: 1;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-danger btn-cancel" style="width: 100%;">
+                            Revoke Access
+                        </button>
+                    </form>
+                </div>
             {% else %}
-                <p class="alert alert-warning mb-0">
-                    Vasto Workspace is not configured yet. Set <code>VASTO_WORKSPACE_BASE_URL</code>
-                    in Vasto's environment to its backend URL, then reload this page.
+                <p style="color: var(--text-secondary, #64748b); margin-bottom: 2rem; line-height: 1.6; font-size: 0.95rem;">
+                    Continue to Vasto Workspace to connect your account. You will confirm your Vasto account with Workspaces. Your Vasto password and session key are never sent to the frontend; Workspaces creates its own session after authorization.
                 </p>
+
+                {% if workspace_authorization_url %}
+                    <div class="oauth-buttons">
+                        <a href="{{ workspace_authorization_url }}" class="btn btn-primary btn-authorize">
+                            Continue to Vasto Workspace
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="error-box">
+                        <strong>Configuration Required</strong><br>
+                        Vasto Workspace is not configured yet. Set <code>VASTO_WORKSPACE_BASE_URL</code> in Vasto's environment to its backend URL, then reload this page.
+                    </div>
+                {% endif %}
             {% endif %}
 
-            <form method="post" action="{% url 'workspace:dismiss' %}" class="mt-3">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-secondary">Dismiss / Not now</button>
-            </form>
-            {% endif %}
-        </div>
+            <div class="dismiss-section">
+                <form method="post" action="{% url 'workspace:dismiss' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="dismiss-btn">Dismiss / Not now</button>
+                </form>
+            </div>
+        {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const authorizeBtn = document.getElementById('authorizeBtn');
+    const form = document.getElementById('authorizationForm');
+    
+    if (authorizeBtn && form) {
+        authorizeBtn.addEventListener('click', function(e) {
+            // Prevent the native submit so the button's name/value isn't stripped
+            e.preventDefault();
+            if (authorizeBtn.dataset.submitted === 'true') return;
+            authorizeBtn.dataset.submitted = 'true';
+
+            // Disable button and show spinner
+            authorizeBtn.disabled = true;
+            const btnText = authorizeBtn.querySelector('.btn-text');
+            const btnSpinner = authorizeBtn.querySelector('.btn-spinner');
+
+            if (btnText) btnText.style.display = 'none';
+            if (btnSpinner) btnSpinner.style.display = 'inline-flex';
+            
+            // Show success message after a short delay
+            setTimeout(function() {
+                // Create success overlay
+                const overlay = document.createElement('div');
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: var(--background, #f8fafc);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                `;
+                
+                overlay.innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <div style="
+                            width: 80px;
+                            height: 80px;
+                            border-radius: 50%;
+                            background: rgba(16, 185, 129, 0.1);
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 1.5rem;
+                        ">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2 style="
+                            font-size: 1.5rem;
+                            font-weight: 700;
+                            color: var(--text-dark, #0f172a);
+                            margin-bottom: 0.5rem;
+                        ">Successfully Linked!</h2>
+                        <p style="
+                            color: var(--text-secondary, #64748b);
+                            margin-bottom: 2rem;
+                        ">Your Vasto account is now connected to Workspaces.</p>
+                        <div style="
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 0.5rem;
+                            color: var(--primary, #2563eb);
+                            font-weight: 600;
+                        ">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            Redirecting to Workspaces...
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(overlay);
+                
+                // Fade in overlay
+                requestAnimationFrame(() => {
+                    overlay.style.opacity = '1';
+                });
+                
+                // Submit the form after showing success.
+                // form.submit() bypasses submit buttons, so inject allow=authorize
+                // as a hidden field to satisfy Django OAuth Toolkit.
+                setTimeout(() => {
+                    const allowInput = document.createElement('input');
+                    allowInput.type = 'hidden';
+                    allowInput.name = 'allow';
+                    allowInput.value = 'authorize';
+                    form.appendChild(allowInput);
+                    form.submit();
+                }, 2000);
+            }, 1500);
+        });
+    }
+});
+</script>
 {% endblock %}

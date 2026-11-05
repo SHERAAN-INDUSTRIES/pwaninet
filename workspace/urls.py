@@ -7,4 +7,5 @@ app_name = "workspace"
 urlpatterns = [
     path("sync/", views.workspace_sync, name="sync"),
     path("dismiss/", views.workspace_dismiss, name="dismiss"),
+    path("revoke/", views.workspace_revoke, name="revoke"),
 ]

@@ -1,7 +1,7 @@
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from rest_framework.routers import DefaultRouter
-from . import views
+from . import views, api_internal_views
 
 router = DefaultRouter()
 router.register(r'users', views.UserViewSet, basename='user')
@@ -113,4 +113,13 @@ urlpatterns = [
     
     # Online status API
     path('api/users/<int:user_id>/online-status/', views.user_online_status_api, name='user_online_status_api'),
+
+    # Internal API routes for Workspaces integration
+    path('api/internal/users/<int:user_id>/profile/', api_internal_views.internal_user_profile, name='internal_user_profile'),
+    path('api/internal/users/<int:user_id>/documents/', api_internal_views.internal_user_documents, name='internal_user_documents'),
+    path('api/internal/users/<int:user_id>/institution/', api_internal_views.internal_user_institution, name='internal_user_institution'),
+    path('api/internal/users/<int:user_id>/courses/', api_internal_views.internal_user_courses, name='internal_user_courses'),
+    path('api/internal/users/<int:user_id>/groups/', api_internal_views.internal_user_groups, name='internal_user_groups'),
+    path('api/internal/users/<int:user_id>/notifications/', api_internal_views.internal_user_notifications, name='internal_user_notifications'),
+    path('api/internal/users/<int:user_id>/conversations/', api_internal_views.internal_user_conversations, name='internal_user_conversations'),
 ]

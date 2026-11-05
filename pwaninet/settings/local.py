@@ -24,7 +24,7 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
         'HOST': db_host,
         'PORT': os.environ.get('DB_PORT', '5432'),
-        'CONN_MAX_AGE': 60,
+        'CONN_MAX_AGE': 0,
     }
 }
 
