@@ -5,7 +5,7 @@
  * exists in exactly one state at any given time.
  */
 
-import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261011-16';
+import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261106-group1';
 
 // Upload state constants
 export const UploadState = {

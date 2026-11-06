@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from pwaninet.offline import offline_post_access, offline_message_access, offline_notification_access
 from django.urls import path, include
 from oauth2_provider.urls import metadata_urlpatterns
 from workspace.views import VastoWorkspaceAuthorizationView
@@ -342,6 +343,9 @@ urlpatterns = [
     path('sitemap.xml', serve_sitemap, name='sitemap'),
     path('robots.txt', serve_robots, name='robots'),
     path('service-worker.js', serve_service_worker, name='service_worker'),
+    path('offline/post-access/', offline_post_access, name='offline_post_access'),
+    path('offline/message-access/', offline_message_access, name='offline_message_access'),
+    path('offline/notification-access/', offline_notification_access, name='offline_notification_access'),
     # Dedicated Downloads Page
     path('downloads/', downloads_page_view, name='downloads'),
     path('download/', downloads_page_view, name='download_alias'),

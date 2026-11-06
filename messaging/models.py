@@ -19,6 +19,10 @@ class Conversation(models.Model):
         default=DIRECT
     )
     name = models.CharField(max_length=255, null=True, blank=True)
+    group = models.OneToOneField(
+        'groups.Group', null=True, blank=True, on_delete=models.CASCADE,
+        related_name='chat_conversation',
+    )
     is_encrypted = models.BooleanField(default=True, help_text="End-to-end encryption enabled")
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)

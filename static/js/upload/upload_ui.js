@@ -7,8 +7,8 @@
  * No alert dialogs or blocking modals.
  */
 
-import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261011-16';
-import { UploadState } from './upload_state_machine.js?v=20261011-16';
+import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261106-group1';
+import { UploadState } from './upload_state_machine.js?v=20261106-group1';
 
 // The manager singleton is reached via window (base.html exports it as
 // window.uploadManager), deliberately NOT imported here: this file is

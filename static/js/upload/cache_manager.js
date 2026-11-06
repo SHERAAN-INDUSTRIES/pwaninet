@@ -6,8 +6,8 @@
  * Downloaded media is never removed when clearing cache.
  */
 
-import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261011-16';
-import { downloadsMetadataManager } from './indexeddb_manager.js?v=20261011-16';
+import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261106-group1';
+import { downloadsMetadataManager } from './indexeddb_manager.js?v=20261106-group1';
 
 class CacheManager {
     constructor() {

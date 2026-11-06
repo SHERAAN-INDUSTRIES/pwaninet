@@ -8,8 +8,8 @@
  * Compatible with existing voice.service.js API and eventBus events.
  */
 
-import { EVENTS } from '../../../chat/shared/constants.js?v=20261011-16';
-import { eventBus } from '../../../chat/core/event-bus.js?v=20261011-16';
+import { EVENTS } from '../../../chat/shared/constants.js?v=20261106-group1';
+import { eventBus } from '../../../chat/core/event-bus.js?v=20261106-group1';
 
 class AudioRecordingService {
     constructor() {
@@ -422,7 +422,7 @@ class AudioRecordingService {
             const conversationId = this._getConversationId();
             if (conversationId) {
                 // Import attachment service to avoid circular dependency
-                import('../../chat/features/attachments/attachment.service.js?v=20261011-16').then(({ attachmentService }) => {
+                import('../../chat/features/attachments/attachment.service.js?v=20261106-group1').then(({ attachmentService }) => {
                     attachmentService.handleFileUpload(file, conversationId);
                 });
             }

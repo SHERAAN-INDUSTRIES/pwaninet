@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+# Docker mode has no host Python or Workspaces registration prerequisites.
+if [[ "${1:-}" == "--docker" ]]; then
+  shift
+  exec bash "$(dirname "${BASH_SOURCE[0]}")/setup-docker.sh" "$@"
+fi
+if [[ "${1:-}" == "--show-service-token-only" ]]; then
+  cd "$(dirname "${BASH_SOURCE[0]}")/.."
+  TOKEN_ENV=.env
+  if [[ "${2:-}" == "--docker" ]]; then TOKEN_ENV=.env.docker-dev; fi
+  exec python3 scripts/show-service-token.py "$TOKEN_ENV"
+fi
 if [[ -t 1 ]]; then C_BLUE=$'\033[1;34m'; C_GREEN=$'\033[1;32m'; C_RESET=$'\033[0m'; else C_BLUE=''; C_GREEN=''; C_RESET=''; fi
 section() { printf '\n%b── %s ──%b\n' "$C_BLUE" "$1" "$C_RESET"; }
 success() { printf '%b✓%b %s\n' "$C_GREEN" "$C_RESET" "$1"; }
@@ -7,21 +18,46 @@ printf '\n%bPwaninet · Local setup%b\n' "$C_BLUE" "$C_RESET"
 printf 'This setup checks your tools, configures local services, and prepares Workspaces sign-in.\n'
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 SKIP=0
+SHOW_TOKEN=0
 DEVELOPER="${VASTO_DEVELOPER:-}"
 OWNER_USERNAME="${VASTO_OWNER_USERNAME:-}"
 REDIRECT_URI="http://127.0.0.1:8001/api/auth/vasto/callback/"
 CREDENTIALS_FILE=""
 while (($#)); do
   case "$1" in
+    --show-service-token) SHOW_TOKEN=1; shift ;;
     --skip-containers) SKIP=1; shift ;;
     --developer) (($# >= 2)) || { echo "--developer requires an identifier." >&2; exit 2; }; DEVELOPER="$2"; shift 2 ;;
     --owner-username) (($# >= 2)) || { echo "--owner-username requires a Vasto staff username." >&2; exit 2; }; OWNER_USERNAME="$2"; shift 2 ;;
     --redirect-uri) (($# >= 2)) || { echo "--redirect-uri requires a callback URL." >&2; exit 2; }; REDIRECT_URI="$2"; shift 2 ;;
     --credentials-file) (($# >= 2)) || { echo "--credentials-file requires an output path." >&2; exit 2; }; CREDENTIALS_FILE="$2"; shift 2 ;;
-    -h|--help) echo "Usage: $0 [--developer ID] [--owner-username USER] [--redirect-uri URL] [--credentials-file PATH] [--skip-containers]"; exit 0 ;;
+    -h|--help) echo "Usage: $0 [--docker] [--developer ID] [--owner-username USER] [--redirect-uri URL] [--credentials-file PATH] [--skip-containers] [--show-service-token]"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+FAILURES=()
+run_step() {
+  local label="$1"; shift
+  if "$@"; then success "$label"; return 0; fi
+  FAILURES+=("$label")
+  printf 'Needs attention: %s; continuing independent steps.\n' "$label" >&2
+  return 1
+}
+setup_summary() {
+  local status=$?
+  printf '\nSetup summary (exit %s)\n' "$status"
+  if ((${#FAILURES[@]})); then printf '  Needs attention: %s\n' "${FAILURES[@]}"; fi
+  if [[ -f .env ]]; then
+    echo '  Pwaninet service token: .env → VASTO_SERVICE_TOKEN (retained across retries).'
+    echo '  To display it locally: bash scripts/setup-dev.sh --show-service-token-only'
+    if (( SHOW_TOKEN )); then
+      "${PY:-python3}" scripts/show-service-token.py .env || true
+    fi
+  fi
+  echo "  OAuth credentials: ${CREDENTIALS_FILE:-$HOME/.config/vasto-workspaces/${DEVELOPER:-YOUR_IDENTIFIER}-local.env}"
+  if (( status )); then echo '  Setup is incomplete. Fix the reported errors and rerun; saved credentials are retained.'; fi
+}
+trap setup_summary EXIT
 if [[ -z "$DEVELOPER" ]]; then
   [[ -t 0 ]] || { echo "Pass --developer ID and --owner-username USER when running without a terminal." >&2; exit 2; }
   read -r -p "Developer identifier [${USER:-developer}]: " DEVELOPER
@@ -90,10 +126,6 @@ else
   PY="$VENV_DIR/bin/python"
   echo "Created Python environment: $VENV_DIR"
 fi
-section 'Installing backend dependencies'
-"$PY" -m pip install --upgrade pip >/dev/null || { echo "pip upgrade failed; check package-index access." >&2; exit 1; }
-"$PY" -m pip install -r requirements.txt || { echo "Dependency installation failed; review the output." >&2; exit 1; }
-"$PY" -m pip check || { echo "Dependency consistency check failed." >&2; exit 1; }
 if [[ ! -e .env ]]; then cp .env.example .env; chmod 600 .env; echo "Created .env from .env.example."; else echo "Retained existing .env."; fi
 "$PY" scripts/sync-env-example.py .env.example .env
 chmod 600 .env
@@ -103,130 +135,61 @@ if grep -Eq '^SECRET_KEY=(your-secret-key-here)?$' .env; then
  chmod 600 .env; echo "Generated local Django SECRET_KEY (not displayed)."
 fi
 
-# Generate VASTO_SERVICE_TOKEN if not present, replacing an existing blank field safely.
-if ! grep -Eq '^VASTO_SERVICE_TOKEN=.+$' .env; then
-  SERVICE_TOKEN=$($PY -c 'import secrets; print(secrets.token_urlsafe(32))')
-  printf '%s' "$SERVICE_TOKEN" | "$PY" scripts/set-env-value.py .env VASTO_SERVICE_TOKEN
-  unset SERVICE_TOKEN
-  chmod 600 .env
-  success "Generated Pwaninet service token (value hidden)."
-else
-  success "Retained existing Pwaninet service token."
-fi
+echo 'The service-account token will be saved to .env after database migrations; existing credentials are retained.'
 
 section 'Enabling internal API access'
-# Enable internal API
-if ! grep -q '^VASTO_INTERNAL_API_ENABLED=' .env; then
-  echo "VASTO_INTERNAL_API_ENABLED=true" >> .env
-  echo "Enabled internal API for Workspaces integration."
-fi
+printf true | "$PY" scripts/set-env-value.py .env VASTO_INTERNAL_API_ENABLED
+success 'Enabled the local internal API for Workspaces.'
 
 # Set allowed IPs for internal API
 if ! grep -q '^INTERNAL_API_ALLOWED_IPS=' .env; then
   echo "INTERNAL_API_ALLOWED_IPS=127.0.0.1" >> .env
   echo "Set INTERNAL_API_ALLOWED_IPS to localhost."
 fi
-section 'Preparing the local sign-in key'
-KD="$HOME/.config/vasto/keys"; KF="$KD/oidc_rsa_private.pem"; LEGACY_KEY="$ROOT/.secrets/oidc_rsa_private.pem"
-mkdir -p "$KD"; chmod 700 "$HOME/.config/vasto" "$KD"
-if [[ -e "$KF" ]]; then
-  echo "Retaining existing local signing key."
-elif [[ -f "$LEGACY_KEY" ]]; then
-  cp -n "$LEGACY_KEY" "$KF"
-  [[ -e "$KF" ]] || { echo "Could not preserve the existing legacy signing key." >&2; exit 1; }
-  chmod 600 "$KF"
-  echo "Preserved the existing repository-local key in the per-user config directory."
-else
-  TEMP_KEY="$(mktemp "$KD/.oidc-rsa.XXXXXX")"
-  if ! openssl genrsa -traditional -out "$TEMP_KEY" 4096 >/dev/null 2>&1; then
-    rm -f "$TEMP_KEY"; echo "OpenSSL RSA key generation failed." >&2; exit 1
-  fi
-  chmod 600 "$TEMP_KEY"
-  if ln "$TEMP_KEY" "$KF" 2>/dev/null; then
-    echo "Created local RSA signing key at $KF."
-  elif [[ -e "$KF" ]]; then
-    echo "Another local signing key appeared; retaining it without replacement."
-  else
-    rm -f "$TEMP_KEY"; echo "Could not securely publish the RSA key file." >&2; exit 1
-  fi
-  rm -f "$TEMP_KEY"
-fi
-chmod 600 "$KF"
-"$PY" - "$KF" <<'PY'
-import sys
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-try: key=serialization.load_pem_private_key(open(sys.argv[1],"rb").read(),password=None)
-except Exception as exc: raise SystemExit(f"Local RSA key is invalid ({type(exc).__name__}); preserve it and repair deliberately.")
-if not isinstance(key,rsa.RSAPrivateKey) or key.key_size<4096: raise SystemExit("OIDC key must be RSA and at least 4096 bits.")
-print("Signing key parsed as RSA (4096 bits or larger).")
-PY
-# Validate the setting Django will actually load, including environment overrides.
-"$PY" manage.py shell --no-imports --settings=pwaninet.settings.local -c 'from django.conf import settings; from cryptography.hazmat.primitives import serialization; from cryptography.hazmat.primitives.asymmetric import rsa; p=settings.OAUTH2_PROVIDER.get("OIDC_RSA_PRIVATE_KEY"); k=serialization.load_pem_private_key(p.encode() if isinstance(p,str) else p,password=None); assert isinstance(k,rsa.RSAPrivateKey) and k.key_size>=4096; print("Django loaded a valid local RSA signing key.")' || { echo "Django did not load a valid 4096-bit RSA signing key. Check OIDC_RSA_PRIVATE_KEY and the local key file." >&2; exit 1; }
+export PY ROOT DEVELOPER OWNER_USERNAME REDIRECT_URI CREDENTIALS_FILE
+section 'Installing backend dependencies'
+run_step "pip upgrade" "$PY" -m pip install --upgrade pip || true
+"$PY" -m pip install -r requirements.txt || { echo "Dependency installation failed; review the output." >&2; exit 1; }
+run_step "Dependency consistency" "$PY" -m pip check || true
+
+KEY_READY=0
+if run_step 'Signing key' bash scripts/setup-signing-key.sh; then KEY_READY=1; fi
 section 'Starting local services'
 if (( ! SKIP )); then
- command -v docker >/dev/null || { echo "Docker is needed for PostgreSQL and Redis; install it or use --skip-containers for separately managed services." >&2; exit 1; }
- docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is needed; install the plugin or use --skip-containers." >&2; exit 1; }
- docker compose up -d db redis || { echo "Could not start Compose services db and redis; check Docker and docker-compose.yml." >&2; exit 1; }
-else echo "Skipped Compose startup as requested."; fi
-ready=0
-for _ in {1..30}; do if "$PY" manage.py shell --no-imports --settings=pwaninet.settings.local -c 'from django.db import connection; connection.ensure_connection()' >/dev/null 2>&1; then ready=1; break; fi; sleep 1; done
-(( ready )) || { echo "PostgreSQL is unreachable with DB_* settings; no migrations were run. Check .env or start your managed database." >&2; exit 1; }
-section 'Checking settings and preparing the database'
-"$PY" manage.py check --settings=pwaninet.settings.local || { echo "Django system check failed." >&2; exit 1; }
-"$PY" manage.py migrate --settings=pwaninet.settings.local || { echo "Migrations failed; database was not reset." >&2; exit 1; }
-
-section 'Preparing the Workspaces connection'
-# Create service account for Workspaces internal API
-"$PY" manage.py create_service_account --settings=pwaninet.settings.local --name="Workspaces" --username="workspaces_service" --email="workspaces@service.local" || { echo "Service account creation failed." >&2; exit 1; }
-
-if [[ -z "$OWNER_USERNAME" ]]; then
-  STAFF_USERS="$("$PY" manage.py shell --no-imports --settings=pwaninet.settings.local -c 'from django.contrib.auth import get_user_model; print("\n".join(get_user_model().objects.filter(is_active=True,is_staff=True).values_list("username",flat=True)))')"
-  if [[ -n "$STAFF_USERS" ]]; then
-    printf 'Active Vasto staff accounts:\n%s\n' "$STAFF_USERS"
-  else
-    echo "No active Vasto staff account exists yet."
-  fi
-  read -r -p "Owner username (leave blank to create a new superuser): " OWNER_USERNAME
-  if [[ -z "$OWNER_USERNAME" ]]; then
-    read -r -p "New Vasto superuser username: " OWNER_USERNAME
-    [[ -n "$OWNER_USERNAME" ]] || { echo "A username is required to create the Vasto superuser." >&2; exit 2; }
-    "$PY" manage.py createsuperuser --username "$OWNER_USERNAME" --settings=pwaninet.settings.local || { echo "Superuser creation failed; rerun setup and select an active staff account." >&2; exit 1; }
-  fi
-fi
-if [[ -z "$CREDENTIALS_FILE" ]]; then
-  CREDENTIALS_FILE="$HOME/.config/vasto-workspaces/$DEVELOPER-local.env"
-fi
-APP_NAME="Vasto Workspaces Local - $DEVELOPER"
-APP_EXISTS="$(APP_NAME="$APP_NAME" "$PY" manage.py shell --no-imports --settings=pwaninet.settings.local -c 'import os; from oauth2_provider.models import Application; print(int(Application.objects.filter(name=os.environ["APP_NAME"]).exists()))')"
-if [[ "$APP_EXISTS" == "1" ]]; then
-  APP_NAME="$APP_NAME" OWNER_USERNAME="$OWNER_USERNAME" REDIRECT_URI="$REDIRECT_URI" CREDENTIALS_FILE="$CREDENTIALS_FILE" "$PY" manage.py shell --no-imports --settings=pwaninet.settings.local <<'APP_CHECK_PY'
-import os
-from django.contrib.auth import get_user_model
-from oauth2_provider.models import Application
-app = Application.objects.get(name=os.environ["APP_NAME"])
-owner = get_user_model().objects.get(username=os.environ["OWNER_USERNAME"])
-if app.user_id != owner.pk:
-    raise SystemExit("Existing OAuth client belongs to a different selected owner; no changes were made.")
-if app.redirect_uris != os.environ["REDIRECT_URI"]:
-    raise SystemExit("Existing OAuth client has a different callback URI; no changes were made.")
-if not os.path.isfile(os.path.expanduser(os.environ["CREDENTIALS_FILE"])):
-    raise SystemExit("Existing OAuth client credential file is missing; its hashed secret cannot be recovered. No changes were made.")
-print("Existing local Workspaces OAuth registration and credential file match; retaining them.")
-APP_CHECK_PY
-elif [[ "$APP_EXISTS" == "0" ]]; then
-  "$PY" manage.py register_workspaces_oauth --settings=pwaninet.settings.local --developer "$DEVELOPER" --owner-username "$OWNER_USERNAME" --redirect-uri "$REDIRECT_URI" --credentials-file "$CREDENTIALS_FILE" || { echo "OAuth registration failed; resolve the message above and rerun setup." >&2; exit 1; }
+  run_step 'PostgreSQL startup' docker compose up -d db || true
+  run_step 'Redis startup' docker compose up -d redis || true
 else
-  echo "Could not determine whether the local Workspaces OAuth client is already registered; refusing to create a duplicate." >&2
-  exit 1
+  echo 'Skipped Compose startup as requested.'
 fi
-success "Vasto environment, key checks, migrations, admin selection, and Workspaces client registration are complete."
-printf '\nNext: run Workspaces setup. It will securely prompt for the generated Pwaninet VASTO_SERVICE_TOKEN and save it in Workspaces .env.\n'
-echo "Credential file: $CREDENTIALS_FILE"
-printf 'Start Vasto for login testing: %q %q runserver 127.0.0.1:8000 --settings=pwaninet.settings.local\n' "$PY" "$ROOT/manage.py"
-printf '\nTo start Celery worker (in another terminal):\n'
-printf '  %q %q celery -A pwaninet worker --loglevel=info --concurrency=2\n' "$PY" "$ROOT/manage.py"
-printf '\nTo start Celery Beat scheduler (in another terminal):\n'
-printf '  %q %q celery -A pwaninet beat --loglevel=info\n' "$PY" "$ROOT/manage.py"
-printf '\nTo monitor Celery with Flower (in another terminal):\n'
-printf '  %q %q flower -A pwaninet --port=5555\n' "$PY" "$ROOT/manage.py"
+DB_READY=0
+for _ in {1..30}; do
+  if "$PY" manage.py shell --no-imports --settings=pwaninet.settings.local -c 'from django.db import connection; connection.ensure_connection()' >/dev/null 2>&1; then DB_READY=1; break; fi
+  sleep 1
+done
+MIGRATED=0
+if (( DB_READY )); then
+  if run_step 'Django checks' "$PY" manage.py check --settings=pwaninet.settings.local; then
+    if run_step 'Database migrations' "$PY" manage.py migrate --noinput --settings=pwaninet.settings.local; then MIGRATED=1; fi
+  fi
+else
+  FAILURES+=('PostgreSQL connection: check DB_* settings; migrations and database-dependent registration were skipped')
+fi
+if (( MIGRATED )); then
+  run_step 'Workspaces service account' "$PY" manage.py create_service_account --settings=pwaninet.settings.local --name=Workspaces --username=workspaces_service --email=workspaces@service.local --env-file "$ROOT/.env" --quiet-token || true
+  if (( KEY_READY )); then
+    run_step 'Workspaces OAuth registration' bash scripts/setup-workspaces-oauth.sh || true
+  else
+    FAILURES+=('OAuth registration skipped until signing key is repaired')
+  fi
+fi
+REDIS_OPTIONS=()
+if (( SKIP )); then REDIS_OPTIONS+=(--no-start-redis); fi
+if (( MIGRATED )); then
+  run_step 'Redis and Celery services' "$PY" scripts/dev-services.py start --root "$ROOT" --app pwaninet --settings pwaninet.settings.local "${REDIS_OPTIONS[@]}" || true
+else
+  run_step 'Redis connectivity' "$PY" scripts/dev-services.py check --root "$ROOT" --app pwaninet --settings pwaninet.settings.local "${REDIS_OPTIONS[@]}" || true
+  FAILURES+=('Celery startup skipped until database migrations succeed')
+fi
+printf '\nStart Pwaninet: DJANGO_SETTINGS_MODULE=pwaninet.settings.local %q -m uvicorn pwaninet.asgi:application --host 127.0.0.1 --port 8000 --reload\n' "$PY"
+if ((${#FAILURES[@]})); then exit 1; fi
+success 'Pwaninet setup completed.'

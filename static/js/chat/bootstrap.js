@@ -4,18 +4,18 @@
  * Supports HTMX partial swaps and continuous conversation switching without full-page reload
  */
 
-import { appController } from './core/app-controller.js?v=20261011-16';
-import { messageService } from './core/message-service.js?v=20261011-16';
-import { webSocketManager } from './core/websocket.js?v=20261011-16';
-import { store } from './core/store.js?v=20261011-16';
-import { uiController } from './ui/ui-controller.js?v=20261011-16';
-import { attachmentService } from './features/attachments/attachment.service.js?v=20261011-16';
-import { attachmentUI } from './features/attachments/attachment-ui.js?v=20261011-16';
-import { cameraService } from './features/camera/camera.service.js?v=20261011-16';
-import { voiceService } from './features/voice/voice.service.js?v=20261011-16';
-import { voiceModalController } from './features/voice/voice-modal-controller.js?v=20261011-16';
-import { emojiService } from './features/emoji/emoji.service.js?v=20261011-16';
-import { contextMenuService } from './features/context-menu/context-menu.service.js?v=20261011-16';
+import { appController } from './core/app-controller.js?v=20261106-group1';
+import { messageService } from './core/message-service.js?v=20261106-group1';
+import { webSocketManager } from './core/websocket.js?v=20261106-group1';
+import { store } from './core/store.js?v=20261106-group1';
+import { uiController } from './ui/ui-controller.js?v=20261106-group1';
+import { attachmentService } from './features/attachments/attachment.service.js?v=20261106-group1';
+import { attachmentUI } from './features/attachments/attachment-ui.js?v=20261106-group1';
+import { cameraService } from './features/camera/camera.service.js?v=20261106-group1';
+import { voiceService } from './features/voice/voice.service.js?v=20261106-group1';
+import { voiceModalController } from './features/voice/voice-modal-controller.js?v=20261106-group1';
+import { emojiService } from './features/emoji/emoji.service.js?v=20261106-group1';
+import { contextMenuService } from './features/context-menu/context-menu.service.js?v=20261106-group1';
 
 // Load encryption module if available
 if (typeof E2EEncryption === 'undefined') {
@@ -37,7 +37,7 @@ export async function initializeChatApp() {
         conversationId: convId,
         currentUserId: userId,
         isEncrypted: (chatContainer?.dataset.isEncrypted || document.body.dataset.isEncrypted) === 'true',
-        isGroupChat: !!chatContainer?.dataset.groupId
+        isGroupChat: chatContainer?.dataset.conversationType === 'group'
     };
 
     // Validate configuration (e.g. skip if on empty state)
@@ -64,7 +64,7 @@ export async function initializeChatApp() {
     messageService.init();
 
     // 3. WebSocket (transport ONLY)
-    const wsUrl = window.GROUPS_WS_URL || null;
+    const wsUrl = null; // All chats use canonical conversation IDs and the same transport.
     webSocketManager.init(config.conversationId, wsUrl);
 
     // 4. UI controller (read-only consumer)

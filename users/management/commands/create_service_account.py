@@ -2,6 +2,9 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from rest_framework.authtoken.models import Token
 from users.models import ServiceAccount
+from pathlib import Path
+import subprocess
+import sys
 
 User = get_user_model()
 
@@ -10,6 +13,9 @@ class Command(BaseCommand):
     help = 'Create a service account for internal API access'
 
     def add_arguments(self, parser):
+        parser.add_argument('--env-file', help='Save the actual DRF service token as VASTO_SERVICE_TOKEN in this env file')
+        parser.add_argument('--token-only', action='store_true', help='Emit a machine-readable VASTO_SERVICE_TOKEN line')
+        parser.add_argument('--quiet-token', action='store_true', help='Do not display the service token')
         parser.add_argument('--name', required=True, help='Service account name')
         parser.add_argument('--username', required=True, help='Django username for the service account')
         parser.add_argument('--email', required=False, help='Email for the service account (optional)')
@@ -47,7 +53,18 @@ class Command(BaseCommand):
         # Get or create token
         token, created = Token.objects.get_or_create(user=user)
 
-        self.stdout.write(self.style.SUCCESS(f'\nService Token: {token.key}'))
-        self.stdout.write(self.style.WARNING('Save this token securely! It will not be shown again.'))
+        if options['token_only']:
+            self.stdout.write('VASTO_SERVICE_TOKEN=' + token.key)
+            return
+
+        if options['env_file']:
+            env_file = Path(options['env_file']).expanduser().resolve()
+            updater = Path(__file__).resolve().parents[3] / 'scripts' / 'set-env-value.py'
+            subprocess.run([sys.executable, str(updater), str(env_file), 'VASTO_SERVICE_TOKEN'],
+                           input=token.key, text=True, check=True)
+            self.stdout.write(self.style.SUCCESS(f'Saved service token to {env_file} (value hidden).'))
+        if not options['quiet_token']:
+            self.stdout.write(self.style.SUCCESS(f'\nService Token: {token.key}'))
+        self.stdout.write('Rerunning this command retrieves the existing token without rotating it.')
         self.stdout.write(self.style.WARNING(f'Username: {username}'))
         self.stdout.write(self.style.WARNING(f'Service Account Name: {name}'))

@@ -3,9 +3,10 @@
 	"appName": "Vasto",
 	"webDir": "www",
 	"server": {
-		"url": "https://pwaninet.app",
 		"cleartext": false,
-		"errorPath": "/offline.html"
+		"allowNavigation": [
+			"pwaninet.app"
+		]
 	},
 	"plugins": {
 		"SplashScreen": {
@@ -34,5 +35,8 @@
 				"alert"
 			]
 		}
+	},
+	"android": {
+		"resolveServiceWorkerRequests": false
 	}
 }

@@ -96,7 +96,7 @@ Vasto was formerly known as Pwaninet. The service domain (pwaninet.app), app ide
 | Framework | Django 5.2 (Python 3.11+) |
 | Database | PostgreSQL with pgvector 0.3.6 for vector embeddings |
 | Task queue | Celery 5.3 with Redis broker and result backend |
-| Real-time | Django Channels 4 with Daphne ASGI server |
+| Real-time | Django Channels 4 with Uvicorn ASGI server |
 | Cache | Redis (with local memory fallback) |
 | API | Django REST Framework 3.14 with drf-spectacular (OpenAPI/Swagger) |
 | Frontend | Django templates, HTMX, Bootstrap, vanilla JS, CSS |
@@ -208,7 +208,7 @@ You do not need to know Django or create a Python environment yourself. The scri
 >>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66
 
    ```bash
-   .venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=pwaninet.settings.local
+   DJANGO_SETTINGS_MODULE=pwaninet.settings.local .venv/bin/python -m uvicorn pwaninet.asgi:application --host 127.0.0.1 --port 8000 --reload
    ```
 
 <<<<<<< HEAD
@@ -250,21 +250,21 @@ To test the Vasto sign-in integration, keep Vasto running and open a second term
 3. When setup reports success, start Workspaces. This command uses the default `.venv`; if the script reused a differently named environment, use the exact server command it printed:
 
    ```bash
-   .venv/bin/python workspace/manage.py runserver 127.0.0.1:8001
+   .venv/bin/python -m uvicorn workspace.asgi:application --app-dir workspace --host 127.0.0.1 --port 8001 --reload
    ```
 
 4. Open `http://127.0.0.1:8001/api/auth/vasto/start/` in a browser and sign in to Vasto. The first sign-in may ask you to approve the Workspaces access request.
 
 You only need the setup scripts for environment, credentials, database migrations, registration, and provider checks. For a normal login test, start both servers and use the browser. The servers run in separate terminals; leave both terminals open while testing.
 
-Start Celery only when you are developing background jobs. Open another terminal in Vasto and run:
+Setup starts Celery automatically. For manual background job debugging, first stop the managed worker before starting another:
 
 ```bash
 export DJANGO_SETTINGS_MODULE=pwaninet.settings.local
 celery -A pwaninet worker -l info
 ```
 
-Celery Beat is optional for scheduled tasks:
+Setup also starts Celery Beat. Stop the managed Beat before manually debugging the scheduler:
 
 ```bash
 celery -A pwaninet beat -l info
@@ -297,11 +297,11 @@ vasto/
 ├── manage.py                  # Django management entry point
 ├── requirements.txt           # Python dependencies
 ├── docker-compose.yml         # PostgreSQL + Redis for local dev
-├── Dockerfile                 # Production image (Daphne + Gunicorn)
+├── Dockerfile                 # Backend image (Uvicorn)
 ├── vasto/                  # Project configuration
 │   ├── settings/              # base.py, local.py, production.py, test.py
 │   ├── urls.py                # Root URL configuration
-│   ├── asgi.py                # ASGI application (Daphne)
+│   ├── asgi.py                # ASGI application (Uvicorn)
 │   ├── wsgi.py                # WSGI application (Gunicorn)
 │   └── celery.py              # Celery app configuration
 ├── pwanimate/                 # Spark AI assistant app (module name retained for compatibility)
@@ -354,8 +354,8 @@ vasto/
 
 ## Important notes
 
-- The repository `docker-compose.yml` starts PostgreSQL and Redis only. Django, Celery workers, and Celey Beat must be started separately.
-- The production Dockerfile starts Daphne (ASGI). Gunicorn is available as a WSGI option but not currently used in the Dockerfile.
+- The repository `docker-compose.yml` starts PostgreSQL and Redis only. Django is started separately with Uvicorn; `setup-dev.sh` starts Celery workers and Beat after migrations.
+- The production Dockerfile starts Uvicorn (ASGI). Gunicorn is available as a WSGI option but not currently used in the Dockerfile.
 - Spark uses pgvector for semantic search. The PostgreSQL Docker image includes the pgvector extension.
 - AI features require provider API keys. Without keys, Spark falls back to a mock provider for development and testing.
 - vasto is an independent project. It is not an official Pwani University service or assignment unless confirmed in writing.
@@ -401,13 +401,13 @@ Vasto uses Celery for background tasks and Redis for caching/message queuing. Th
 
 ```bash
 # Start Celery worker
-.venv/bin/python manage.py celery -A pwaninet worker --loglevel=info --concurrency=2
+.venv/bin/python -m celery -A pwaninet worker --loglevel=info --concurrency=2
 
 # Start Celery Beat scheduler
-.venv/bin/python manage.py celery -A pwaninet beat --loglevel=info
+.venv/bin/python -m celery -A pwaninet beat --loglevel=info
 
 # Monitor with Flower
-.venv/bin/python manage.py flower -A pwaninet --port=5555
+.venv/bin/python -m celery -A pwaninet flower --port=5555
 ```
 
 ### Redis Database Allocation
@@ -419,3 +419,111 @@ Vasto uses Celery for background tasks and Redis for caching/message queuing. Th
 | 2 | Django cache | Workspaces |
 | 3 | Celery broker | Workspaces |
 | 4 | Celery results | Workspaces |
+
+
+### One-command Docker development
+
+Install Docker with the Compose plugin and OpenSSL, start Docker, then run:
+
+```bash
+./scripts/setup-dev.sh --docker
+# Equivalent dedicated entry point:
+./scripts/setup-docker.sh
+```
+
+This mode needs no host Python installation or Workspaces account. It creates
+`.env.docker-dev` and a private `.secrets/docker-dev-oidc.pem`, waits for PostgreSQL
+(with pgvector) and Redis, builds the backend image, verifies Django connections,
+runs checks and migrations, collects static files, and starts Django, the Celery
+worker, and Celery Beat. Setup waits for the web health check before reporting success.
+Rerunning preserves credentials and database/media volumes and rebuilds the backend.
+Existing application containers stop before migrations; a failure leaves them stopped
+until you fix the reported error and rerun setup.
+
+Open [the local backend](http://127.0.0.1:8000). If a host port is occupied, edit
+`WEB_HOST_PORT`, `POSTGRES_HOST_PORT`, or `REDIS_HOST_PORT` in `.env.docker-dev` and
+rerun. The local backend URL for OAuth and CSRF follows `WEB_HOST_PORT` automatically.
+The default host ports are 8000, 5432, and 6379, bound to localhost. Containers
+always connect internally to `db:5432` and `redis:6379`, independent of host ports.
+The database name and user live in the same file; changing PostgreSQL credentials
+after the first startup does not change users in the existing database volume.
+
+Manage this stack with:
+
+```bash
+# Create an administrator
+ docker compose -p pwaninet-dev --env-file .env.docker-dev -f docker-compose.dev.yml exec web python manage.py createsuperuser
+# Follow application logs
+ docker compose -p pwaninet-dev --env-file .env.docker-dev -f docker-compose.dev.yml logs -f web celery_worker
+# Stop containers while keeping data
+ docker compose -p pwaninet-dev --env-file .env.docker-dev -f docker-compose.dev.yml down
+```
+
+This is a separate local stack from `docker-compose.yml` and production. It uses
+local media storage. Optional third-party integration settings can be added to
+`.env.docker-dev`. The existing `setup-dev.sh` workflow without `--docker` still
+handles host Python and Workspaces OAuth registration; Docker mode does not
+register a Workspaces client automatically.
+
+
+### Team setup, tokens, and retries
+
+Run from the repository root:
+
+```bash
+bash scripts/setup-dev.sh --developer YOUR_IDENTIFIER --owner-username YOUR_ADMIN_USERNAME
+# Start the backend in this terminal after reviewing the setup summary:
+DJANGO_SETTINGS_MODULE=pwaninet.settings.local .venv/bin/python -m uvicorn pwaninet.asgi:application --host 127.0.0.1 --port 8000 --reload
+```
+
+For a fresh database, run `bash scripts/setup-dev.sh` interactively to create an
+administrator. The setup prints the exact Uvicorn command for the selected
+Python environment. Workspaces uses Uvicorn on `127.0.0.1:8001`.
+
+Setup prepares `.env` before installing backend dependencies. After migrations,
+it saves the actual database-backed service-account token as `VASTO_SERVICE_TOKEN`
+before attempting OAuth registration. A new token cannot be provisioned while
+the database is unavailable. Independent steps continue after recoverable failures, including
+service-account/OAuth registration or Redis errors. Steps requiring a working
+database are skipped if connection or migrations fail. The final summary lists
+unfinished steps, saved credential locations, and returns a nonzero exit for
+incomplete setup. Fix the reported errors and rerun; saved tokens, keys, and
+existing database data are retained. Missing Python or failed dependency
+installation still blocks Python-dependent steps.
+
+To recover the saved Pwaninet service token without rerunning setup:
+
+```bash
+bash scripts/setup-dev.sh --show-service-token-only
+# For credentials from the isolated Docker stack:
+bash scripts/setup-dev.sh --show-service-token-only --docker
+# Or display it in the summary of a normal setup:
+bash scripts/setup-dev.sh --developer YOUR_IDENTIFIER --owner-username YOUR_ADMIN_USERNAME --show-service-token
+```
+
+This service token is the service-account DRF token, distinct from a browser
+session token and the OAuth client secret. The OAuth credential file stays at
+`~/.config/vasto-workspaces/YOUR_IDENTIFIER-local.env`. Pass that file to
+Workspaces setup, and paste the Pwaninet service token at its hidden prompt.
+Avoid sharing terminal output containing credentials.
+
+In host mode, set `DB_PORT` and `REDIS_PORT` in `.env` to change the ports
+published by Compose. Update the Redis URLs (`REDIS_URL`, `CELERY_BROKER_URL`,
+and `CELERY_RESULT_BACKEND`) to match the Redis port. PostgreSQL inside Docker
+still uses 5432; Django on the host uses your configured `DB_PORT`.
+Use `--skip-containers` for separately managed services; setup will check Redis
+but will not start a Redis container/server in that mode.
+
+After successful migrations, setup checks Redis and starts Celery worker and
+Beat in the background, reusing responsive workers and its existing scheduler.
+Logs and PID files are in `.dev-services/`. Do not start a second Beat while the
+managed scheduler runs. Stop a managed process using
+`kill "$(cat .dev-services/worker.pid)"` or the corresponding `beat.pid`.
+
+Git records executable permissions: `scripts/setup-dev.sh` is already tracked
+as executable, so normal Linux/macOS/WSL clones can use `./scripts/setup-dev.sh`.
+The `bash scripts/setup-dev.sh` form works even when a downloaded archive or
+filesystem loses those permissions. To restore direct execution, run
+`chmod +x scripts/setup-dev.sh scripts/setup-docker.sh` once. Setup uses its
+selected Python environment automatically; manual environment activation is
+not required.

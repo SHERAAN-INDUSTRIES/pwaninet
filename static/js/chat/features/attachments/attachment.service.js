@@ -3,10 +3,10 @@
  * Pure service layer, no DOM manipulation
  */
 
-import { EVENTS } from '../../shared/constants.js?v=20261011-16';
-import { eventBus } from '../../core/event-bus.js?v=20261011-16';
-import { isImageFile, isVideoFile, isAudioFile } from '../../shared/utils.js?v=20261011-16';
-import { messageService } from '../../core/message-service.js?v=20261011-16';
+import { EVENTS } from '../../shared/constants.js?v=20261106-group1';
+import { eventBus } from '../../core/event-bus.js?v=20261106-group1';
+import { isImageFile, isVideoFile, isAudioFile } from '../../shared/utils.js?v=20261106-group1';
+import { messageService } from '../../core/message-service.js?v=20261106-group1';
 
 export class AttachmentService {
   constructor() {
@@ -103,7 +103,7 @@ export class AttachmentService {
       // Save sender file locally to IndexedDB/Filesystem
       if (file && options.tempId) {
         try {
-          const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261011-16');
+          const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261106-group1');
           await deviceMediaStore.saveSenderMedia(options.tempId, file, file.name || 'attachment');
         } catch (_) {}
       }
@@ -175,7 +175,7 @@ export class AttachmentService {
         // Rekey local media store from tempId to permanent message id
         if (options.tempId && data?.id) {
           try {
-            const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261011-16');
+            const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261106-group1');
             await deviceMediaStore.rekeyMedia(options.tempId, data.id);
           } catch (_) {}
         }

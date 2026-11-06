@@ -7,7 +7,8 @@
 'use strict';
 let CACHE_VERSION = '1.6.4';
 let CACHE_BUILD = '117';
-const SW_CACHE_REVISION = '18';
+const SW_CACHE_REVISION = '20';
+importScripts('/static/js/offline-pages-worker.js');
 let CACHE_NAME = `vasto-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
 let OFFLINE_CACHE_NAME = `vasto-offline-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
 
@@ -39,9 +40,9 @@ self.addEventListener('message', (event) => {
 
 // Core assets to cache for offline functionality
 const CORE_ASSETS = [
-    '/',
     '/offline.html',
-    '/offline-media/',
+    '/static/js/offline-view.js',
+    '/static/js/offline-capture.js',
     '/static/css/bootstrap.min.css',
     '/static/css/bootstrap-icons.css',
     '/static/css/custom.css',
@@ -70,14 +71,6 @@ const CORE_ASSETS = [
     '/static/js/downloads/offline_media_viewer.js'
 ];
 
-// Page shells to cache for offline access
-const PAGE_SHELLS = [
-    '/',
-    '/offline-media/',
-    '/posts/',
-    '/users/profile/'
-];
-
 // Install event - cache core assets
 self.addEventListener('install', (event) => {
     console.log('Service Worker: Installing...');
@@ -86,7 +79,12 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('Service Worker: Caching core assets');
-                return cache.addAll(CORE_ASSETS);
+                return Promise.all(CORE_ASSETS.map(async url => {
+                    try {
+                        const response = await fetch(url);
+                        if (response.ok) await cache.put(url, response);
+                    } catch (_) { /* A missing optional icon cannot abort installation. */ }
+                }));
             })
             .then(() => {
                 console.log('Service Worker: Core assets cached, activating immediately');
@@ -289,11 +287,19 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
     
-    // Skip non-GET requests and external resources
-    if (request.method !== 'GET' || url.origin !== self.location.origin) {
+    if (url.origin !== self.location.origin) return;
+    if (/(?:\/(?:logout|switch-account|remove-account)(?:\/|$)|\/users\/accounts\/(?:switch|remove)\/)/.test(url.pathname)) {
+        event.respondWith(OfflinePages.clear().then(() => offlineFetch(request)));
         return;
     }
-    
+    if (request.method !== 'GET') {
+        event.respondWith(offlineFetch(request));
+        return;
+    }
+    if (request.mode === 'navigate') {
+        event.respondWith(OfflinePages.navigate(request));
+        return;
+    }
     // Offline Media Hub keeps its own cache-first handler (it serves HTMX
     // partials while offline), so it is exempt from the HTMX bypass below.
     const isOfflineMedia = url.pathname === '/offline-media/' ||
@@ -305,6 +311,7 @@ self.addEventListener('fetch', (event) => {
     // nothing and the user sees a dead page). Let them hit the network
     // directly so htmx sees the real failure and can fall back.
     if (!isOfflineMedia && isHtmxRequest(request)) {
+        event.respondWith(offlineFetch(request));
         return;
     }
     
@@ -354,304 +361,80 @@ async function handleRequest(request) {
 }
 
 async function handleOfflineMediaRequest(request) {
-    try {
-        const networkResponse = await fetch(request);
-        if (networkResponse && networkResponse.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
-        }
-        return networkResponse;
-    } catch (error) {
-        console.log('Service Worker: Network failed for /offline-media/, serving offline cache:', error);
-        
-        // 1. Try matching the exact request (cached partial if HTMX, or cached full document)
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) {
-            return cachedResponse;
-        }
-
-        // 2. Try matching the pre-cached page shell '/offline-media/'
-        const cachedShell = await caches.match('/offline-media/');
-        if (cachedShell) {
-            return cachedShell;
-        }
-
-        return await getOfflinePage();
-    }
+    return OfflinePages.navigate(request);
 }
 
 async function handleNavigationRequest(request) {
-    const url = new URL(request.url);
-
-    // Explicit request to view cached pages (from offline screen action button)
-    const isExplicitCacheView = url.searchParams.has('view_cache') || url.searchParams.has('cached');
-    if (isExplicitCacheView) {
-        const cleanUrl = new URL(request.url);
-        cleanUrl.searchParams.delete('view_cache');
-        cleanUrl.searchParams.delete('cached');
-        const cleanReq = new Request(cleanUrl.toString(), {
-            headers: request.headers,
-            mode: request.mode,
-            credentials: request.credentials
-        });
-
-        const cached = (await caches.match(cleanReq)) || (await caches.match(request)) || (await caches.match('/'));
-        if (cached) {
-            return cached;
-        }
-    }
-
-    try {
-        // Try network first directly
-        const networkResponse = await fetch(request);
-        
-        // Cache successful responses ONLY if NOT an HTMX request
-        const isHtmx = request.headers.get('HX-Request') === 'true';
-        if (networkResponse && networkResponse.ok && !isHtmx) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
-        }
-        
-        return networkResponse;
-        
-    } catch (error) {
-        console.log('Service Worker: Network failed for navigation request:', error);
-        
-        // When navigating to /offline-media/, always serve the offline media viewer shell if cached
-        if (url.pathname === '/offline-media/' || url.pathname.startsWith('/offline-media/')) {
-            const cachedMedia = (await caches.match('/offline-media/')) || (await caches.match(request));
-            if (cachedMedia) {
-                return cachedMedia;
-            }
-        }
-        
-        // When offline, present the offline screen with options to view cached pages or downloaded media
-        return await getOfflinePage();
-    }
+    return OfflinePages.navigate(request);
 }
 
 async function handleStaticAssetRequest(request) {
     const url = new URL(request.url);
-    
-    // For CSS files, use network first to ensure latest styles
-    if (url.pathname.includes('.css')) {
-        try {
-            const networkResponse = await fetch(request);
-            if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
-                if (networkResponse.ok) {
-                    const cache = await caches.open(CACHE_NAME);
-                    cache.put(request, networkResponse.clone());
-                }
-                return networkResponse;
-            }
-        } catch (error) {
-            console.log('Service Worker: Network failed for CSS, trying cache');
-            const cachedResponse = await caches.match(request, { ignoreSearch: true });
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-            return await getOfflineAsset(request);
-        }
-    }
-    
-    // For video files, use network first to ensure latest content
-    if (url.pathname.includes('.mp4') || url.pathname.includes('.webm') || url.pathname.includes('.mov')) {
-        try {
-            const networkResponse = await fetch(request);
-            if (networkResponse.ok) {
-                const cache = await caches.open(CACHE_NAME);
-                cache.put(request, networkResponse.clone());
-                return networkResponse;
-            }
-        } catch (error) {
-            console.log('Service Worker: Network failed for video, trying cache');
-            const cachedResponse = await caches.match(request);
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-        }
-    }
-    
-    // For profile images, use cache first with background refresh
-    if (url.pathname.includes('profile_pics') || url.pathname.includes('profile-pic')) {
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) {
-            // Return cached version immediately
-            // Then fetch fresh version in background
-            fetch(request).then(networkResponse => {
-                if (networkResponse.ok) {
-                    const cache = caches.open(CACHE_NAME);
-                    cache.then(c => c.put(request, networkResponse));
-                }
-            }).catch(() => {});
-            return cachedResponse;
-        }
-    }
-    
-    // For JS files, use network first (same policy as CSS) to ensure the
-    // latest scripts. Cache-first here shipped stale features that only
-    // lived in JS (e.g. reel keyboard shortcuts) and ?v= bumps get missed.
-    if (url.pathname.endsWith('.js')) {
-        try {
-            const networkResponse = await fetch(request);
-            if (networkResponse && (networkResponse.ok || networkResponse.status === 304)) {
-                if (networkResponse.ok) {
-                    const cache = await caches.open(CACHE_NAME);
-                    cache.put(request, networkResponse.clone());
-                }
-                return networkResponse;
-            }
-        } catch (error) {
-            console.log('Service Worker: Network failed for JS, trying cache');
-            const cachedResponse = await caches.match(request, { ignoreSearch: true });
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-            return await getOfflineAsset(request);
-        }
-    }
-
-    // Cache first for other static assets
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-        return cachedResponse;
-    }
-    
+    if (!url.pathname.startsWith('/static/')) return offlineFetch(request);
+    const cached = await caches.match(request, { ignoreSearch: true });
+    // Versioned scripts/styles revalidate; ordinary icons/fonts can reuse their copy.
+    if (cached && !/\.(?:js|css)$/.test(url.pathname)) return cached;
     try {
-        // Try network
-        const networkResponse = await fetch(request);
-        
-        // Cache successful responses
-        if (networkResponse.ok) {
+        const response = await fetch(request);
+        if (response.status >= 500 && cached) return cached;
+        if (response.ok && !/no-store/i.test(response.headers.get('Cache-Control') || '') &&
+            !/text\/html/i.test(response.headers.get('Content-Type') || '')) {
             const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
+            await cache.put(request, response.clone());
+            const keys = await cache.keys();
+            while (keys.length > 300) await cache.delete(keys.shift());
         }
-        
-        return networkResponse;
-        
-    } catch (error) {
-        console.log('Service Worker: Network failed for static asset:', request.url);
-        
-        // Return offline asset if available
-        return await getOfflineAsset(request);
+        return response;
+    } catch (_) {
+        return cached || getOfflineAsset(request);
     }
 }
 
 async function handleOfflineMediaStreamRequest(request) {
-    const url = new URL(request.url);
-    const id = url.pathname.replace('/offline-media-stream/', '').split('?')[0];
-    
-    return new Promise((resolve) => {
-        const req = indexedDB.open('vasto_downloads_v1', 1);
-        req.onerror = () => resolve(new Response('Database error', { status: 500 }));
+    const current = await OfflinePages.state();
+    if (!current.owner) return new Response('Sign in to access saved media', { status: 401 });
+    const id = decodeURIComponent(new URL(request.url).pathname.split('/')[2] || '');
+    const blob = await new Promise(resolve => {
+        const req = indexedDB.open(`vasto_offline_media_${current.owner}`, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('files', { keyPath: 'id' });
+        req.onerror = () => resolve(null);
         req.onsuccess = () => {
             const db = req.result;
-            if (!db.objectStoreNames.contains('blobs')) {
-                resolve(new Response('Store not found', { status: 404 }));
-                return;
-            }
-            const tx = db.transaction(['blobs'], 'readonly');
-            const store = tx.objectStore('blobs');
-            const getReq = store.get(id);
-
-            getReq.onerror = () => resolve(new Response('File read error', { status: 500 }));
-            getReq.onsuccess = () => {
-                const record = getReq.result;
-                if (!record || !record.blob) {
-                    resolve(new Response('Media not found offline', { status: 404 }));
-                    return;
-                }
-
-                const blob = record.blob;
-                const rangeHeader = request.headers.get('Range');
-                const contentType = blob.type || 'video/mp4';
-
-                if (rangeHeader) {
-                    const match = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
-                    if (match) {
-                        const start = parseInt(match[1], 10);
-                        const end = match[2] ? parseInt(match[2], 10) : blob.size - 1;
-                        const chunk = blob.slice(start, end + 1);
-
-                        resolve(new Response(chunk, {
-                            status: 206,
-                            statusText: 'Partial Content',
-                            headers: {
-                                'Content-Range': `bytes ${start}-${end}/${blob.size}`,
-                                'Accept-Ranges': 'bytes',
-                                'Content-Length': String(chunk.size),
-                                'Content-Type': contentType
-                            }
-                        }));
-                        return;
-                    }
-                }
-
-                resolve(new Response(blob, {
-                    status: 200,
-                    headers: {
-                        'Accept-Ranges': 'bytes',
-                        'Content-Length': String(blob.size),
-                        'Content-Type': contentType
-                    }
-                }));
-            };
+            if (!db.objectStoreNames.contains('files')) { db.close(); resolve(null); return; }
+            const tx = db.transaction('files');
+            const get = tx.objectStore('files').get(id);
+            get.onsuccess = () => resolve(get.result ? get.result.blob : null);
+            get.onerror = () => resolve(null);
+            tx.oncomplete = () => db.close();
         };
     });
+    if (!blob?.size) return new Response('Video was not saved or was removed', { status: 404 });
+    // Recheck ownership after asynchronous storage reads.
+    if ((await OfflinePages.state()).owner !== current.owner) return new Response('Account changed', { status: 403 });
+    const headers = { 'Content-Type': blob.type || 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
+    const range = request.headers.get('Range');
+    if (!range) return new Response(blob, { headers: { ...headers, 'Content-Length': String(blob.size) } });
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    let start, end;
+    if (match && (match[1] || match[2])) {
+        start = match[1] ? Number(match[1]) : Math.max(0, blob.size - Number(match[2]));
+        end = match[1] && match[2] ? Math.min(Number(match[2]), blob.size - 1) : blob.size - 1;
+    }
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= blob.size || end < start) {
+        return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${blob.size}` } });
+    }
+    const chunk = blob.slice(start, end + 1);
+    return new Response(chunk, { status: 206, headers: { ...headers,
+        'Content-Range': `bytes ${start}-${end}/${blob.size}`, 'Content-Length': String(chunk.size)
+    } });
 }
 
 async function handleApiRequest(request) {
-    try {
-        // Try network first for API requests
-        const networkResponse = await fetch(request);
-        
-        // Cache successful GET requests
-        if (networkResponse.ok && request.method === 'GET') {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
-        }
-        
-        return networkResponse;
-        
-    } catch (error) {
-        console.log('Service Worker: API request failed, trying cache');
-        
-        // Try cache for GET requests
-        if (request.method === 'GET') {
-            const cachedResponse = await caches.match(request);
-            if (cachedResponse) {
-                return cachedResponse;
-            }
-        }
-        
-        // Return offline response for API requests
-        return await getOfflineApiResponse(request);
-    }
+    try { return await offlineFetch(request); }
+    catch (_) { return getOfflineApiResponse(request); }
 }
-
 async function networkFirst(request) {
-    try {
-        const networkResponse = await fetch(request);
-        
-        // Cache successful responses ONLY if not an HTMX request
-        const isHtmx = request.headers.get('HX-Request') === 'true';
-        if (networkResponse.ok && !isHtmx) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put(request, networkResponse.clone());
-        }
-        
-        return networkResponse;
-        
-    } catch (error) {
-        console.log('Service Worker: Network failed, trying cache');
-        
-        const cachedResponse = await caches.match(request);
-        if (cachedResponse) {
-            return cachedResponse;
-        }
-        
-        throw error;
-    }
+    return offlineFetch(request);
 }
 
 async function getOfflineResponse(request) {
@@ -693,90 +476,7 @@ async function getOfflineResponse(request) {
 }
 
 async function getOfflinePage() {
-    // Always try to get the actual offline.html from cache first
-    const offlineResponse = await caches.match('/offline.html');
-    if (offlineResponse) {
-        return offlineResponse;
-    }
-    
-    // Try to fetch and cache the offline page from network
-    try {
-        const response = await fetch('/offline.html');
-        if (response.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            cache.put('/offline.html', response.clone());
-            return response;
-        }
-    } catch (error) {
-        console.log('Failed to fetch offline.html from network');
-    }
-    
-    // Minimal fallback if offline.html is not available
-    return new Response(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>vasto - Offline</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background: #f8fafc;
-                    color: #0f172a;
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    text-align: center;
-                    padding: 20px;
-                }
-                .offline-container { max-width: 400px; animation: fadeInUp 0.8s ease; }
-                .offline-title { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
-                .offline-message { font-size: 16px; color: #64748b; margin-bottom: 32px; line-height: 1.6; }
-                .retry-button {
-                    background: #2563eb;
-                    color: white;
-                    padding: 16px 24px;
-                    border-radius: 12px;
-                    font-size: 15px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    border: none;
-                    text-decoration: none;
-                    display: inline-block;
-                }
-                @keyframes fadeInUp {
-                    from { opacity: 0; transform: translateY(30px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="offline-container">
-                <h1 class="offline-title">YOU ARE OFFLINE</h1>
-                <p class="offline-message">WE WILL RECONNECT WHEN YOU HAVE INTERNET ACCESS</p>
-                <button class="retry-button" onclick="window.location.reload()">Retry</button>
-            </div>
-            <script>
-                function attemptReload() {
-                    fetch('/api/health/', { mode: 'no-cors', cache: 'no-store' })
-                        .then(() => window.location.reload())
-                        .catch(() => {});
-                }
-                window.addEventListener('online', attemptReload);
-                setInterval(() => { if (navigator.onLine) attemptReload(); }, 5000);
-            </script>
-        </body>
-        </html>
-    `, {
-        status: 200,
-        statusText: 'OK',
-        headers: {
-            'Content-Type': 'text/html'
-        }
-    });
+    return OfflinePages.offlinePage();
 }
 
 async function getOfflineAsset(request) {
@@ -925,22 +625,12 @@ async function getCacheInfo() {
 }
 
 async function clearCache() {
+    await OfflinePages.clear();
     await caches.delete(CACHE_NAME);
     await caches.delete(OFFLINE_CACHE_NAME);
 }
 
 async function cachePage(url) {
-    try {
-        const cache = await caches.open(CACHE_NAME);
-        const response = await fetch(url);
-        if (response.ok) {
-            await cache.put(url, response);
-            return true;
-        }
-    } catch (error) {
-        console.error('Failed to cache page:', error);
-    }
+    // Raw HTML may contain CSRF tokens; only SAVE_RENDERED_PAGE can persist it.
     return false;
 }
-
-console.log('Service Worker: Loaded');

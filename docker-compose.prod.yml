@@ -51,7 +51,7 @@ services:
       sh -c "mkdir -p /app/media/temp &&
              python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
-             daphne -b 0.0.0.0 -p 8000 --ping-interval 20 --ping-timeout 60 pwaninet.asgi:application"
+             uvicorn pwaninet.asgi:application --host 0.0.0.0 --port 8000"
     depends_on:
       db:
         condition: service_healthy

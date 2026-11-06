@@ -4,7 +4,7 @@
  * All mutations MUST go through explicit store methods
  */
 
-import { CONNECTION_STATE, UI_STATE, MESSAGE_STATE } from '../shared/constants.js?v=20261011-16';
+import { CONNECTION_STATE, UI_STATE, MESSAGE_STATE } from '../shared/constants.js?v=20261106-group1';
 
 // CANONICAL MESSAGE SCHEMA - All modules MUST conform to this
 export const MESSAGE_SCHEMA = {
@@ -83,6 +83,7 @@ export class Store {
         this._state.conversationId = targetConvId;
         this._state.currentUserId = Number(config.currentUserId);
         this._state.isEncrypted = config.isEncrypted || false;
+        this._state.isGroupChat = Boolean(config.isGroupChat);
         
         this._notifySubscribers();
     }
@@ -111,6 +112,7 @@ export class Store {
             conversationId: this._state.conversationId,
             currentUserId: this._state.currentUserId,
             isEncrypted: this._state.isEncrypted,
+            isGroupChat: this._state.isGroupChat,
             isInitialHistoryLoaded: Boolean(this._state.isInitialHistoryLoaded),
             messages: this._getMessagesArray(),
             messageQueue: [], // Queue handled by message service

@@ -3,9 +3,10 @@
   "appName": "Vasto",
   "webDir": "www",
   "server": {
-    "url": "https://pwaninet.app",
     "cleartext": false,
-    "errorPath": "/offline.html"
+    "allowNavigation": [
+      "pwaninet.app"
+    ]
   },
   "plugins": {
     "SplashScreen": {
@@ -28,7 +29,14 @@
       "overlaysWebView": true
     },
     "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     }
+  },
+  "android": {
+    "resolveServiceWorkerRequests": false
   }
 }

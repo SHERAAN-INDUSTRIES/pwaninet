@@ -4,9 +4,9 @@
  * ONLY for development/testing - should not be used in production
  */
 
-import { MESSAGE_STATE, isValidStateTransition } from '../shared/constants.js?v=20261011-16';
-import { store } from '../core/store.js?v=20261011-16';
-import { messageService } from '../core/message-service.js?v=20261011-16';
+import { MESSAGE_STATE, isValidStateTransition } from '../shared/constants.js?v=20261106-group1';
+import { store } from '../core/store.js?v=20261106-group1';
+import { messageService } from '../core/message-service.js?v=20261106-group1';
 
 export class MessageStateDebugger {
     constructor() {

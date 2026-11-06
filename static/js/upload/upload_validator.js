@@ -5,8 +5,8 @@
  * Returns structured validation results without UI manipulation.
  */
 
-import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261011-16';
-import { previewManager } from './preview_manager.js?v=20261011-16';
+import { uploadEvents, UploadEventNames } from './upload_events.js?v=20261106-group1';
+import { previewManager } from './preview_manager.js?v=20261106-group1';
 
 // Validation result structure
 class ValidationResult {

@@ -1,10 +1,36 @@
 """
 Signal handlers for Groups app to emit PlatformEvents for the notification engine.
 """
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from groups.models import Membership, MembershipStatus
 from notifications.events import publish_event, EventTypes, EventSources, EventActions
+
+
+@receiver(post_save, sender=Membership)
+@receiver(post_delete, sender=Membership)
+def sync_chat_membership(sender, instance, **kwargs):
+    from messaging.models import Conversation, ConversationMember
+    conversation = Conversation.objects.filter(group_id=instance.group_id).first()
+    if not conversation:
+        return
+    approved = Membership.objects.filter(
+        group_id=instance.group_id, user_id=instance.user_id,
+        status=MembershipStatus.APPROVED,
+    ).exists()
+    if approved:
+        ConversationMember.objects.get_or_create(conversation=conversation, user_id=instance.user_id)
+    else:
+        ConversationMember.objects.filter(conversation=conversation, user_id=instance.user_id).delete()
+
+
+from groups.models import Group
+
+
+@receiver(post_save, sender=Group)
+def sync_chat_name(sender, instance, **kwargs):
+    from messaging.models import Conversation
+    Conversation.objects.filter(group_id=instance.pk).update(name=instance.name)
 
 
 @receiver(post_save, sender=Membership)

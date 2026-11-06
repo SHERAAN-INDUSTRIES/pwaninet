@@ -50,6 +50,11 @@ import ee.forgr.capacitor.social.login.ModifiedMainActivityForSocialLoginPlugin;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.WebViewListener;
+import com.getcapacitor.JSExport;
+import com.getcapacitor.PluginHandle;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import java.util.Collections;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -746,6 +751,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         applySystemBarTheme(!isSystemNight);
 
         setupAndroidBridge();
+        setupHostedCapacitor();
         setupNotificationChannels();
         setupSafeAreaInsets();
         setupNetworkMonitoring();
@@ -891,18 +897,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
                 new ConnectivityManager.NetworkCallback() {
                     @Override
                     public void onAvailable(Network network) {
-                        boolean wasOffline = !isNetworkAvailable;
                         isNetworkAvailable = true;
-                        runOnUiThread(() -> {
-                            // Only reload if showing the offline fallback error page and not actively viewing offline media
-                            String currentUrl = (getBridge() != null && getBridge().getWebView() != null) ? getBridge().getWebView().getUrl() : null;
-                            boolean isViewingOfflineMedia = currentUrl != null && currentUrl.contains("/offline-media");
-
-                            if (isOfflinePageShowing && !isViewingOfflineMedia && getBridge() != null && getBridge().getWebView() != null) {
-                                isOfflinePageShowing = false;
-                                getBridge().getWebView().loadUrl("https://pwaninet.app");
-                            }
-                        });
                     }
 
                     @Override
@@ -935,24 +930,69 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     }
 
     private boolean isInternalHost(String host) {
-        if (host == null) return true;
-        host = host.toLowerCase(Locale.US);
+        return "pwaninet.app".equalsIgnoreCase(host) || "localhost".equalsIgnoreCase(host);
+    }
 
-        if (getBridge() != null && getBridge().getServerUrl() != null) {
-            try {
-                Uri serverUri = Uri.parse(getBridge().getServerUrl());
-                if (serverUri != null && serverUri.getHost() != null && host.equalsIgnoreCase(serverUri.getHost())) {
-                    return true;
-                }
-            } catch (Exception ignored) {}
+    private boolean isDebugServerOrigin(Uri uri) {
+        if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0 ||
+                getBridge() == null || getBridge().getServerUrl() == null) return false;
+        Uri server = Uri.parse(getBridge().getServerUrl());
+        return uri != null && uri.getUserInfo() == null && server.getScheme() != null &&
+            server.getScheme().equalsIgnoreCase(uri.getScheme()) && server.getHost() != null &&
+            server.getHost().equalsIgnoreCase(uri.getHost()) && server.getPort() == uri.getPort();
+    }
+
+    private void setupHostedCapacitor() {
+        // Moving startup local must not remove native sign-in/camera/downloads
+        // from the existing trusted hosted interface. No wildcard origins.
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        try {
+            ArrayList<PluginHandle> plugins = new ArrayList<>();
+            for (String id : new String[] { "App", "Camera", "Filesystem", "PushNotifications",
+                    "Share", "StatusBar", "SocialLogin", "NavigationBar", "Haptics",
+                    "UploadManager", "AppUpdater", "WebView", "CapacitorHttp", "CapacitorCookies" }) {
+                PluginHandle plugin = getBridge().getPlugin(id);
+                if (plugin != null) plugins.add(plugin);
+            }
+            String script = JSExport.getGlobalJS(this, getBridge().getConfig().isLoggingEnabled(), getBridge().isDevMode())
+                + "\nwindow.WEBVIEW_SERVER_URL=" + JSONObject.quote(getBridge().getLocalUrl()) + ";\n"
+                + JSExport.getBridgeJS(this) + "\n" + JSExport.getPluginJS(plugins);
+            WebViewCompat.addDocumentStartJavaScript(getBridge().getWebView(), script,
+                Collections.singleton("https://pwaninet.app"));
+            String debugServer = getBridge().getServerUrl();
+            if (debugServer != null && isDebugServerOrigin(Uri.parse(debugServer))) {
+                Uri origin = Uri.parse(debugServer).buildUpon().path(null).clearQuery().fragment(null).build();
+                WebViewCompat.addDocumentStartJavaScript(getBridge().getWebView(), script,
+                    Collections.singleton(origin.toString()));
+            }
+        } catch (Exception error) {
+            Log.e("VastoOffline", "Could not initialize hosted native plugins", error);
         }
+    }
 
-        return host.equals("pwaninet.app") ||
-               host.endsWith(".pwaninet.app") ||
-               host.equals("localhost") ||
-               host.equals("127.0.0.1") ||
-               host.equals("10.0.2.2") ||
-               host.startsWith("192.168.");
+    private void updateLaunchState(WebView webView) {
+        Uri url = Uri.parse(webView.getUrl() == null ? "" : webView.getUrl());
+        android.content.SharedPreferences prefs = getSharedPreferences("offline-launch", MODE_PRIVATE);
+        if ("localhost".equals(url.getHost())) {
+            try {
+                JSONObject state = new JSONObject();
+                state.put("returning", prefs.getBoolean("returning", false));
+                state.put("signedOut", prefs.getBoolean("signedOut", false));
+                state.put("route", prefs.getString("route", "/"));
+                webView.evaluateJavascript("window.showVastoLaunchState && window.showVastoLaunchState(" + state + ")", null);
+                isPageReady = true;
+            } catch (Exception ignored) {}
+        } else if ("pwaninet.app".equals(url.getHost())) {
+            final String route = url.getEncodedPath() + (url.getEncodedQuery() == null ? "" : "?" + url.getEncodedQuery());
+            webView.evaluateJavascript("Boolean(document.body && document.body.classList.contains('auth-entry-page') && !document.body.dataset.userId)", value -> {
+                if ("true".equals(value)) prefs.edit().putBoolean("returning", false)
+                    .putBoolean("signedOut", true).remove("route").apply();
+            });
+            webView.evaluateJavascript("Boolean(document.body && document.body.dataset.userId)", value -> {
+                if ("true".equals(value)) prefs.edit().putBoolean("returning", true)
+                    .putBoolean("signedOut", false).putString("route", route).apply();
+            });
+        }
     }
 
     private boolean handleExternalUri(Uri uri) {
@@ -980,8 +1020,9 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         }
 
         // For http/https, if host is external, launch via native Intent
+        if (isDebugServerOrigin(uri)) return false;
         String host = uri.getHost();
-        if (host != null && !isInternalHost(host)) {
+        if (host != null && (!isInternalHost(host) || !scheme.equals("https"))) {
             openExternalUrl(uri.toString());
             return true;
         }
@@ -993,8 +1034,22 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         if (getBridge() != null) {
             getBridge().setWebViewClient(new BridgeWebViewClient(getBridge()) {
                 @Override
+                public android.webkit.WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    // Hosted requests belong to Chromium (cookies, service worker,
+                    // response policies), not Capacitor's native HTML proxy.
+                    if (("pwaninet.app".equals(request.getUrl().getHost()) || isDebugServerOrigin(request.getUrl())) &&
+                        !request.getUrl().getPath().startsWith("/_capacitor_")) return null;
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
                 public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                     if (request != null && request.getUrl() != null) {
+                        String path = request.getUrl().getPath();
+                        if (path != null && (path.contains("/logout/") || (path.contains("/switch-account/") || path.contains("/users/accounts/switch/") || path.contains("/users/accounts/remove/")))) {
+                            getSharedPreferences("offline-launch", MODE_PRIVATE).edit()
+                                .putBoolean("returning", false).putBoolean("signedOut", true).remove("route").apply();
+                        }
                         if (handleExternalUri(request.getUrl())) {
                             return true;
                         }
@@ -1027,21 +1082,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
                             !isNetworkAvailable) {
                             isPageReady = true;
                             isOfflinePageShowing = true;
-                            loadOfflinePage(view);
+                            loadOfflinePage(view, request.getUrl().toString());
                         }
-                    }
-                }
-
-                @Override
-                public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                    super.onReceivedError(view, errorCode, description, failingUrl);
-                    if (errorCode == WebViewClient.ERROR_HOST_LOOKUP ||
-                        errorCode == WebViewClient.ERROR_CONNECT ||
-                        errorCode == WebViewClient.ERROR_TIMEOUT ||
-                        !isNetworkAvailable) {
-                        isPageReady = true;
-                        isOfflinePageShowing = true;
-                        loadOfflinePage(view);
                     }
                 }
             });
@@ -1053,6 +1095,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
                     // (remote CSS/fonts pending). Web signals readiness via
                     // AndroidBridge.notifyPageReady(); watchdog covers failure.
                     isOfflinePageShowing = false;
+                    updateLaunchState(webView);
                     setupAndroidBridge();
                     injectSafeAreaInsets();
                     syncSystemBarThemeFromDom();
@@ -1394,8 +1437,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
             webView.getSettings().setDomStorageEnabled(true);
             webView.getSettings().setDatabaseEnabled(true);
             
-            // Enable more aggressive caching - use cache when network is unavailable
-            webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_CACHE_ELSE_NETWORK);
+            // HTTP policy stays intact; the service worker owns explicit saved copies.
+            webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
             
             // Enable hardware acceleration for better performance
             webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
@@ -1404,30 +1447,21 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         }
     }
 
-    private void loadOfflinePage(WebView webView) {
+    private void loadOfflinePage(WebView webView, String failedUrl) {
         isOfflinePageShowing = true;
-        try {
-            // Load the offline.html file from assets
-            InputStream inputStream = getAssets().open("public/offline.html");
-            StringBuilder htmlBuilder = new StringBuilder();
-            
-            byte[] buffer = new byte[1024];
-            int length;
-            while ((length = inputStream.read(buffer)) != -1) {
-                htmlBuilder.append(new String(buffer, 0, length));
-            }
-            inputStream.close();
-            
-            webView.loadDataWithBaseURL("file:///android_asset/public/", 
-                htmlBuilder.toString(), "text/html", "UTF-8", null);
-        } catch (IOException e) {
-            e.printStackTrace();
-            // Fallback to simple error message if offline.html fails to load
-            String fallbackHtml = "<html><body style='display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;text-align:center;'>" +
-                "<div><h1>YOU ARE OFFLINE</h1><p>WE WILL RECONNECT WHEN YOU HAVE INTERNET ACCESS</p>" +
-                "<button onclick='location.reload()'>Retry</button></div></body></html>";
-            webView.loadData(fallbackHtml, "text/html", "UTF-8");
+        if (isDebugServerOrigin(Uri.parse(failedUrl))) {
+            String retry = android.text.TextUtils.htmlEncode(getBridge().getServerUrl());
+            webView.loadDataWithBaseURL(getBridge().getServerUrl(),
+                "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'>" +
+                "<body style='font:18px system-ui;padding:24px;background:#f5f7fb;color:#17233b'>" +
+                "<h1>Vasto</h1><p>The local development server could not be reached. " +
+                "Start Django and restore the USB tunnel, then try again.</p><a href='" + retry +
+                "'>Retry connection</a></body>", "text/html", "UTF-8", null);
+            return;
         }
+        Uri failed = Uri.parse(failedUrl);
+        String route = failed.getEncodedPath() + (failed.getEncodedQuery() == null ? "" : "?" + failed.getEncodedQuery());
+        webView.loadUrl("https://localhost/index.html?route=" + Uri.encode(route));
     }
 
     private Vibrator getVibratorService() {

@@ -94,7 +94,14 @@
     }
 
     function getCsrfToken() {
-        var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+        var metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag && metaTag.getAttribute('content')) {
+            var val = metaTag.getAttribute('content').trim();
+            if (val && val.indexOf('{{') === -1) return val;
+        }
+        var formField = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (formField && formField.value) return formField.value;
+        var match = document.cookie.match(/(?:^|;\s*)(?:csrftoken|pwaninet_local_csrftoken|vasto_local_csrftoken)=([^;]*)/);
         return match ? decodeURIComponent(match[1]) : '';
     }
 

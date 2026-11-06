@@ -5,8 +5,8 @@
  * and clean fallback to prevent browser origin errors.
  */
 
-import { EVENTS } from '../../shared/constants.js?v=20261011-16';
-import { eventBus } from '../../core/event-bus.js?v=20261011-16';
+import { EVENTS } from '../../shared/constants.js?v=20261106-group1';
+import { eventBus } from '../../core/event-bus.js?v=20261106-group1';
 
 export class VoiceService {
   constructor() {
@@ -575,7 +575,7 @@ export class VoiceService {
     const recordingDuration = this.duration || 0;
     let localUrl = '';
     try {
-      const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261011-16');
+      const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261106-group1');
       localUrl = await deviceMediaStore.saveSenderMedia(tempId, recordingBlob, filename);
     } catch (saveErr) {
       console.warn('[VOICE_SERVICE] Failed to save sender voice note locally:', saveErr);
@@ -619,7 +619,7 @@ export class VoiceService {
     eventBus.emit(EVENTS.MESSAGE_OPTIMISTIC_ADD, optMsg);
 
     try {
-      const { attachmentService } = await import('../attachments/attachment.service.js?v=20261011-16');
+      const { attachmentService } = await import('../attachments/attachment.service.js?v=20261106-group1');
       const uploadedMsg = await attachmentService.handleFileUpload(file, conversationId, {
         isVoiceNote: true,
         tempId,
@@ -627,7 +627,7 @@ export class VoiceService {
       });
       if (uploadedMsg?.id && recordingBlob) {
         try {
-          const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261011-16');
+          const { deviceMediaStore } = await import('../../core/device-media-store.js?v=20261106-group1');
           await deviceMediaStore.saveSenderMedia(uploadedMsg.id, recordingBlob, filename);
         } catch (_) {}
       }

@@ -4,8 +4,8 @@
  * Single source of truth for all status UI rendering
  */
 
-import { MESSAGE_STATE, SHOW_QUEUE_ICON_AFTER_MS } from './constants.js?v=20261011-16';
-import { networkHealthTracker } from './network-health-tracker.js?v=20261011-16';
+import { MESSAGE_STATE, SHOW_QUEUE_ICON_AFTER_MS } from './constants.js?v=20261106-group1';
+import { networkHealthTracker } from './network-health-tracker.js?v=20261106-group1';
 
 export class MessageStatusRenderer {
     /**

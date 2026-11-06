@@ -1,0 +1,26 @@
+{
+  "passed": [
+    "eligible rendered page saved under account 1",
+    "rendered pagination persisted after DOM update",
+    "MP4 bytes and metadata committed before ready state",
+    "CSRF values, original scripts and duplicate post IDs excluded",
+    "offline navigation restores all loaded posts in order",
+    "saved MP4 plays and seeks offline; byte range/416 checks pass",
+    "visited Pwanimate conversation opens offline",
+    "saved route history/back navigation works",
+    "unvisited route renders inline offline state",
+    "message transactions commit in order and group/direct IDs stay isolated",
+    "conversation opens offline with current and older loaded messages",
+    "saved conversation automatically resumes online and receives new messages",
+    "notification history and loaded pagination open offline",
+    "saved notifications automatically refresh when online",
+    "late pre-switch response cannot restore the previous account",
+    "account switch purges account 1 snapshots and message databases",
+    "logout prevents reopening prior managed pages",
+    "successful feed refresh retains authorized earlier pages",
+    "server 503 refresh preserves last good content",
+    "interrupted download never creates ready media metadata",
+    "release config starts from bundled assets"
+  ],
+  "page_errors": []
+}

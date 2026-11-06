@@ -5,11 +5,11 @@
  * Coordinates all messaging services for scalability and maintainability.
  */
 
-import MessageQueueService from './message-queue-service.js?v=20261011-16';
-import ReconnectionSyncEngine from './reconnection-sync-engine.js?v=20261011-16';
-import AudioRecordingService from './audio-recording-service.js?v=20261011-16';
-import connectionManager from './connection-manager.js?v=20261011-16';
-import { messageSoundManager } from '../../chat/shared/message-sound.js?v=20261011-16';
+import MessageQueueService from './message-queue-service.js?v=20261106-group1';
+import ReconnectionSyncEngine from './reconnection-sync-engine.js?v=20261106-group1';
+import AudioRecordingService from './audio-recording-service.js?v=20261106-group1';
+import connectionManager from './connection-manager.js?v=20261106-group1';
+import { messageSoundManager } from '../../chat/shared/message-sound.js?v=20261106-group1';
 
 class MessagingOrchestrator {
     constructor() {

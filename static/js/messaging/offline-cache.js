@@ -5,23 +5,39 @@
 
 class OfflineCache {
     constructor() {
-        this.dbName = 'vasto_chat';
+        this.owner = String(window.vastoUserId || document.body?.dataset.userId || '');
+        this.dbName = '';
+        this.initializing = null;
+        this.databases = new Map();
+        this.pendingDatabases = new Map();
+        this.blocked = false;
+        navigator.serviceWorker?.addEventListener('message', event => {
+            if (event.data?.type === 'PRIVATE_OFFLINE_INVALIDATED' && event.data.owner !== this.owner) {
+                this.blocked = true; this.databases.forEach(db => db.close()); this.databases.clear(); this.db = null;
+            }
+        });
         this.dbVersion = 1;
         this.db = null;
     }
 
-    async init() {
+    async init(scope = window.IS_GROUP_CHAT ? 'group' : 'direct') {
+        if (!this.owner || this.blocked) throw new Error('Sign in to access saved messages');
+        const name = `vasto_chat_v2_${this.owner}_${scope}`;
+        if (this.databases.has(name)) { this.dbName = name; this.db = this.databases.get(name); return this.db; }
+        if (!this.pendingDatabases.has(name)) this.pendingDatabases.set(name, this.openDatabase(name));
         try {
-            this.db = await this.openDatabase();
-            console.log('Offline cache initialized successfully');
-        } catch (error) {
-            console.error('Failed to initialize offline cache:', error);
-        }
+            const db = await this.pendingDatabases.get(name);
+            if (this.blocked) { db.close(); throw new Error('Account changed'); }
+            this.databases.set(name, db);
+            this.dbName = name; this.db = db;
+            db.onversionchange = () => { db.close(); this.databases.delete(name); if (this.db === db) this.db = null; };
+            return db;
+        } finally { this.pendingDatabases.delete(name); }
     }
 
-    async openDatabase() {
+    async openDatabase(name) {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.dbVersion);
+            const request = indexedDB.open(name, this.dbVersion);
 
             request.onerror = () => reject(request.error);
             request.onsuccess = () => resolve(request.result);
@@ -59,6 +75,7 @@ class OfflineCache {
 
     // CONVERSATIONS
     async saveConversation(conversation) {
+        await this.init();
         if (!this.db) return;
         
         const transaction = this.db.transaction(['conversations'], 'readwrite');
@@ -71,6 +88,7 @@ class OfflineCache {
     }
 
     async saveConversations(conversations) {
+        await this.init();
         if (!this.db || !conversations || !conversations.length) return;
         
         const transaction = this.db.transaction(['conversations'], 'readwrite');
@@ -86,6 +104,7 @@ class OfflineCache {
                     is_pinned: item.is_pinned || false,
                     last_msg_time: conv.last_msg_time || null,
                     preview: item.preview || null,
+                    updated_at: conv.updated_at || conv.last_msg_time || new Date().toISOString(),
                     cached_at: new Date().toISOString()
                 };
                 store.put(dataToSave);
@@ -96,6 +115,7 @@ class OfflineCache {
     }
 
     async getConversations(limit = 50) {
+        await this.init();
         if (!this.db) return [];
         
         const transaction = this.db.transaction(['conversations'], 'readonly');
@@ -121,6 +141,7 @@ class OfflineCache {
     }
 
     async getConversation(conversationId) {
+        await this.init();
         if (!this.db) return null;
         
         const transaction = this.db.transaction(['conversations'], 'readonly');
@@ -135,76 +156,76 @@ class OfflineCache {
 
     // MESSAGES
     async saveMessage(message) {
-        if (!this.db) return;
-        
-        const transaction = this.db.transaction(['messages'], 'readwrite');
-        const store = transaction.objectStore('messages');
-        
-        // Add cache timestamp
-        message.cached_at = new Date().toISOString();
-        if (!message.conversation_id && message.conversation) {
-            message.conversation_id = message.conversation;
-        }
-        if (typeof message.conversation_id === 'string' && !isNaN(Number(message.conversation_id))) {
-            message.conversation_id = Number(message.conversation_id);
-        }
-        
-        return store.put(message);
+        return this.saveMessages([message]);
     }
 
     async saveMessages(messages) {
-        if (!this.db || !messages.length) return;
-        
-        const transaction = this.db.transaction(['messages'], 'readwrite');
-        const store = transaction.objectStore('messages');
-        
-        for (const message of messages) {
-            message.cached_at = new Date().toISOString();
-            if (!message.conversation_id && message.conversation) {
-                message.conversation_id = message.conversation;
+        const scope = messages?.[0]?.group != null ? 'group' : messages?.[0]?.conversation != null ? 'direct' : window.IS_GROUP_CHAT ? 'group' : 'direct';
+        const db = await this.init(scope);
+        if (!messages?.length) return;
+        const now = new Date().toISOString();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('messages', 'readwrite');
+            const store = tx.objectStore('messages');
+            for (const original of messages) {
+                if (!original.id || !/^\d+$/.test(String(original.id))) continue;
+                const message = { ...original, cached_at: now };
+                if (message.is_deleted) { message.content = ''; message.encrypted_content = ''; message.attachments = []; message.attachment_url = null; }
+                message.conversation_id = Number(message.conversation_id ?? message.conversation ?? message.conversationId ?? message.group);
+                if (!Number.isFinite(message.conversation_id)) continue;
+                store.put(message);
             }
-            if (typeof message.conversation_id === 'string' && !isNaN(Number(message.conversation_id))) {
-                message.conversation_id = Number(message.conversation_id);
-            }
-            store.put(message);
-        }
-        
-        return transaction.complete;
+            tx.oncomplete = resolve;
+            tx.onerror = tx.onabort = () => reject(tx.error || new Error('Message cache interrupted'));
+        });
+        await this.pruneMessages(db);
     }
 
-    async getMessages(conversationId, limit = 100, offset = 0) {
-        if (!this.db) return [];
-        
-        const targetId = (!isNaN(Number(conversationId))) ? Number(conversationId) : conversationId;
-        const transaction = this.db.transaction(['messages'], 'readonly');
-        const store = transaction.objectStore('messages');
-        const index = store.index('conversation_id');
-        
-        return new Promise((resolve, reject) => {
-            const request = index.openCursor(IDBKeyRange.only(targetId), 'prev');
-            const results = [];
-            let skipped = 0;
-            
-            request.onsuccess = (event) => {
-                const cursor = event.target.result;
-                if (cursor && results.length < limit) {
-                    if (skipped < offset) {
-                        skipped++;
-                        cursor.continue();
-                    } else {
-                        results.push(cursor.value);
-                        cursor.continue();
-                    }
-                } else {
-                    resolve(results.reverse()); // Reverse to show oldest first
-                }
+    async pruneMessages(db) {
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('messages', 'readwrite');
+            const store = tx.objectStore('messages');
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const records = request.result.sort((a, b) => new Date(b.created_at || b.cached_at) - new Date(a.created_at || a.cached_at));
+                let bytes = 0;
+                const counts = new Map();
+                records.forEach((item, index) => {
+                    bytes += JSON.stringify(item).length * 2;
+                    const count = (counts.get(item.conversation_id) || 0) + 1;
+                    counts.set(item.conversation_id, count);
+                    if (index >= 10000 || bytes > 30 * 1024 * 1024 || count > 1000 || Date.now() - new Date(item.cached_at).getTime() > 30 * 86400000) store.delete(item.id);
+                });
             };
-            
-            request.onerror = () => reject(request.error);
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error);
+        });
+    }
+
+    async getMessages(conversationId, limit = 1000, offset = 0) {
+        const db = await this.init();
+        return new Promise((resolve, reject) => {
+            const req = db.transaction('messages').objectStore('messages').index('conversation_id').getAll(Number(conversationId));
+            req.onsuccess = () => {
+                const records = req.result.filter(item => Date.now() - new Date(item.cached_at).getTime() <= 30 * 86400000)
+                    .sort((a, b) => new Date(a.created_at || a.timestamp) - new Date(b.created_at || b.timestamp) || Number(a.id) - Number(b.id));
+                resolve(records.slice(Math.max(0, records.length - offset - Math.min(limit, 1000)), offset ? -offset : undefined));
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async deleteMessages(ids) {
+        const db = await this.init();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('messages', 'readwrite');
+            ids.forEach(id => tx.objectStore('messages').delete(id));
+            tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
         });
     }
 
     async getMessage(messageId) {
+        await this.init();
         if (!this.db) return null;
         
         const transaction = this.db.transaction(['messages'], 'readonly');
@@ -219,6 +240,7 @@ class OfflineCache {
 
     // OUTBOX (pending messages)
     async saveToOutbox(message) {
+        await this.init();
         if (!this.db) return;
         
         const transaction = this.db.transaction(['outbox'], 'readwrite');
@@ -234,6 +256,7 @@ class OfflineCache {
     }
 
     async getOutboxMessages(conversationId = null) {
+        await this.init();
         if (!this.db) return [];
         
         const transaction = this.db.transaction(['outbox'], 'readonly');
@@ -265,6 +288,7 @@ class OfflineCache {
     }
 
     async removeFromOutbox(outboxId) {
+        await this.init();
         if (!this.db) return;
         
         const transaction = this.db.transaction(['outbox'], 'readwrite');
@@ -279,6 +303,7 @@ class OfflineCache {
 
     // USERS
     async saveUser(user) {
+        await this.init();
         if (!this.db) return;
         
         const transaction = this.db.transaction(['users'], 'readwrite');
@@ -290,6 +315,7 @@ class OfflineCache {
     }
 
     async getUser(userId) {
+        await this.init();
         if (!this.db) return null;
         
         const transaction = this.db.transaction(['users'], 'readonly');
@@ -304,6 +330,7 @@ class OfflineCache {
 
     // UTILITY
     async clearCache() {
+        await this.init();
         if (!this.db) return;
         
         const stores = ['conversations', 'messages', 'outbox', 'users'];
@@ -318,6 +345,7 @@ class OfflineCache {
     }
 
     async getCacheSize() {
+        await this.init();
         if (!this.db) return 0;
         
         let totalSize = 0;

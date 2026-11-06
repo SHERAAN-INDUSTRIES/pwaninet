@@ -46,6 +46,7 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.activity:activity:$androidxActivityVersion"
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.work:work-runtime:$workRuntimeVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"

@@ -489,6 +489,12 @@ class ChatNotificationService:
 
             blocked_ids = cls.get_blocked_user_ids(sender_id)
             members = list(conversation.members.all())
+            if conversation.group_id:
+                from groups.models import Membership, MembershipStatus
+                approved = set(Membership.objects.filter(
+                    group_id=conversation.group_id, status=MembershipStatus.APPROVED,
+                ).values_list('user_id', flat=True))
+                members = [member for member in members if member.user_id in approved]
 
             # Identify peer user for 1:1 conversations (so sender's sidebar row has peer name/avatar)
             peer_member = next((m for m in members if m.user_id != sender_id), None)

@@ -1374,30 +1374,6 @@ def group_batch_attachment_upload(request):
 
 
 @login_required
-def group_chat_view(request, group_id):
-    """Web view for group chat"""
-    group = get_object_or_404(
-        Group.objects.annotate(member_count=Count('memberships', filter=Q(memberships__status=MembershipStatus.APPROVED))),
-        id=group_id
-    )
-
-    # Check if user is a member
-    if not Membership.objects.filter(
-        user=request.user,
-        group=group,
-        status=MembershipStatus.APPROVED
-    ).exists():
-        messages.error(request, 'You must be a member of this group to access the chat.')
-        return redirect('groups:groups_detail', group_id=group_id)
-
-    context = {
-        'group': group,
-        'unread_notifications_count': get_cached_unread_count(request.user),
-    }
-    return render(request, 'groups/group_chat.html', context)
-
-
-@login_required
 @require_http_methods(["POST"])
 @transaction.atomic
 def toggle_group_membership(request, group_id):
@@ -2068,25 +2044,16 @@ def group_settings_view(request, group_id):
 
 @login_required
 def group_chat_view(request, group_id):
-    """View group chat page"""
-    group = get_object_or_404(Group, id=group_id)
-
-    # Check if user is a member
-    try:
-        membership = Membership.objects.get(
-            user=request.user,
-            group=group,
-            status=MembershipStatus.APPROVED
-        )
-    except Membership.DoesNotExist:
-        messages.error(request, 'You must be a member to access group chat.')
-        return redirect('groups:groups_detail', group_id=group.id)
-
-    context = {
-        'group': group,
-    }
-
-    return render(request, 'groups/group_chat.html', context)
+    """Open the group's canonical conversation in the shared messaging UI."""
+    from groups.services.chat_service import open_group_chat
+    group = get_object_or_404(Group, pk=group_id)
+    conversation = open_group_chat(group.pk, request.user)
+    url = reverse('messaging:conversation_detail', args=[conversation.pk])
+    if request.headers.get('HX-Request'):
+        response = HttpResponse(status=200)
+        response['HX-Redirect'] = url
+        return response
+    return redirect(url)
 
 
 @login_required
@@ -2604,3 +2571,9 @@ def mark_announcement_read_api(request, announcement_id):
         'group_id': announcement.group_id
     })
 
+
+
+@login_required
+def retired_group_chat_api(request, **kwargs):
+    """Legacy message IDs must never be interpreted as shared Message IDs."""
+    return JsonResponse({'error': 'This endpoint has moved. Open the group Chat link to use messaging.'}, status=410)

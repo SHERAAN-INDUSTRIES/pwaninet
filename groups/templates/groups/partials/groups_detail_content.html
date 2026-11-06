@@ -768,6 +768,10 @@
 
         {% if is_member %}
           <div class="d-grid gap-2 px-2">
+            <a href="{% if group.chat_conversation %}{% url 'messaging:conversation_detail' group.chat_conversation.id %}{% else %}{% url 'groups:group_chat' group.id %}{% endif %}"
+               class="btn btn-outline-primary rounded-pill fw-bold btn-sm profile-action-btn" hx-boost="false">
+              <i class="bi bi-chat-dots-fill me-1"></i> Chat
+            </a>
             <a href="{% url 'groups:group_announcements' group.id %}"
                class="btn btn-outline-secondary rounded-pill fw-bold btn-sm profile-action-btn"
                hx-get="{% url 'groups:group_announcements' group.id %}"

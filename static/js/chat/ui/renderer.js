@@ -4,12 +4,12 @@
  * Pure DOM manipulation based on provided data
  */
 
-import { formatDateLabel, formatTime, formatPreciseTime, escapeHtml } from '../shared/utils.js?v=20261011-16';
-import { renderMessageStatus } from '../shared/message-status-renderer.js?v=20261011-16';
-import { linkPreviewRenderer } from '../features/link-preview/link-preview-renderer.js?v=20261011-16';
-import { EVENTS } from '../shared/constants.js?v=20261011-16';
-import { eventBus } from '../core/event-bus.js?v=20261011-16';
-import { deviceMediaStore } from '../core/device-media-store.js?v=20261011-16';
+import { formatDateLabel, formatTime, formatPreciseTime, escapeHtml } from '../shared/utils.js?v=20261106-group1';
+import { renderMessageStatus } from '../shared/message-status-renderer.js?v=20261106-group1';
+import { linkPreviewRenderer } from '../features/link-preview/link-preview-renderer.js?v=20261106-group1';
+import { EVENTS } from '../shared/constants.js?v=20261106-group1';
+import { eventBus } from '../core/event-bus.js?v=20261106-group1';
+import { deviceMediaStore } from '../core/device-media-store.js?v=20261106-group1';
 
 export class MessageRenderer {
     constructor() {
@@ -1063,6 +1063,7 @@ export class MessageRenderer {
      * @param {Array} messages - Messages array from store (canonical schema)
      */
     render(messages) {
+        this.senderProfiles = new Map(messages.map(message => [Number(message.senderId), message.metadata?.sender || {}]));
         console.log("[RENDERER] RENDER CALLED - messages count:", messages?.length);
         
         if (this.isRendering) {
@@ -1372,6 +1373,7 @@ export class MessageRenderer {
      */
     _updateExistingMessageElement(wrapperEl, message) {
         if (!wrapperEl || !message) return wrapperEl;
+        this._decorateGroupSender(wrapperEl, message);
 
         // If message was deleted, replace with deleted tombstone
         if (message.isDeleted) {
@@ -1938,6 +1940,25 @@ export class MessageRenderer {
      * @returns {HTMLElement} Message element
      */
     _createMessageElement(message) {
+        const element = this._createMessageBody(message);
+        this._decorateGroupSender(element, message);
+        return element;
+    }
+
+    _decorateGroupSender(element, message) {
+        if (document.querySelector('.chat-container')?.dataset.conversationType !== 'group' || message.isOwn) return;
+        const target = element.querySelector('.message-content-wrapper') || element;
+        let label = target.querySelector('.group-message-sender');
+        if (!label) {
+            label = document.createElement('div');
+            label.className = 'group-message-sender small fw-bold text-primary mb-1';
+            target.prepend(label);
+        }
+        const sender = message.metadata?.sender || {};
+        label.textContent = [sender.first_name, sender.last_name].filter(Boolean).join(' ') || sender.username || 'Member';
+    }
+
+    _createMessageBody(message) {
         // DEBUG: Log message type detection
         console.log('[RENDERER] Creating message element. ID:', message.id, 'Type:', message.type, 'Metadata:', message.metadata);
 
@@ -4441,6 +4462,10 @@ export class MessageRenderer {
      * @returns {string} Avatar URL
      */
     _getSenderAvatar(senderId) {
+        if (document.querySelector('.chat-container')?.dataset.conversationType === 'group') {
+            const sender = this.senderProfiles?.get(Number(senderId)) || {};
+            return sender.profile_pic_url || sender.profile_pic || '/static/images/default_pic1.jpg';
+        }
         // Try to get avatar from dataset (set by template)
         const receiverAvatar = document.body.dataset.receiverAvatar;
         if (receiverAvatar && receiverAvatar !== 'undefined' && receiverAvatar !== 'null') {

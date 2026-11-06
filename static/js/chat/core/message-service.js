@@ -4,12 +4,12 @@
  * NO direct state mutations, NO UI updates, NO business logic
  */
 
-import { store } from './store.js?v=20261011-16';
-import { webSocketManager } from './websocket.js?v=20261011-16';
-import { eventBus } from './event-bus.js?v=20261011-16';
-import { getCSRFToken } from '../shared/utils.js?v=20261011-16';
-import { EVENTS, MESSAGE_STATE, CONNECTION_STATE, isValidStateTransition } from '../shared/constants.js?v=20261011-16';
-import { messageSoundManager } from '../shared/message-sound.js?v=20261011-16';
+import { store } from './store.js?v=20261106-group1';
+import { webSocketManager } from './websocket.js?v=20261106-group1';
+import { eventBus } from './event-bus.js?v=20261106-group1';
+import { getCSRFToken } from '../shared/utils.js?v=20261106-group1';
+import { EVENTS, MESSAGE_STATE, CONNECTION_STATE, isValidStateTransition } from '../shared/constants.js?v=20261106-group1';
+import { messageSoundManager } from '../shared/message-sound.js?v=20261106-group1';
 
 export class MessageService {
     constructor() {
@@ -372,6 +372,7 @@ export class MessageService {
         }
         const isFwd = Boolean(raw.is_forwarded || raw.isForwarded || metadata.is_forwarded);
         
+        metadata.sender = raw.sender || {};
         return this._createCanonicalMessage({
             id: String(raw.id),
             conversationId: Number(raw.conversation_id ?? raw.conversation ?? raw.conversationId ?? 0),
@@ -390,6 +391,27 @@ export class MessageService {
             replyToDetails: raw.reply_to_details || null,
             sortOrder: new Date(raw.created_at || raw.timestamp || Date.now()).getTime()
         });
+    }
+
+    async restoreSavedHistory(conversationId) {
+        // Both direct and group chats use globally unique Conversation IDs.
+        if (!window.offlineCache) return;
+        try {
+            const cached = await window.offlineCache.getMessages(conversationId, 1000);
+            if (!cached.length) return;
+            const response = await fetch('/offline/message-access/', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+                body: JSON.stringify({ conversation: conversationId, ids: cached.map(message => message.id) })
+            });
+            if (!response.ok) return; // Network failure leaves the existing view intact.
+            const messages = (await response.json()).messages;
+            const present = new Set(messages.map(message => String(message.id)));
+            await window.offlineCache.deleteMessages(cached.filter(message => !present.has(String(message.id))).map(message => message.id));
+            await window.offlineCache.saveMessages(messages);
+            store.addMessages(this._filterDeletedForMe(messages, conversationId).map(message => this.normalizeServerMessage(message)));
+        } catch (error) {
+            console.warn('[OFFLINE_CACHE] Saved history refresh deferred:', error);
+        }
     }
 
     async loadConversationHistory(conversationId) {
@@ -418,7 +440,8 @@ export class MessageService {
                             store.setInitialHistoryLoaded(true);
                             serverHydrated = true;
                             if (window.offlineCache && convMatches.length > 0) {
-                                window.offlineCache.saveMessages(convMatches).catch(() => {});
+                                await window.offlineCache.saveMessages(convMatches);
+                                await this.restoreSavedHistory(conversationId);
                             }
                             return;
                         }
@@ -434,7 +457,7 @@ export class MessageService {
                     if (!window.offlineCache.db) {
                         await window.offlineCache.init();
                     }
-                    const cachedMessages = await window.offlineCache.getMessages(conversationId, INITIAL_BATCH_LIMIT);
+                    const cachedMessages = await window.offlineCache.getMessages(conversationId, 1000);
                     if (cachedMessages && cachedMessages.length > 0) {
                         const filteredCache = this._filterDeletedForMe(cachedMessages, conversationId);
                         const normalizedCache = filteredCache.map(m => this.normalizeServerMessage(m));
@@ -449,9 +472,8 @@ export class MessageService {
 
             // 3. Server fetch routine (only when not already hydrated by fresh server HTML)
             const syncPromise = (async () => {
-                const isGroupChat = window.IS_GROUP_CHAT || false;
-                let apiUrl = isGroupChat ? `/groups/api/groups/${conversationId}/messages/` : `/messaging/v1/messages/`;
-                let queryParams = isGroupChat ? `?limit=${INITIAL_BATCH_LIMIT}` : `?conversation=${conversationId}&limit=${INITIAL_BATCH_LIMIT}`;
+                const apiUrl = `/messaging/v1/messages/`;
+                const queryParams = `?conversation=${conversationId}&limit=${INITIAL_BATCH_LIMIT}`;
 
                 const res = await fetch(`${apiUrl}${queryParams}`, {
                     headers: {
@@ -513,18 +535,9 @@ export class MessageService {
         console.log('[MESSAGE_SERVICE] Loading older messages before id:', oldestId);
 
         try {
-            const isGroupChat = window.IS_GROUP_CHAT || false;
             const PAGE_LIMIT = 30;
-            let apiUrl;
-            let queryParams;
-
-            if (isGroupChat) {
-                apiUrl = `/groups/api/groups/${conversationId}/messages/`;
-                queryParams = `?limit=${PAGE_LIMIT}&before_id=${oldestId}`;
-            } else {
-                apiUrl = `/messaging/v1/messages/`;
-                queryParams = `?conversation=${conversationId}&limit=${PAGE_LIMIT}&before_id=${oldestId}`;
-            }
+            const apiUrl = `/messaging/v1/messages/`;
+            const queryParams = `?conversation=${conversationId}&limit=${PAGE_LIMIT}&before_id=${oldestId}`;
 
             const res = await fetch(`${apiUrl}${queryParams}`, {
                 headers: {

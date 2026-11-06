@@ -50,10 +50,10 @@ urlpatterns = [
     path('api/groups/<int:group_id>/mutual-friends/', views.get_mutual_friends_api, name='get_mutual_friends_api'),
     path('api/groups/<int:group_id>/send-invites/', views.send_group_invites_api, name='send_group_invites_api'),
     # Group Chat API endpoints
-    path('api/groups/<int:group_id>/messages/', views.GroupMessageViewSet.as_view({'get': 'list', 'post': 'create'}), name='group_messages_api'),
-    path('api/groups/<int:group_id>/messages/<int:pk>/', views.GroupMessageViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='group_message_detail_api'),
-    path('api/groups/<int:group_id>/messages/<int:pk>/react/', views.GroupMessageViewSet.as_view({'post': 'react'}), name='group_message_react_api'),
-    path('api/groups/<int:group_id>/messages/<int:pk>/mark-read/', views.GroupMessageViewSet.as_view({'post': 'mark_read'}), name='group_message_mark_read_api'),
-    path('api/groups/attachments/upload/', views.group_attachment_upload, name='group_attachment_upload'),
-    path('api/groups/attachments/batch-upload/', views.group_batch_attachment_upload, name='group_batch_attachment_upload'),
+    path('api/groups/<int:group_id>/messages/', views.retired_group_chat_api, name='group_messages_api'),
+    path('api/groups/<int:group_id>/messages/<int:pk>/', views.retired_group_chat_api, name='group_message_detail_api'),
+    path('api/groups/<int:group_id>/messages/<int:pk>/react/', views.retired_group_chat_api, name='group_message_react_api'),
+    path('api/groups/<int:group_id>/messages/<int:pk>/mark-read/', views.retired_group_chat_api, name='group_message_mark_read_api'),
+    path('api/groups/attachments/upload/', views.retired_group_chat_api, name='group_attachment_upload'),
+    path('api/groups/attachments/batch-upload/', views.retired_group_chat_api, name='group_batch_attachment_upload'),
 ]

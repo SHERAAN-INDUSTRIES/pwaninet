@@ -34,5 +34,5 @@ RUN mkdir -p /app/logs
 # Expose port
 EXPOSE 8000
 
-# Run the application with Daphne for WebSocket support
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "20", "--ping-timeout", "60", "vasto.asgi:application"]
+# Run the ASGI application with Uvicorn for HTTP and WebSocket support
+CMD ["uvicorn", "pwaninet.asgi:application", "--host", "0.0.0.0", "--port", "8000"]

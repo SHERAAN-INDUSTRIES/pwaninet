@@ -4,14 +4,14 @@
  * Coordinates UI rendering based on store state
  */
 
-import { store } from '../core/store.js?v=20261011-16';
-import { messageService } from '../core/message-service.js?v=20261011-16';
-import { MessageRenderer } from './renderer.js?v=20261011-16';
-import { contextMenuService } from '../features/context-menu/context-menu.service.js?v=20261011-16';
-import { messageSoundManager } from '../shared/message-sound.js?v=20261011-16';
-import { eventBus } from '../core/event-bus.js?v=20261011-16';
-import { EVENTS } from '../shared/constants.js?v=20261011-16';
-import { escapeHtml, getCSRFToken } from '../shared/utils.js?v=20261011-16';
+import { store } from '../core/store.js?v=20261106-group1';
+import { messageService } from '../core/message-service.js?v=20261106-group1';
+import { MessageRenderer } from './renderer.js?v=20261106-group1';
+import { contextMenuService } from '../features/context-menu/context-menu.service.js?v=20261106-group1';
+import { messageSoundManager } from '../shared/message-sound.js?v=20261106-group1';
+import { eventBus } from '../core/event-bus.js?v=20261106-group1';
+import { EVENTS } from '../shared/constants.js?v=20261106-group1';
+import { escapeHtml, getCSRFToken } from '../shared/utils.js?v=20261106-group1';
 
 export class UIController {
     constructor() {
@@ -260,7 +260,7 @@ export class UIController {
                 const messageId = this.pendingDeleteMessageId;
                 if (!messageId) return;
 
-                import('../core/websocket.js?v=20261011-16').then(({ webSocketManager }) => {
+                import('../core/websocket.js?v=20261106-group1').then(({ webSocketManager }) => {
                     webSocketManager.send({
                         type: 'delete_message',
                         message_id: parseInt(messageId, 10)
@@ -347,7 +347,7 @@ export class UIController {
                 const targetConvIds = Array.from(checked).map(cb => parseInt(cb.value, 10)).filter(Boolean);
                 if (targetConvIds.length === 0) return;
 
-                import('../core/websocket.js?v=20261011-16').then(({ webSocketManager }) => {
+                import('../core/websocket.js?v=20261106-group1').then(({ webSocketManager }) => {
                     webSocketManager.send({
                         type: 'forward_message',
                         message_id: parseInt(messageId, 10),
@@ -884,7 +884,7 @@ export class UIController {
             const editBar = document.getElementById('editPreviewBar');
             if (editBar) editBar.classList.add('d-none');
 
-            import('../core/websocket.js?v=20261011-16').then(({ webSocketManager }) => {
+            import('../core/websocket.js?v=20261106-group1').then(({ webSocketManager }) => {
                 webSocketManager.send({
                     type: 'edit_message',
                     message_id: parseInt(editId, 10),
@@ -1033,6 +1033,13 @@ export class UIController {
         }
 
         // 2. Header ALWAYS shows peer presence (Active now / Last seen) - NEVER overwritten by typing/recording
+        if (state.isGroupChat) {
+            chatStatus.textContent = recordingArray.length ? `${recordingArray.join(', ')} recording…`
+                : typingEntries.length ? `${typingEntries.map(([, name]) => name).join(', ')} typing…`
+                : `${document.querySelector('.chat-container')?.dataset.memberCount || ''} members`;
+            chatStatus.className = 'chat-status small text-muted';
+            return;
+        }
         if (isPeerOnline) {
             chatStatus.textContent = 'Active now';
             chatStatus.className = 'chat-status text-success fw-semibold';

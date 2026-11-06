@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.urls import reverse
+from urllib.parse import urlencode
 from django.core import signing
 from django.conf import settings
 from celery.result import AsyncResult
@@ -949,7 +950,7 @@ def home_view(request):
                 return redirect(redirect_url)
             except (ValueError, AttributeError):
                 pass
-        return redirect(f"{settings.LOGIN_URL}?next={request.get_full_path()}")
+        return redirect(f"{reverse('login_direct')}?{urlencode({'next': request.get_full_path()})}")
 
     # Enforce onboarding before landing on feed
     if not getattr(request.user, 'has_completed_onboarding', True):

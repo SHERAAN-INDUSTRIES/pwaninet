@@ -1,5 +1,5 @@
   <div class="chat-container d-flex flex-column flex-grow-1 {% if not conversation %}chat-container-empty{% endif %}" id="chatMainArea"
-       {% if conversation %}data-conversation-id="{{ conversation.id }}" data-user-id="{{ request.user.id }}" data-is-encrypted="false"{% endif %}
+       {% if conversation %}data-conversation-id="{{ conversation.id }}" data-user-id="{{ request.user.id }}" data-is-encrypted="false" data-conversation-type="{{ conversation.type }}" data-member-count="{{ conversation.members.count }}"{% endif %}
        data-default-chat-theme="{{ request.user.chat_theme_preference|default:'ocean-wave' }}">
     {% if conversation %}
     <div class="chat-header d-flex align-items-center justify-content-between px-3 border-bottom" data-conversation-id="{{ conversation.id }}">
@@ -13,7 +13,9 @@
 
         <!-- Avatar -->
         <div class="position-relative flex-shrink-0" id="headerProfileTrigger" style="cursor: pointer;" title="View info & media">
-          {% if conversation.type == 'group' %}
+          {% if conversation.group_id %}
+          <img src="{{ conversation.group.get_photo_url }}" class="chat-avatar rounded-circle border" style="width: 40px; height: 40px; object-fit: cover;" alt="{{ conversation.name }}">
+          {% elif conversation.type == 'group' %}
           <div class="chat-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle" style="width: 40px; height: 40px;">
             <i class="bi bi-people-fill fs-5"></i>
           </div>
@@ -57,6 +59,9 @@
 
       <!-- Actions on Far Right End: Dedicated Media Button + 3-Dots Dropdown -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0">
+        {% if conversation.group_id %}
+        <a href="{% url 'groups:groups_detail' conversation.group_id %}" class="btn btn-outline-primary btn-sm rounded-pill" hx-boost="false" aria-label="Back to group profile">Group</a>
+        {% endif %}
         <!-- Dedicated Media Button for Desktop -->
         <button type="button"
                 class="btn btn-outline-secondary btn-sm rounded-pill d-none d-lg-inline-flex align-items-center gap-1 px-3 py-1 chat-header-media-btn"
@@ -118,7 +123,7 @@
         <h2 class="pwanimate-empty-title fw-bold mb-1" style="font-size: 1.35rem;">{{ conversation.name|default:"Group Chat" }}</h2>
         <p class="pwanimate-empty-greeting text-muted mb-2">{{ conversation.members.count }} member{{ conversation.members.count|pluralize }} in this group</p>
         <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-          <i class="bi bi-shield-lock-fill text-primary"></i> Direct & secure group chat
+          <i class="bi bi-shield-lock-fill text-primary"></i> Chat with your group members
         </div>
         <p class="pwanimate-empty-question text-muted small mb-3">Send a message to break the ice!</p>
       {% else %}
@@ -249,7 +254,7 @@
         <h2 class="pwanimate-empty-title fw-bold mb-1" style="font-size: 1.35rem;">{{ conversation.name|default:"Group Chat" }}</h2>
         <p class="pwanimate-empty-greeting text-muted mb-2">{{ conversation.members.count }} member{{ conversation.members.count|pluralize }} in this group</p>
         <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-          <i class="bi bi-shield-lock-fill text-primary"></i> Direct & secure group chat
+          <i class="bi bi-shield-lock-fill text-primary"></i> Chat with your group members
         </div>
         <p class="pwanimate-empty-question text-muted small mb-3">Send a message to break the ice!</p>
       {% else %}

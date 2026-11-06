@@ -180,6 +180,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         """Receive message from WebSocket and dispatch action."""
+        if not await self._is_member():
+            await self.close(code=4003)
+            return
         try:
             data = json.loads(text_data)
         except json.JSONDecodeError:
@@ -444,6 +447,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Group Broadcast Dispatches (Downlink to WebSocket)
     # -------------------------------------------------------------
 
+    async def send(self, text_data=None, bytes_data=None, close=False):
+        # Existing sockets must stop receiving after removal, including bulk
+        # membership changes that bypass Django signals.
+        if not await self._is_member():
+            await self.close(code=4003)
+            return
+        await super().send(text_data=text_data, bytes_data=bytes_data, close=close)
+
     async def chat_message_event(self, event):
         await self.send(text_data=json.dumps({
             'type': 'chat_message',
@@ -538,10 +549,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _is_member(self):
-        return ConversationMember.objects.filter(
-            conversation_id=self.conversation_id,
-            user_id=self.user_id
-        ).exists()
+        from groups.services.chat_service import accessible_conversations
+        return accessible_conversations(self.user).filter(pk=self.conversation_id).exists()
 
     @database_sync_to_async
     def _get_other_members(self):
@@ -767,12 +776,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _get_message_for_forward(self, message_id):
-        return Message.objects.filter(id=message_id).first()
+        return Message.objects.filter(id=message_id, conversation_id=self.conversation_id).first()
 
     @database_sync_to_async
     def _forward_message_to_conv(self, orig_msg, target_conv_id):
         try:
-            conv = Conversation.objects.filter(id=target_conv_id, members__user=self.user).first()
+            from groups.services.chat_service import accessible_conversations
+            conv = accessible_conversations(self.user).filter(id=target_conv_id).first()
             if not conv:
                 return None, None
             new_msg = Message.objects.create(

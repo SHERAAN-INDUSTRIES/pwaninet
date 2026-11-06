@@ -8,7 +8,8 @@
 
 class DownloadStorage {
     constructor() {
-        this.dbName = 'vasto_downloads_v1';
+        const owner = window.vastoUserId || document.body?.dataset.userId;
+        this.dbName = owner ? `vasto_downloads_v2_${owner}` : 'vasto_downloads_v2_signed_out';
         this.dbVersion = 1;
         this.db = null;
         this.initPromise = null;

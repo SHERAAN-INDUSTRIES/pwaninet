@@ -1,4 +1,4 @@
-import { UploadState } from './upload_state_machine.js?v=20261011-16';
+import { UploadState } from './upload_state_machine.js?v=20261106-group1';
 
 class UploadSession {
     constructor({ id, files = [], caption = '', visibility = 'public', metadata = {} }) {

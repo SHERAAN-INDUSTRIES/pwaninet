@@ -384,6 +384,16 @@ class FileUploadValidator:
 
 class MessageCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating messages."""
+    def validate(self, attrs):
+        from groups.services.chat_service import can_access_conversation
+        conversation = attrs['conversation']
+        if not can_access_conversation(conversation, self.context['request'].user):
+            raise serializers.ValidationError('Conversation unavailable.')
+        reply = attrs.get('reply_to')
+        if reply and reply.conversation_id != conversation.pk:
+            raise serializers.ValidationError('Reply must belong to this conversation.')
+        return attrs
+
     class Meta:
         model = Message
         fields = ['id', 'status', 'created_at', 'conversation', 'content', 'encrypted_content', 'is_encrypted', 'reply_to', 'attachment', 'attachment_type',

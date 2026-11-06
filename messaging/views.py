@@ -1,3 +1,4 @@
+from groups.services.chat_service import accessible_conversations, can_access_conversation
 from .tasks import process_video_attachment_task
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes, parser_classes
@@ -53,7 +54,7 @@ def share_post_to_conversation(request):
         )
 
     conversation = get_object_or_404(
-        Conversation,
+        accessible_conversations(request.user),
         id=conversation_id,
         members__user=request.user,
     )
@@ -100,8 +101,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Return conversations for the current user."""
-        return Conversation.objects.filter(
-            members__user=self.request.user,
+        return accessible_conversations(self.request.user).filter(
             messages__isnull=False,
         ).annotate(
             last_message_at=models.Max('messages__created_at'),
@@ -135,10 +135,24 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 )
         return conversation
 
+    def perform_update(self, serializer):
+        if serializer.instance.group_id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Manage this conversation from the group.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.group_id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Manage this conversation from the group.')
+        instance.delete()
+
     @action(detail=True, methods=['post'])
     def add_member(self, request, pk=None):
         """Add a member to the conversation."""
         conversation = self.get_object()
+        if conversation.group_id:
+            return Response({'error': 'Manage membership from the group.'}, status=403)
         user_id = request.data.get('user_id')
         
         if not user_id:
@@ -174,6 +188,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def remove_member(self, request, pk=None):
         """Remove a member from the conversation."""
         conversation = self.get_object()
+        if conversation.group_id:
+            return Response({'error': 'Manage membership from the group.'}, status=403)
         user_id = request.data.get('user_id')
         
         if not user_id:
@@ -317,7 +333,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         """Return messages the user has access to with optimized queries."""
         user = self.request.user
         return Message.objects.filter(
-            conversation__members__user=user
+            conversation__in=accessible_conversations(user)
         ).select_related(
             'sender',
             'conversation',
@@ -419,9 +435,21 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         """Update message and mark as edited."""
         from django.utils import timezone
+        from rest_framework.exceptions import PermissionDenied
+        if serializer.instance.sender_id != self.request.user.pk:
+            raise PermissionDenied('You can only edit your own messages.')
         updated_msg = serializer.save(edited_at=timezone.now())
         ChatNotificationService.notify_message_edited(updated_msg, self.request.user)
         return updated_msg
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+        if instance.sender_id != self.request.user.pk:
+            raise PermissionDenied('You can only delete your own messages.')
+        instance.is_deleted = True
+        instance.content = ''
+        instance.save(update_fields=['is_deleted', 'content'])
+        ChatNotificationService.notify_message_deleted(instance, self.request.user)
 
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
@@ -429,7 +457,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         message = self.get_object()
         
         # Check if user is a member of the conversation
-        if not message.conversation.members.filter(user=request.user).exists():
+        if not can_access_conversation(message.conversation, request.user):
             return Response(
                 {'error': 'You are not a member of this conversation'},
                 status=status.HTTP_403_FORBIDDEN
@@ -507,7 +535,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         # Verify user is a member of the conversation
         conversation = get_object_or_404(
-            Conversation,
+            accessible_conversations(request.user),
             id=conversation_id,
             members__user=request.user
         )
@@ -548,7 +576,7 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
         """Return reactions for messages the user has access to."""
         user = self.request.user
         return MessageReaction.objects.filter(
-            message__conversation__members__user=user
+            message__conversation__in=accessible_conversations(user)
         ).distinct()
 
 
@@ -589,7 +617,7 @@ def build_user_conversation_data(user, active_conversation_id=None):
     from django.db.models.functions import Coalesce
 
     conversations = list(
-        Conversation.objects.filter(members__user=user)
+        accessible_conversations(user)
         .prefetch_related(
             models.Prefetch(
                 'members',
@@ -617,6 +645,7 @@ def build_user_conversation_data(user, active_conversation_id=None):
     # Batch-fetch unread counts per conversation in a single grouped SQL query (excluding deleted messages)
     unread_rows = (
         Message.objects.filter(
+            conversation__in=accessible_conversations(user),
             conversation__members__user=user,
             is_deleted=False,
             id__gt=Coalesce(models.F('conversation__members__last_read_message_id'), models.Value(0)),
@@ -789,7 +818,7 @@ def conversation_detail(request, conversation_id):
     import json
 
     conversation = get_object_or_404(
-        Conversation.objects.prefetch_related(
+        accessible_conversations(request.user).select_related("group").prefetch_related(
             models.Prefetch(
                 'members',
                 queryset=ConversationMember.objects.select_related('user')
@@ -820,7 +849,7 @@ def conversation_detail(request, conversation_id):
 
     # Mark conversation as read only if there is a newer message than last_read_message_id
     member = next((m for m in conversation.members.all() if m.user_id == request.user.id), None)
-    if member and recent_messages_list:
+    if member and recent_messages_list and request.headers.get('X-Vasto-Offline-Revalidate') != '1':
         last_message = recent_messages_list[-1]
         if member.last_read_message_id != last_message.id:
             member.last_read_message = last_message
@@ -876,7 +905,10 @@ def conversation_detail(request, conversation_id):
             'today': today.strftime('%Y-%m-%d'),
             'yesterday': yesterday.strftime('%Y-%m-%d'),
         }
-        return render(request, 'messaging/partials/conversation_chat_partial.html', context)
+        response = render(request, 'messaging/partials/conversation_chat_partial.html', context)
+        if conversation.group_id:
+            response['X-Vasto-Group'] = str(conversation.group_id)
+        return response
 
     # Full page load: populate left rail conversation list and new-chat modal data
     conversation_data = build_user_conversation_data(
@@ -924,7 +956,10 @@ def conversation_detail(request, conversation_id):
         'yesterday': yesterday.strftime('%Y-%m-%d'),
     }
 
-    return render(request, 'messaging/conversation_detail_refactored.html', context)
+    response = render(request, 'messaging/conversation_detail_refactored.html', context)
+    if conversation.group_id:
+        response['X-Vasto-Group'] = str(conversation.group_id)
+    return response
 
 
 def get_conversation_media_items(conversation, media_type, page=1, page_size=24):
@@ -1076,7 +1111,7 @@ def get_conversation_media_items(conversation, media_type, page=1, page_size=24)
 def conversation_media(request, conversation_id):
     """Paginated lazy-loaded media endpoint for the dynamic right media rail."""
     conversation = get_object_or_404(
-        Conversation,
+        accessible_conversations(request.user),
         id=conversation_id,
         members__user=request.user
     )
@@ -1203,7 +1238,7 @@ class ConversationThemeViewSet(viewsets.ModelViewSet):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         
         # Verify user is a member of this conversation
-        if not conversation.members.filter(user=self.request.user).exists():
+        if not can_access_conversation(conversation, self.request.user):
             raise PermissionError("You are not a member of this conversation")
         
         serializer.save(user=self.request.user, conversation=conversation)
@@ -1222,7 +1257,7 @@ class ConversationThemeViewSet(viewsets.ModelViewSet):
         conversation = theme.conversation
         
         # Verify user is a member of this conversation
-        if not conversation.members.filter(user=request.user).exists():
+        if not can_access_conversation(conversation, request.user):
             return Response(
                 {'error': 'You are not a member of this conversation'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1247,7 +1282,7 @@ class ConversationThemeViewSet(viewsets.ModelViewSet):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         
         # Verify user is a member of this conversation
-        if not conversation.members.filter(user=request.user).exists():
+        if not can_access_conversation(conversation, request.user):
             return Response(
                 {'error': 'You are not a member of this conversation'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1297,7 +1332,7 @@ def attachment_upload(request):
         
         # Verify user is a member of the conversation
         conversation = get_object_or_404(Conversation, id=conversation_id)
-        if not conversation.members.filter(user=request.user).exists():
+        if not can_access_conversation(conversation, request.user):
             metrics.record_upload_failure(request.user.id, 'NOT_MEMBER', file.size)
             return Response(
                 {'error': 'You are not a member of this conversation', 'error_code': 'NOT_MEMBER'},
@@ -1511,7 +1546,7 @@ def batch_attachment_upload(request):
         
         # Verify user is a member of the conversation
         conversation = get_object_or_404(Conversation, id=conversation_id)
-        if not conversation.members.filter(user=request.user).exists():
+        if not can_access_conversation(conversation, request.user):
             return Response(
                 {'error': 'You are not a member of this conversation', 'error_code': 'NOT_MEMBER'},
                 status=status.HTTP_403_FORBIDDEN

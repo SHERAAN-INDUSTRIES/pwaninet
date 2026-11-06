@@ -3,14 +3,14 @@
  * Enforces: websocket → message-service → store → ui-controller → renderer
  */
 
-import { appController } from './app-controller.js?v=20261011-16';
-import { messageService } from './message-service.js?v=20261011-16';
-import { webSocketManager } from './websocket.js?v=20261011-16';
-import { store } from './store.js?v=20261011-16';
-import { uiController } from '../ui/ui-controller.js?v=20261011-16';
-import { voiceService } from '../features/voice/voice.service.js?v=20261011-16';
-import { attachmentUI } from '../features/attachments/attachment-ui.js?v=20261011-16';
-import { contextMenuService } from '../features/context-menu/context-menu.service.js?v=20261011-16';
+import { appController } from './app-controller.js?v=20261106-group1';
+import { messageService } from './message-service.js?v=20261106-group1';
+import { webSocketManager } from './websocket.js?v=20261106-group1';
+import { store } from './store.js?v=20261106-group1';
+import { uiController } from '../ui/ui-controller.js?v=20261106-group1';
+import { voiceService } from '../features/voice/voice.service.js?v=20261106-group1';
+import { attachmentUI } from '../features/attachments/attachment-ui.js?v=20261106-group1';
+import { contextMenuService } from '../features/context-menu/context-menu.service.js?v=20261106-group1';
 
 // Load encryption module if available
 if (typeof E2EEncryption === 'undefined') {

@@ -10,7 +10,7 @@
  *   - Browser blob downloads to disk for desktop users
  */
 
-import { downloadStorage } from '../../downloads/download_storage.js?v=20261011-16';
+import { downloadStorage } from '../../downloads/download_storage.js?v=20261106-group1';
 
 class DeviceMediaStore {
     constructor() {
