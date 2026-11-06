@@ -13,7 +13,11 @@ services:
     # "server closed the connection unexpectedly".
     shm_size: "256mb"
     ports:
+<<<<<<< HEAD
       - "127.0.0.1:${DB_PORT:-5432}:5432"
+=======
+      - "${DB_PORT:-5432}:5432"
+>>>>>>> 47407345e3fe410a351cbefb7c976ee183a4b3d0
 
   redis:
     image: redis:7-alpine
@@ -24,3 +28,4 @@ services:
 
 volumes:
   postgres_data:
+    name: pwaninet_pgdata

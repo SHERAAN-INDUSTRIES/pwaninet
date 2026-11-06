@@ -189,7 +189,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 150 * 1024 * 1024  # 150MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 150 * 1024 * 1024  # 150MB
 
 # Auth settings
-LOGIN_URL = 'login_direct'
+LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = 'posts:home'
 LOGOUT_REDIRECT_URL = 'users:logout'
 AUTH_USER_MODEL = 'users.User'
@@ -357,7 +357,7 @@ OAUTH2_PROVIDER = {
     'REQUEST_APPROVAL_PROMPT': 'auto',
 
     # Login URL for authorization (use Vasto's login route)
-    'LOGIN_URL': 'login_direct',
+    'LOGIN_URL': '/login/',
 
     # Custom Validator
     'OAUTH2_VALIDATOR_CLASS': 'users.validators.CustomOAuth2Validator',

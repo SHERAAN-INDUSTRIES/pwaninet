@@ -189,7 +189,7 @@ This starts:
 - **PostgreSQL** with pgvector extension on host port 5432 (container port 5432)
 - **Redis** on port 6379
 
-The checked-in Compose file publishes PostgreSQL on host port 5432. Set `DB_PORT` to the port published by your PostgreSQL service; the Compose mapping is currently fixed at `5432:5432`, so changing only `.env` does not change the Compose port. Use `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4.
+The checked-in Compose file publishes PostgreSQL on host port 5432 by default, forwarding to PostgreSQL's container port 5432. Set `DB_PORT` in `.env` to use a different host port; Compose uses that same value for its host-side port while keeping the container port at 5432. Use `DB_HOST=127.0.0.1` for local development to avoid `localhost` resolving to IPv6 when PostgreSQL only accepts IPv4.
 
 ### Verify services are running
 >>>>>>> 0d2ec7e59454798cbb6af0122c761d0d288afe66

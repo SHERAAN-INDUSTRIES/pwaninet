@@ -38,8 +38,10 @@ class WorkspaceSyncViewTests(TestCase):
 
         response = self.client.get(reverse("workspace:sync"))
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(settings.LOGIN_URL, response.url)
+        self.assertRedirects(
+            response,
+            f"{reverse('login_direct')}?next={reverse('workspace:sync')}",
+        )
 
     def test_sync_page_rejects_post(self):
         response = self.client.post(reverse("workspace:sync"))
