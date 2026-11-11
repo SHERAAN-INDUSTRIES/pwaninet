@@ -21,13 +21,6 @@
     cursor: pointer;
 }
 
-.workspace-desktop-bottom-nav {
-    position: fixed;
-    z-index: 1020;
-    right: 1.5rem;
-    bottom: 1rem;
-}
-
 /* ================================
    BASE FORM SYSTEM
 ================================ */
@@ -467,24 +460,22 @@
     border-color: var(--primary, #6366f1);
 }
 
-/* Empty Feed Card & Suggested Classmates for New Users */
+/* Empty Feed State & Suggested Classmates for New Users (flat, sits on app surface) */
 .feed-empty-card {
-    background-color: var(--card-bg, #ffffff) !important;
-    border: 1px solid var(--border, #e2e8f0) !important;
+    background: transparent !important;
+    border: none !important;
     color: var(--text-dark, #0f172a);
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .feed-empty-user-card {
-    background-color: var(--card-bg, #ffffff) !important;
-    border: 1px solid var(--border, #e2e8f0) !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 12px !important;
+    transition: background-color 0.15s ease;
 }
 
 .feed-empty-user-card:hover {
-    transform: translateY(-2px);
-    border-color: var(--primary, #2563eb) !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+    background-color: rgba(37, 99, 235, 0.06) !important;
 }
 
 .feed-empty-user-card .user-card-name {
@@ -497,20 +488,22 @@
     color: var(--primary, #2563eb) !important;
 }
 
+/* Hide scrollbar on the suggested-classmates scroll row */
+.feed-empty-users-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.feed-empty-users-scroll::-webkit-scrollbar {
+    display: none;
+}
+
 [data-theme="dark"] .feed-empty-card {
-    background-color: var(--card-bg, #242526) !important;
-    border-color: var(--border, #3a3b3c) !important;
     color: var(--text-dark, #e4e6eb) !important;
 }
 
-[data-theme="dark"] .feed-empty-user-card {
-    background-color: #242526 !important;
-    border-color: var(--border, #3a3b3c) !important;
-}
-
 [data-theme="dark"] .feed-empty-user-card:hover {
-    border-color: var(--primary, #818cf8) !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+    background-color: rgba(99, 102, 241, 0.12) !important;
 }
 
 [data-theme="dark"] .feed-empty-user-card .user-card-name {
@@ -1340,7 +1333,8 @@ body.modal-open .mobile-bottom-nav {
        band above the footer. Spark/chat pages zero their own padding. */
     .app-shell-layout {
         display: grid;
-        grid-template-columns: minmax(220px, 1fr) minmax(0, 800px) minmax(220px, 1fr);
+        grid-template-columns: minmax(200px, 240px) minmax(0, 800px) minmax(240px, 340px);
+        justify-content: space-between;
         align-items: start;
         width: 100%;
         max-width: 100%;
@@ -1388,6 +1382,8 @@ body.modal-open .mobile-bottom-nav {
         max-width: 800px;
         justify-self: center;
         min-width: 0;
+        padding-left: 24px;
+        padding-right: 24px;
         box-sizing: border-box;
     }
 
@@ -1410,13 +1406,50 @@ body.modal-open .mobile-bottom-nav {
         scrollbar-color: rgba(100, 116, 139, 0.2) transparent;
         z-index: 100;
     }
+
+    /* Keep rails viewport-tall so they scroll independently of the feed */
+    .desktop-left-rail,
+    .desktop-context-rail {
+        height: calc(100vh - var(--navbar-height, 60px) - 32px);
+    }
+
+    /* Panel separators: full-height hairlines at the grid column boundaries,
+       extended to meet the top navbar's bottom border. Drawn on the shell
+       (not the rails) so they span the whole row regardless of rail
+       sticky/overflow. Excluded on shells that hide the rails or manage
+       their own chrome (Spark, academic workspace, conversations, reels). */
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::before,
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::after {
+        content: "";
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-soft, #e2e8f0);
+        pointer-events: none;
+    }
+
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::before {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: end;
+        margin-top: -16px;
+        margin-bottom: 0;
+    }
+
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::after {
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: start;
+        margin-top: -16px;
+        margin-bottom: 0;
+    }
 }
 
 /* Full Desktop Layout (1200px+): Left Rail (flush left) + Centered Feed + Right Rail (flush right) */
 @media (min-width: 1200px) {
     .app-shell-layout {
         display: grid;
-        grid-template-columns: minmax(240px, 1fr) minmax(0, 800px) minmax(240px, 1fr);
+        grid-template-columns: minmax(200px, 240px) minmax(0, 800px) minmax(240px, 340px);
+        justify-content: space-between;
         align-items: start;
         width: 100%;
         max-width: 100%;
@@ -1450,6 +1483,8 @@ body.modal-open .mobile-bottom-nav {
         max-width: 800px;
         justify-self: center;
         min-width: 0;
+        padding-left: 24px;
+        padding-right: 24px;
         box-sizing: border-box;
     }
 
@@ -1480,6 +1515,21 @@ body.modal-open .mobile-bottom-nav {
     .desktop-context-rail::-webkit-scrollbar-thumb {
         background: rgba(100, 116, 139, 0.2);
         border-radius: 4px;
+    }
+
+    /* Keep rails viewport-tall so they scroll independently of the feed */
+    .desktop-left-rail,
+    .desktop-context-rail {
+        height: calc(100vh - var(--navbar-height, 60px) - 32px);
+    }
+
+    /* Panel separators reach the navbar border (shell padding-top is 20px here) */
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::before {
+        margin-top: -20px;
+    }
+
+    body:not(.pwanimate-active):not(.vdw-active):not(.in-conversation-active):not(.reels-active):not(:has(.whatsapp-layout)) .app-shell-layout:not(.in-conversation-shell):not(.auth-guest-entry-shell)::after {
+        margin-top: -20px;
     }
 
     /* Hide floating actions FAB on desktop when contextual rail is visible */
@@ -1664,6 +1714,7 @@ body.modal-open .mobile-bottom-nav {
 /* Context Rail Item Hover Styles */
 .context-rail-item-hover {
     transition: background-color 0.15s ease, transform 0.1s ease;
+    border-radius: 12px !important;
 }
 
 .context-rail-item-hover:hover {
@@ -1674,13 +1725,163 @@ body.modal-open .mobile-bottom-nav {
     background-color: rgba(99, 102, 241, 0.15);
 }
 
+/* ── Flat Context Rail (matches left nav rail aesthetic) ── */
+.desktop-context-rail .card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+}
+
+.desktop-context-rail .card .cover-container,
+.desktop-context-rail .group-banner {
+    border-radius: 12px 12px 0 0 !important;
+}
+
+.desktop-context-rail .btn {
+    border-radius: 12px !important;
+}
+
+.desktop-context-rail .btn-outline-primary,
+.desktop-context-rail .btn-outline-secondary,
+.desktop-context-rail .btn-outline-info,
+.desktop-context-rail .btn-outline-success {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    color: var(--text-dark, #0f172a) !important;
+}
+
+.desktop-context-rail .btn-outline-primary:hover,
+.desktop-context-rail .btn-outline-secondary:hover,
+.desktop-context-rail .btn-outline-info:hover,
+.desktop-context-rail .btn-outline-success:hover {
+    background-color: rgba(37, 99, 235, 0.08) !important;
+    border-color: transparent !important;
+    color: var(--primary, #2563eb) !important;
+}
+
+.desktop-context-rail .btn-outline-danger {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    color: #dc3545 !important;
+}
+
+.desktop-context-rail .btn-outline-danger:hover {
+    background-color: rgba(220, 53, 69, 0.08) !important;
+    border-color: transparent !important;
+    color: #dc3545 !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .btn-outline-primary,
+[data-theme="dark"] .desktop-context-rail .btn-outline-secondary,
+[data-theme="dark"] .desktop-context-rail .btn-outline-info,
+[data-theme="dark"] .desktop-context-rail .btn-outline-success {
+    color: var(--text-dark, #e4e6eb) !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .btn-outline-primary:hover,
+[data-theme="dark"] .desktop-context-rail .btn-outline-secondary:hover,
+[data-theme="dark"] .desktop-context-rail .btn-outline-info:hover,
+[data-theme="dark"] .desktop-context-rail .btn-outline-success:hover {
+    background-color: rgba(99, 102, 241, 0.15) !important;
+    color: var(--primary-hover, #818cf8) !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .btn-outline-danger:hover {
+    background-color: rgba(248, 113, 113, 0.12) !important;
+}
+
+/* Inner surfaces inside flat rail cards sit on the app background too.
+   The hero .profile-card is excluded — it keeps its card chrome. */
+.desktop-context-rail,
+.context-rail-inner {
+    background: transparent;
+}
+
+.desktop-context-rail .card:not(.profile-card) .card-header,
+.desktop-context-rail .card:not(.profile-card) .card-body {
+    background: transparent;
+}
+
+.desktop-context-rail .card:not(.profile-card) .bg-light,
+.desktop-context-rail .card:not(.profile-card) .bg-white {
+    background-color: transparent !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .card:not(.profile-card) .bg-light,
+[data-theme="dark"] .desktop-context-rail .card:not(.profile-card) .bg-white {
+    background-color: transparent !important;
+}
+
+/* Profile hero card keeps its outlined pill action buttons */
+.desktop-context-rail .profile-card .btn {
+    border-radius: 50rem !important;
+}
+
+.desktop-context-rail .profile-card .btn-outline-primary,
+.desktop-context-rail .profile-card .btn-outline-secondary,
+.desktop-context-rail .profile-card .btn-outline-info,
+.desktop-context-rail .profile-card .btn-outline-success,
+.desktop-context-rail .profile-card .btn-outline-danger {
+    color: var(--bs-btn-color) !important;
+    border: 1px solid var(--bs-btn-color) !important;
+    background-color: transparent !important;
+}
+
+.desktop-context-rail .profile-card .btn-outline-primary:hover,
+.desktop-context-rail .profile-card .btn-outline-secondary:hover,
+.desktop-context-rail .profile-card .btn-outline-info:hover,
+.desktop-context-rail .profile-card .btn-outline-success:hover,
+.desktop-context-rail .profile-card .btn-outline-danger:hover {
+    color: var(--bs-btn-hover-color) !important;
+    background-color: var(--bs-btn-hover-bg) !important;
+    border-color: var(--bs-btn-hover-border-color, var(--bs-btn-hover-bg)) !important;
+}
+
+/* Dark-mode card chrome leaks from profile.css/postcard.css (loaded later,
+   equal specificity) — outrank them so rail cards stay flat. */
+[data-theme="dark"] .desktop-context-rail .card,
+[data-theme="dark"] .desktop-context-rail .card.post-card,
+[data-theme="dark"] .desktop-context-rail .profile-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Hero profile card keeps its card chrome — everything else in the rail stays flat */
+.desktop-context-rail .card.profile-card {
+    background-color: var(--card-bg, #ffffff) !important;
+    border: 1px solid var(--card-border, #e4e6eb) !important;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+    border-radius: 8px !important;
+}
+
+.desktop-context-rail .profile-card .cover-container {
+    border-radius: 16px 16px 0 0 !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .card.profile-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+.desktop-context-rail .card:not(.profile-card):hover {
+    transform: none !important;
+}
+
+[data-theme="dark"] .desktop-context-rail .card:not(.profile-card):hover,
+[data-theme="dark"] .desktop-context-rail .post-card:not(.profile-card):hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 /* ── Search Header & Global Search Bar ── */
 :root, [data-theme="light"] {
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
     --primary-light: #dbeafe;
-    --search-bg: #e9ecef;
+    --search-bg: #ffffff;
     --search-bg-focus: #ffffff;
+    --search-shadow: 0 4px 16px rgba(15, 23, 42, 0.10);
     --header-blur-bg: rgba(255, 255, 255, 0.88);
     --text-main: #0f172a;
     --text-muted: #64748b;
@@ -1697,6 +1898,7 @@ body.modal-open .mobile-bottom-nav {
     --primary-light: #312e81;
     --search-bg: #3a3b3c;
     --search-bg-focus: #4e4f50;
+    --search-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
     --header-blur-bg: rgba(24, 25, 31, 0.88);
     --text-main: #e4e6eb;
     --text-muted: #e4e6eb;
@@ -1708,18 +1910,18 @@ body.modal-open .mobile-bottom-nav {
     position: relative !important;
     top: auto !important;
     z-index: 10 !important;
-    background: var(--header-blur-bg, rgba(255, 255, 255, 0.88)) !important;
-    backdrop-filter: blur(14px) !important;
-    -webkit-backdrop-filter: blur(14px) !important;
-    border-bottom: 1px solid var(--border-soft, #e2e8f0) !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-bottom: none !important;
     padding: 8px 16px !important;
     width: 100% !important;
     box-sizing: border-box !important;
 }
 
 [data-theme="dark"] .search-header {
-    background: var(--header-blur-bg, rgba(24, 25, 31, 0.88)) !important;
-    border-bottom-color: var(--border-soft, #3a3b3c) !important;
+    background: transparent !important;
+    border-bottom: none !important;
 }
 
 .is-native-app .search-header,
@@ -1780,7 +1982,7 @@ body.is-native-app .search-header {
     object-fit: cover !important;
     display: block !important;
     border: 2px solid #ffffff !important;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16) !important;
 }
 
 [data-theme="dark"] .avatar-img {
@@ -1808,14 +2010,15 @@ body.is-native-app .search-header {
 
 .search-input {
     width: 100% !important;
-    background: var(--search-bg, #e9ecef) !important;
-    border: 0 !important;
+    background: var(--search-bg, #ffffff) !important;
+    border: 1px solid var(--border-soft, #e2e8f0) !important;
     border-radius: var(--radius-pill, 999px) !important;
     padding: 11px 38px 11px 38px !important;
     font-size: 14px !important;
     font-weight: 500 !important;
     color: var(--text-main, #0f172a) !important;
     outline: none !important;
+    box-shadow: var(--search-shadow, 0 4px 16px rgba(15, 23, 42, 0.10)) !important;
     transition: background var(--transition-smooth, 0.22s ease), box-shadow var(--transition-smooth, 0.22s ease) !important;
     line-height: 1.4 !important;
     box-sizing: border-box !important;
@@ -1833,12 +2036,12 @@ body.is-native-app .search-header {
 
 .search-input:focus {
     background: var(--search-bg-focus, #ffffff) !important;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+    box-shadow: var(--search-shadow, 0 4px 16px rgba(15, 23, 42, 0.10)), 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
 }
 
 [data-theme="dark"] .search-input:focus {
     background: var(--search-bg-focus, #4e4f50) !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
+    box-shadow: var(--search-shadow, 0 4px 16px rgba(0, 0, 0, 0.45)), 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
 }
 
 .search-input:focus ~ .search-icon,
@@ -2033,4 +2236,17 @@ body.is-native-app .search-header {
 
 [data-theme="dark"] .group-explore-name {
     color: var(--text-main, #e4e6eb) !important;
+}
+
+/* Global: hide scrollbars everywhere while preserving scrolling
+   (mouse wheel, trackpad, touch, and keyboard scrolling all still work). */
+* {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }

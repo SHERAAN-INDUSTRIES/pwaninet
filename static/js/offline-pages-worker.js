@@ -45,7 +45,7 @@ const OfflinePages = (() => {
     }
     async function purge() {
         for (const name of await caches.keys()) {
-            if (name.startsWith(PREFIX)) await caches.delete(name);
+            if (name.startsWith(PREFIX) || name.startsWith('vasto-private-assets-v1-')) await caches.delete(name);
         }
     }
     async function observe(request, response, generation) {
@@ -127,30 +127,16 @@ const OfflinePages = (() => {
     }
     // Self-contained last resort mirroring templates/offline.html. Only used
     // when even the precached /offline.html is unavailable.
-    const OFFLINE_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>vasto - Offline</title><style>' +
-        ':root,[data-theme="light"]{--primary:#2563eb;--primary-light:#dbeafe;--text-dark:#0f172a;--text-secondary:#64748b;--background:#f8fafc;--border:#e2e8f0}' +
-        '[data-theme="dark"]{--primary:#6366f1;--primary-light:#312e81;--text-dark:#e4e6eb;--text-secondary:#e4e6eb;--background:#18191f;--border:#3a3b3c}' +
-        '*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--background);color:var(--text-dark);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}' +
-        '.offline-container{max-width:400px;width:100%}.offline-icon{width:120px;height:120px;margin:0 auto 32px}.offline-icon svg{width:120px;height:120px;fill:var(--primary)}' +
-        '.offline-title{font-size:28px;font-weight:700;margin-bottom:16px;letter-spacing:-.5px}.offline-message{font-size:16px;color:var(--text-secondary);margin-bottom:32px;line-height:1.6}' +
-        '.action-buttons{display:flex;flex-direction:column;gap:16px;align-items:center}.action-button{background:transparent;color:var(--text-secondary);padding:12px 24px;border-radius:50px;font-size:14px;font-weight:600;cursor:pointer;border:2px solid var(--border);text-decoration:none;display:inline-flex;align-items:center;gap:8px;width:100%;max-width:280px;justify-content:center}' +
-        '.action-button:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}' +
-        '@media(max-width:480px){.offline-title{font-size:20px}.offline-icon,.offline-icon svg{width:80px;height:80px}}' +
-        '</style></head><body><div class="offline-container"><div class="offline-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>' +
-        '<h1 class="offline-title">YOU ARE OFFLINE</h1><p class="offline-message">WE WILL RECONNECT WHEN YOU HAVE INTERNET ACCESS</p>' +
-        '<div class="action-buttons">' +
-        '<a class="action-button" href="/?view_cache=1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 19v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="17"/></svg><span>VIEW CACHED PAGES</span></a>' +
-        '<a class="action-button" href="/offline-media/"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>VIEW DOWNLOADED MEDIA</span></a>' +
-        '<button class="action-button" id="offline-retry"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>RETRY CONNECTION</span></button>' +
-        '</div></div><script>(function(){var t=localStorage.getItem("theme")||"system";var d=document.documentElement;if(t==="dark"||t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches)d.setAttribute("data-theme","dark");document.getElementById("offline-retry").onclick=function(){location.href="/"};var busy=false;function probe(){if(busy)return;busy=true;fetch("/api/health/",{mode:"no-cors",cache:"no-store"}).then(function(){location.href="/"}).catch(function(){busy=false})}addEventListener("online",probe);setInterval(function(){if(navigator.onLine)probe()},5000)})();</script></body></html>';
+    const OFFLINE_HTML='<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body><div style="position:fixed;bottom:8px;left:50%;transform:translateX(-50%);font:11px system-ui;color:#64748b;white-space:nowrap">You are offline viewing cached pages</div></body>';
     async function offlinePage() {
-        const cached = await caches.match('/offline.html');
-        if (cached) return cached;
-        try {
-            const response = await fetch('/offline.html', { cache: 'no-store' });
-            if (response.ok && /text\/html/.test(response.headers.get('Content-Type') || '')) return response;
-        } catch (_) { /* Fall through to the self-contained page. */ }
-        return new Response(OFFLINE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+        const current=await state();
+        if(current.owner){
+            const cache=await caches.open(PREFIX+current.owner);
+            const entries=await cache.keys();
+            if(current.lastRoute && await cache.match(current.lastRoute)){const target=new URL(current.lastRoute);target.searchParams.set('offline_saved','1');return Response.redirect(target.href,302);}
+            if(entries.length){const target=new URL(entries[entries.length-1].url);target.searchParams.set('offline_saved','1');return Response.redirect(target.href,302);}
+        }
+        return new Response(OFFLINE_HTML,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
     }
     async function navigate(request) {
         const initial = await state();
@@ -159,14 +145,44 @@ const OfflinePages = (() => {
             const latest = await state();
             return copy && latest.owner === initial.owner && latest.generation === initial.generation ? copy : offlinePage();
         };
-        if (copy && new URL(request.url).searchParams.has('offline_saved')) return copy;
-        const network = offlineFetch(request).then(async response => {
-            if (response.status >= 500 && copy) return fallback();
-            return response;
-        }).catch(fallback);
-        // A failed or stalled refresh must not blank an available view.
-        if (copy) return Promise.race([network, new Promise(resolve => setTimeout(() => resolve(fallback()), 1500))]);
-        return network;
+        // A saved-route hint never overrides a working connection. In
+        // particular, slow responses and HTTP 5xx are still online responses.
+        if (self.navigator.onLine === false) return fallback();
+        const live = new URL(request.url);
+        ['offline_saved', 'view_cache', 'cached'].forEach(key => live.searchParams.delete(key));
+        try {
+            return await offlineFetch(live.href === request.url ? request : new Request(live.href, {
+                headers: request.headers, credentials: request.credentials,
+                redirect: 'follow', mode: 'same-origin', cache: 'no-store',
+            }));
+        } catch (error) {
+            if (self.navigator.onLine === false) return fallback();
+            throw error;
+        }
+    }
+    async function saveResource(event) {
+        const payload=event.data.payload||{};
+        const client=event.source && await self.clients.get(event.source.id);
+        const current=await state();
+        if(!client || new URL(client.url).origin!==self.location.origin || String(payload.owner)!==current.owner ||
+           !/^\/__offline_resource__\/[a-f0-9]{64}$/.test(payload.path||'') || !(payload.blob instanceof Blob) || payload.blob.size>30*1024*1024)return;
+        await locked(async()=>{
+            if((await state()).owner!==current.owner)return;
+            const cache=await caches.open('vasto-private-assets-v1-'+current.owner);
+            await cache.put(new URL(payload.path,self.location.origin).href,new Response(payload.blob,{headers:{'Content-Type':payload.blob.type||'application/octet-stream','X-Vasto-Asset-Bytes':String(payload.blob.size)}}));
+            let total=0;const keys=await cache.keys();
+            for(const key of keys.reverse()) {
+                const item=await cache.match(key);total+=Number(item.headers.get('X-Vasto-Asset-Bytes'))||0;
+                if(total>300*1024*1024)await cache.delete(key);
+            }
+            event.ports[0]?.postMessage({saved:true});
+        });
+    }
+    async function resource(request) {
+        const current=await state();
+        const response=current.owner && await(await caches.open('vasto-private-assets-v1-'+current.owner)).match(request.url);
+        if(response && (await state()).owner===current.owner)return response;
+        return new Response('',{status:404});
     }
     async function exportPage(event) {
         const payload = event.data.payload || {};
@@ -175,7 +191,7 @@ const OfflinePages = (() => {
         if (!payload.url || new URL(payload.url, self.location.origin).origin !== self.location.origin) return;
         const route = key(payload.url);
         if (key(client.url) !== route || !eligible(new URL(route).pathname)) return;
-        if (typeof payload.html !== 'string' || payload.html.length > 3000000) return;
+        if (typeof payload.html !== 'string' || payload.html.length > 8000000) return;
         await locked(async () => {
             const current = await state();
             if (!current.owner || String(payload.owner) !== current.owner ||
@@ -188,7 +204,7 @@ const OfflinePages = (() => {
                 'X-Vasto-Post-IDs': JSON.stringify(Array.isArray(payload.postIds) ? payload.postIds.slice(0, 200) : []),
                 // Only our small offline runtime executes. Captured event handlers,
                 // forms, scripts, frames and CSRF values have also been removed.
-                'Content-Security-Policy': "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self' blob:; script-src " + self.location.origin + "/static/js/offline-view.js; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'"
+                'Content-Security-Policy': "default-src 'none'; style-src 'self' data: 'unsafe-inline'; img-src 'self' https://localhost https://vasto-debug data: blob:; font-src 'self' https://localhost https://vasto-debug data:; media-src 'self' https://localhost https://vasto-debug blob: data:; script-src " + self.location.origin + "/static/js/offline-view.js " + self.location.origin + "/static/js/bootstrap.bundle.min.js; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'"
             } }));
             const entries = await Promise.all((await cache.keys()).map(async request => {
                 const response = await cache.match(request);
@@ -200,6 +216,7 @@ const OfflinePages = (() => {
                 bytes += entry.bytes;
                 if (index >= MAX_PAGES || bytes > 60 * 1024 * 1024) await cache.delete(entry.request);
             }
+            current.lastRoute=route;await setState(current);
             client.postMessage({ type: 'PRIVATE_PAGE_SAVED', url: route, savedAt: Date.now() });
         });
     }
@@ -262,9 +279,10 @@ const OfflinePages = (() => {
     self.addEventListener('message', event => {
         if (event.data?.type === 'RECONCILE_PRIVATE_OFFLINE') event.waitUntil(reconcile(event.data.payload || {}));
         if (event.data?.type === 'SAVE_RENDERED_PAGE') event.waitUntil(exportPage(event));
+        if (event.data?.type === 'SAVE_OFFLINE_RESOURCE') event.waitUntil(saveResource(event));
         if (event.data?.type === 'CLEAR_PRIVATE_OFFLINE') event.waitUntil(clear().then(() => event.ports[0]?.postMessage({ cleared: true })));
     });
-    return { eligible, key, observe, clear, saved, navigate, state, offlinePage };
+    return { resource, eligible, key, observe, clear, saved, navigate, state, offlinePage };
 })();
 async function offlineFetch(request) {
     const generation = (await OfflinePages.state()).generation;

@@ -70,6 +70,7 @@ class UnifiedRetrievalService:
                 on_source_start(source)
             source_start = time.perf_counter()
             source_results: List[RetrievalResult] = []
+            degraded = False
 
             try:
                 if source == SourceType.DOCUMENT:
@@ -85,6 +86,11 @@ class UnifiedRetrievalService:
                         try:
                             sem_results = self.document_service.retrieve(request)
                         except Exception as sem_exc:
+                            degraded = True
+                            try:
+                                sem_results = self.document_service.retrieve_lexical_chunks(request)
+                            except Exception:
+                                logger.exception('Chunk-text fallback failed; trying document metadata search.')
                             logger.warning(
                                 "Semantic document retrieval failed in hybrid mode, continuing with lexical fallback: %s",
                                 sem_exc,
@@ -176,6 +182,7 @@ class UnifiedRetrievalService:
             source_metrics[source.value] = {
                 "count": len(source_results),
                 "duration_ms": source_duration_ms,
+                "degraded": degraded,
             }
             combined_results.extend(source_results)
 

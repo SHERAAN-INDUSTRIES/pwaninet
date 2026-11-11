@@ -4,15 +4,24 @@
     <div class="pwanimate-settings-mobile-container p-3 mx-auto" style="max-width: 720px;">
         <!-- Header with Back Button -->
         <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+            {% if embed_offcanvas %}
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 rounded-pill px-3"
+                    onclick="window.sparkCloseOffcanvasPanel && window.sparkCloseOffcanvasPanel()">
+                <i data-lucide="arrow-left"></i>
+                <span class="fw-semibold">{% trans "Back" %}</span>
+            </button>
+            {% else %}
             <button type="button"
                     class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 rounded-pill px-3"
                     hx-get="{% url 'pwanimate:index' %}"
                     hx-target="#page-content-target"
                     hx-swap="innerHTML"
                     hx-push-url="true">
-                <i class="bi bi-arrow-left"></i>
+                <i data-lucide="arrow-left"></i>
                 <span class="fw-semibold">{% trans "Back to Chat" %}</span>
             </button>
+            {% endif %}
             <h5 class="fw-bold mb-0 text-center flex-grow-1">{% trans "Settings" %}</h5>
             <div style="width: 100px;"></div>
         </div>
@@ -25,9 +34,18 @@
                         id="mobile-tab-personalization"
                         data-tab="personalization"
                         onclick="window.switchSparkSettingsTab('mobile', 'personalization')">
-                    <i class="bi bi-sliders me-1"></i>
+                    <i data-lucide="sliders-horizontal" class="me-1"></i>
                     <span>{% trans "Personalization" %}</span>
                 </button>
+            </li>
+            <li class="nav-item">
+                <button type="button" class="nav-link rounded-pill py-2 {% if active_tab == 'memory' %}active{% endif %}" id="mobile-tab-memory" data-tab="memory" onclick="window.switchSparkSettingsTab('mobile', 'memory')"><i data-lucide="brain" class="me-1" aria-hidden="true"></i><span>{% trans "Memory" %}</span></button>
+            </li>
+            <li class="nav-item">
+                <button type="button" class="nav-link rounded-pill py-2 {% if active_tab == 'plans' %}active{% endif %}" id="mobile-tab-plans" data-tab="plans" onclick="window.switchSparkSettingsTab('mobile', 'plans')"><i data-lucide="calendar-clock" class="me-1" aria-hidden="true"></i><span>{% trans "Plans" %}</span></button>
+            </li>
+            <li class="nav-item">
+                <button type="button" class="nav-link rounded-pill py-2" id="mobile-tab-offline" data-tab="offline" onclick="window.openSparkOfflineSettings('mobile')"><i data-lucide="book-down" class="me-1" aria-hidden="true"></i><span>{% trans "Offline" %}</span></button>
             </li>
             <li class="nav-item">
                 <button type="button"
@@ -35,7 +53,7 @@
                         id="mobile-tab-usage"
                         data-tab="usage"
                         onclick="window.switchSparkSettingsTab('mobile', 'usage')">
-                    <i class="bi bi-speedometer2 me-1"></i>
+                    <i data-lucide="gauge" class="me-1"></i>
                     <span>{% trans "Usage" %}</span>
                 </button>
             </li>
@@ -45,7 +63,7 @@
                         id="mobile-tab-about"
                         data-tab="about"
                         onclick="window.switchSparkSettingsTab('mobile', 'about')">
-                    <i class="bi bi-info-circle me-1"></i>
+                    <i data-lucide="info" class="me-1"></i>
                     <span>{% trans "About" %}</span>
                 </button>
             </li>
@@ -55,6 +73,12 @@
         <main id="pwanimate-settings-mobile-content" class="pwanimate-settings-mobile-pane">
             <div id="pwanimate-mobile-pane-personalization" class="pwanimate-settings-pane {% if active_tab == 'personalization' or not active_tab %}active{% else %}d-none{% endif %}">
                 {% include 'pwanimate/settings/partials/personalization_content.html' %}
+            </div>
+            <div id="pwanimate-mobile-pane-memory" class="pwanimate-settings-pane {% if active_tab == 'memory' %}active{% else %}d-none{% endif %}">
+                {% include 'pwanimate/settings/partials/study_content.html' with study_scope='mobile' study_section='memory' %}
+            </div>
+            <div id="pwanimate-mobile-pane-plans" class="pwanimate-settings-pane {% if active_tab == 'plans' %}active{% else %}d-none{% endif %}">
+                {% include 'pwanimate/settings/partials/study_content.html' with study_scope='mobile' study_section='plans' %}
             </div>
             <div id="pwanimate-mobile-pane-usage" class="pwanimate-settings-pane {% if active_tab == 'usage' %}active{% else %}d-none{% endif %}">
                 {% include 'pwanimate/settings/partials/usage_content.html' %}

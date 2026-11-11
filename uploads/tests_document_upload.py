@@ -308,7 +308,7 @@ class TimetableUploadEngineTest(TestCase):
             self.client.post(f"/api/uploads/{upload_id}/authorize/", {}, format="json")
             with patch(
                 "documents.tasks.timetable.process_timetable_image_task.apply_async"
-            ) as task:
+            ) as task, self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(
                     f"/api/uploads/{upload_id}/complete/",
                     {

@@ -65,7 +65,7 @@ def _transcribe_pdf_page(page, attachment: PwanimateAttachment, page_number: int
         attachment_type="image",
         data_bytes=page_bytes,
     )
-    model = getattr(settings, "PWANIMATE_VISION_MODEL", "gemini-3.8-flash")
+    model = settings.PWANIMATE_ATTACHMENT_VISION_MODEL
     result = AIGateway().generate(LLMRequest(
         task="attachment_vision_extraction",
         messages=[ChatMessage(
@@ -78,12 +78,15 @@ def _transcribe_pdf_page(page, attachment: PwanimateAttachment, page_number: int
             ),
             attachments=[page_image],
         )],
-        provider="gemini",
+        provider=settings.PWANIMATE_ATTACHMENT_VISION_PROVIDER,
         model=model,
         temperature=0.1,
-        max_tokens=1600,
+        max_tokens=settings.PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS,
         attachments=[page_image],
-        metadata={"required_capability": "image"},
+        metadata={
+            "required_capability": "image",
+            "fallback_chain": settings.PWANIMATE_ATTACHMENT_VISION_FALLBACK_CHAIN,
+        },
     ))
     return result.content.strip(), result.provider, result.model
 
@@ -138,7 +141,7 @@ def _analyze_image(attachment: PwanimateAttachment) -> tuple[str, str, str]:
             "Spark Vision is busy right now. Try again shortly."
         )
 
-    model = getattr(settings, "PWANIMATE_VISION_MODEL", "gemini-3.8-flash")
+    model = settings.PWANIMATE_ATTACHMENT_VISION_MODEL
     result = AIGateway().generate(LLMRequest(
         task="attachment_vision_analysis",
         messages=[ChatMessage(
@@ -152,12 +155,15 @@ def _analyze_image(attachment: PwanimateAttachment) -> tuple[str, str, str]:
             ),
             attachments=[attachment],
         )],
-        provider="gemini",
+        provider=settings.PWANIMATE_ATTACHMENT_VISION_PROVIDER,
         model=model,
         temperature=0.1,
-        max_tokens=1600,
+        max_tokens=settings.PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS,
         attachments=[attachment],
-        metadata={"required_capability": "image"},
+        metadata={
+            "required_capability": "image",
+            "fallback_chain": settings.PWANIMATE_ATTACHMENT_VISION_FALLBACK_CHAIN,
+        },
     ))
 
     # 3. Meter the analysis: it spends an image from the student's

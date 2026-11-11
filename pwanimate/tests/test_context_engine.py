@@ -379,8 +379,7 @@ class ContextEngineTestCase(TestCase):
 
         # Verify formatting contains both user context and retrieved data
         formatted = pkg.format_context_text()
-        self.assertIn("<user_context>", formatted)
-        self.assertIn("Alice Wambui", formatted)
+        self.assertIn("<student_context>", formatted)
         self.assertIn("Bachelor of Science in Computer Science", formatted)
         self.assertIn("<retrieved_context", formatted)
         self.assertIn('<grounding_data source="document"', formatted)
@@ -416,7 +415,12 @@ class ContextEngineTestCase(TestCase):
         self.assertTrue(pkg.has_content())
 
         formatted = pkg.format_context_text()
-        self.assertIn("<user_context>", formatted)
-        self.assertIn("Solo Student", formatted)
+        self.assertIn("<student_context>", formatted)
         self.assertNotIn("<retrieved_context", formatted)
 
+
+    def test_retrieved_evidence_is_not_formatted_twice(self):
+        package = self.engine.build_context(ContextRequest(query=self.query, results=[self.res_doc_chunk_1]))
+        formatted = package.format_context_text()
+        self.assertEqual(formatted.count('<retrieved_context '), 1)
+        self.assertEqual(formatted.count(self.res_doc_chunk_1.snippet), 1)

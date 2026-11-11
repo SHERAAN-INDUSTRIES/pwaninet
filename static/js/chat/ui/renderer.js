@@ -11,6 +11,8 @@ import { EVENTS } from '../shared/constants.js?v=20261106-group1';
 import { eventBus } from '../core/event-bus.js?v=20261106-group1';
 import { deviceMediaStore } from '../core/device-media-store.js?v=20261106-group1';
 
+import { createMediaZoom } from './media-zoom.js';
+
 export class MessageRenderer {
     constructor() {
         this.container = null;
@@ -1373,6 +1375,7 @@ export class MessageRenderer {
      */
     _updateExistingMessageElement(wrapperEl, message) {
         if (!wrapperEl || !message) return wrapperEl;
+        wrapperEl.dataset.nativeMessageVersion = message.edited_at || message.editedAt || message.metadata?.edited_at || '';
         this._decorateGroupSender(wrapperEl, message);
 
         // If message was deleted, replace with deleted tombstone
@@ -1941,19 +1944,21 @@ export class MessageRenderer {
      */
     _createMessageElement(message) {
         const element = this._createMessageBody(message);
+        element.dataset.nativeMessageVersion = message.edited_at || message.editedAt || message.metadata?.edited_at || '';
         this._decorateGroupSender(element, message);
         return element;
     }
 
     _decorateGroupSender(element, message) {
         if (document.querySelector('.chat-container')?.dataset.conversationType !== 'group' || message.isOwn) return;
-        const target = element.querySelector('.message-content-wrapper') || element;
-        let label = target.querySelector('.group-message-sender');
+        const target = element.matches('.message-bubble') ? element : element.querySelector('.message-bubble');
+        if (!target) return;
+        let label = element.querySelector('.group-message-sender');
         if (!label) {
             label = document.createElement('div');
-            label.className = 'group-message-sender small fw-bold text-primary mb-1';
-            target.prepend(label);
+            label.className = 'group-message-sender';
         }
+        target.prepend(label);
         const sender = message.metadata?.sender || {};
         label.textContent = [sender.first_name, sender.last_name].filter(Boolean).join(' ') || sender.username || 'Member';
     }
@@ -2083,6 +2088,16 @@ export class MessageRenderer {
             <p class="message-content">${escapeHtml(message.content || '')}${this._getSpacerHtml(message)}</p>
             ${reactionsHtml}
         `;
+
+        if (message.type === 'voice_call' && message.metadata?.voice_call) {
+            const call = message.metadata.voice_call;
+            const started = new Date(call.started_at);
+            const direction = message.isOwn ? 'Outgoing' : 'Incoming';
+            const outcome = { ended: 'Ended', missed: 'Missed', declined: 'Declined', cancelled: 'Cancelled' }[call.status] || 'Ended';
+            messageDiv.classList.add('voice-call-bubble');
+            const body = messageDiv.querySelector('.message-content');
+            body.innerHTML = `<span class="voice-call-summary"><i class="bi bi-telephone-${message.isOwn ? 'outbound' : 'inbound'}" aria-hidden="true"></i><span><strong>Voice call</strong><span>${direction} · ${outcome}</span><time datetime="${escapeHtml(call.started_at)}">Started ${escapeHtml(Number.isNaN(started.getTime()) ? '' : started.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</time></span></span>${this._getSpacerHtml(message)}`;
+        }
 
         // Render link preview if available
         if (message.link_preview && message.link_preview.url) {
@@ -3043,21 +3058,31 @@ export class MessageRenderer {
         console.log('[MEDIA_VIEWER] Total attachments:', attachments.length);
         console.log('[MEDIA_VIEWER] Starting at index:', startIndex);
 
+        if (!attachments.length) return;
+        startIndex = Math.max(0, Math.min(startIndex, attachments.length - 1));
+
         // Remove existing viewer if present
         const existingViewer = document.querySelector('.media-viewer-overlay');
         if (existingViewer) {
+            existingViewer.dispatchEvent(new Event('media-viewer-close'));
             existingViewer.remove();
         }
 
         // Create viewer overlay
         const overlay = document.createElement('div');
         overlay.className = 'media-viewer-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Media viewer');
 
         // Create viewer container
         const container = document.createElement('div');
         container.className = 'media-viewer-container';
 
         let currentIndex = startIndex;
+        let imageZoom = null;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
 
         // Create header with download and close button
         const header = document.createElement('div');
@@ -3084,6 +3109,8 @@ export class MessageRenderer {
         });
 
         const closeViewer = () => {
+            imageZoom?.destroy();
+            document.body.style.overflow = previousOverflow;
             const vids = overlay.querySelectorAll('video');
             vids.forEach(v => {
                 try { v.pause(); v.src = ''; } catch (_) {}
@@ -3093,8 +3120,11 @@ export class MessageRenderer {
             document.removeEventListener('keydown', handleKeydown);
         };
 
+        overlay.addEventListener('media-viewer-close', closeViewer, { once: true });
+
         const closeButton = document.createElement('button');
         closeButton.className = 'media-viewer-close';
+        closeButton.setAttribute('aria-label', 'Close media viewer');
         closeButton.innerHTML = `
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -3103,6 +3133,21 @@ export class MessageRenderer {
         `;
         closeButton.addEventListener('click', closeViewer);
 
+        const zoomControls = document.createElement('div');
+        zoomControls.className = 'media-viewer-zoom-controls';
+        const zoomOut = document.createElement('button');
+        const zoomReset = document.createElement('button');
+        const zoomIn = document.createElement('button');
+        for (const [button, label, text] of [[zoomOut, 'Zoom out', '−'], [zoomReset, 'Reset zoom', '100%'], [zoomIn, 'Zoom in', '+']]) {
+            button.type = 'button'; button.className = 'media-viewer-btn';
+            button.setAttribute('aria-label', label); button.title = label; button.textContent = text;
+            zoomControls.appendChild(button);
+        }
+        zoomReset.classList.add('media-viewer-zoom-reset');
+        zoomOut.addEventListener('click', () => imageZoom?.zoomBy(1 / 1.5));
+        zoomIn.addEventListener('click', () => imageZoom?.zoomBy(1.5));
+        zoomReset.addEventListener('click', () => imageZoom?.reset());
+        header.appendChild(zoomControls);
         header.appendChild(downloadButton);
         header.appendChild(closeButton);
 
@@ -3172,10 +3217,13 @@ export class MessageRenderer {
             const attachment = attachments[index];
             if (!attachment) return;
 
+            imageZoom?.destroy(); imageZoom = null;
+            content.querySelectorAll('video').forEach(video => video.pause());
             const fileType = attachment.file_type || attachment.type || 'image';
+            zoomControls.hidden = fileType.startsWith('video');
             const fileUrl = attachment.file_url || attachment.url || '';
 
-            if (fileType === 'video') {
+            if (fileType.startsWith('video')) {
                 content.innerHTML = `
                     <div class="media-viewer-video-container">
                         <video class="media-viewer-video"
@@ -3342,7 +3390,11 @@ export class MessageRenderer {
                     }
                 }
             } else {
-                content.innerHTML = `<img src="${escapeHtml(fileUrl)}" alt="Media" class="media-viewer-content">`;
+                content.innerHTML = `<img src="${escapeHtml(fileUrl)}" alt="Media" class="media-viewer-image" draggable="false">`;
+                imageZoom = createMediaZoom(content, content.querySelector('img'), scale => {
+                    zoomReset.textContent = `${Math.round(scale * 100)}%`;
+                    zoomOut.disabled = scale <= 1; zoomIn.disabled = scale >= 5;
+                });
             }
 
             // Update counter and caption
@@ -3373,6 +3425,10 @@ export class MessageRenderer {
         const handleKeydown = (e) => {
             if (e.key === 'Escape') {
                 closeViewer();
+            } else if (['+', '=', '-', '0'].includes(e.key) && imageZoom) {
+                e.preventDefault();
+                if (e.key === '0') imageZoom.reset();
+                else imageZoom.zoomBy(e.key === '-' ? 1 / 1.5 : 1.5);
             } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
                 currentIndex--;
                 renderAttachment(currentIndex);

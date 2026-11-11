@@ -43,6 +43,10 @@ class VastoWorkspaceAuthorizationView(AuthorizationView):
             context['has_active_tokens'] = False
             context['has_refresh_tokens'] = False
         
+        context['workspace_app_url'] = getattr(
+            settings, "VASTO_WORKSPACE_APP_URL", "http://127.0.0.1:3000"
+        )
+        
         return context
 
 
@@ -72,6 +76,9 @@ def workspace_sync(request):
             f"{workspace_base_url}/api/auth/vasto/start/" if workspace_base_url else ""
         ),
         "is_already_authorized": is_authorized,
+        "workspace_app_url": getattr(
+            settings, "VASTO_WORKSPACE_APP_URL", "http://127.0.0.1:3000"
+        ),
     }
     return render(request, "workspace/sync.html", context)
 

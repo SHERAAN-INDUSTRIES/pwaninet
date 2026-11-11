@@ -7,7 +7,7 @@
 'use strict';
 let CACHE_VERSION = '1.6.4';
 let CACHE_BUILD = '117';
-const SW_CACHE_REVISION = '20';
+const SW_CACHE_REVISION = '23';
 importScripts('/static/js/offline-pages-worker.js');
 let CACHE_NAME = `vasto-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
 let OFFLINE_CACHE_NAME = `vasto-offline-v${CACHE_VERSION}-build${CACHE_BUILD}-sw${SW_CACHE_REVISION}`;
@@ -43,6 +43,7 @@ const CORE_ASSETS = [
     '/offline.html',
     '/static/js/offline-view.js',
     '/static/js/offline-capture.js',
+    '/static/js/offline-resources.js',
     '/static/css/bootstrap.min.css',
     '/static/css/bootstrap-icons.css',
     '/static/css/custom.css',
@@ -326,6 +327,17 @@ async function handleRequest(request) {
     const url = new URL(request.url);
     
     try {
+        if(url.pathname.startsWith('/__offline_resource__/')) {
+            const response=await OfflinePages.resource(request);
+            if(!response.ok || !request.headers.get('Range'))return response;
+            const blob=await response.blob();
+            const match=/^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range'));
+            let start=match&&match[1]?Number(match[1]):match&&match[2]?Math.max(0,blob.size-Number(match[2])):NaN;
+            let end=match&&match[1]&&match[2]?Number(match[2]):blob.size-1;
+            if(!Number.isSafeInteger(start)||start<0||start>=blob.size||!Number.isSafeInteger(end)||end<start)return new Response(null,{status:416,headers:{'Content-Range':`bytes */${blob.size}`}});
+            end=Math.min(end,blob.size-1);
+            return new Response(blob.slice(start,end+1),{status:206,headers:{'Content-Type':blob.type,'Content-Length':String(end-start+1),'Content-Range':`bytes ${start}-${end}/${blob.size}`,'Accept-Ranges':'bytes'}});
+        }
         // Handle virtual offline media stream with range support (HTTP 206)
         if (url.pathname.startsWith('/offline-media-stream/')) {
             return await handleOfflineMediaStreamRequest(request);
@@ -356,6 +368,7 @@ async function handleRequest(request) {
         
     } catch (error) {
         console.error('Service Worker: Request handling failed for', request.url, error);
+        if (isNavigationRequest(request) && self.navigator.onLine !== false) return Response.error();
         return await getOfflineResponse(request);
     }
 }

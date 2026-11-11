@@ -28,7 +28,7 @@ from django.template.loader import render_to_string
 from rest_framework import permissions, status
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.renderers import BaseRenderer, JSONRenderer
+from rest_framework.renderers import BaseRenderer, BrowsableAPIRenderer, JSONRenderer
 from rest_framework.views import APIView
 
 from pwanimate.ai.exceptions import (
@@ -43,6 +43,7 @@ from pwanimate.api.serializers import (
     PwanimateAttachmentSerializer,
 )
 from pwanimate.models import (
+    DocumentChunk,
     PwanimateAttachment,
     PwanimateConversation,
     PwanimateMessage,
@@ -71,6 +72,7 @@ from pwanimate.services.tts import (
 from pwanimate.ai.gateway.quota_tracker import get_quota_tracker
 from pwanimate.ai.engines import UnknownSparkEngineError, get_engine, get_engines_status, identify_engine
 from documents.models import Document
+from documents.collections.models import Collection, CollectionItem
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,21 @@ class AudioMP3Renderer(BaseRenderer):
         if isinstance(data, (bytes, bytearray)):
             return bytes(data)
         return JSONRenderer().render(data, accepted_media_type, renderer_context)
+
+
+class EventStreamRenderer(BaseRenderer):
+    """Let DRF negotiate `Accept: text/event-stream` for the chat endpoint.
+
+    The view always returns a StreamingHttpResponse for SSE requests, so this
+    renderer never actually serializes payloads — it exists purely so content
+    negotiation does not reject SSE-only clients with HTTP 406.
+    """
+
+    media_type = "text/event-stream"
+    format = "event-stream"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return b""
 
 
 def _quota_block_payload(decision) -> dict:
@@ -164,6 +181,12 @@ class PwanimateAttachmentVisionPolicyView(APIView):
         )
 
 
+# Sentinel passed as token_callback so resume_run_response takes its
+# journal-tail (durable) path. It is never invoked — claimed runs execute in
+# the worker, not inline.
+_SSE_EXECUTION_MARKER = lambda text: None  # noqa: E731
+
+
 class PwanimateChatView(APIView):
     """
     Primary conversational endpoint for Pwanimate.
@@ -175,6 +198,9 @@ class PwanimateChatView(APIView):
 
     permission_classes = [permissions.IsAuthenticated]
     orchestrator = None
+    # SSE-only Accept headers (the embedded clarification/approval widgets)
+    # must negotiate; JSON and the browsable API keep working unchanged.
+    renderer_classes = [JSONRenderer, BrowsableAPIRenderer, EventStreamRenderer]
 
     def get_orchestrator(self) -> PwanimateOrchestrator:
         return self.orchestrator or PwanimateOrchestrator()
@@ -185,6 +211,13 @@ class PwanimateChatView(APIView):
             # DRF caches parsed data on the Request instance.
             _ = request.data
             _ = request.user.is_authenticated
+            data = request.data or {}
+            if data.get('resume_run_id') or data.get('interaction_id'):
+                # Continuation requests claim + dispatch durably, then tail the
+                # journal — they must not go through the in-process queue.
+                from pwanimate.api.agent_runs import resume_run_response
+                return resume_run_response(
+                    self, request, [], None, _SSE_EXECUTION_MARKER)
             return self._stream_chat_response(request)
         return self._post_chat(request)
 
@@ -193,14 +226,10 @@ class PwanimateChatView(APIView):
         events = queue.Queue()
 
         def report_progress(stage):
-            if stage in {
-                "searching_web",
-                "reading_sources",
-                "devouring_context",
-                "searching_posts",
-                "searching_documents",
-            }:
-                events.put(("status", {"stage": stage}))
+            if isinstance(stage,dict) and stage.get('type') == 'activity':
+                events.put(('activity',stage))
+            elif isinstance(stage,str):
+                events.put(('status',{'stage':stage}))
 
         def report_tokens(text):
             """Visible LLM text deltas -> chunk events for progressive rendering."""
@@ -237,8 +266,8 @@ class PwanimateChatView(APIView):
                     yield ": keep-alive\n\n"
                     continue
 
-                if event_type == "status":
-                    yield f"event: status\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+                if event_type in {"status", "activity"}:
+                    yield f"event: {event_type}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
                     continue
 
                 if event_type == "chunk":
@@ -279,7 +308,26 @@ class PwanimateChatView(APIView):
             study_mode (bool): Optional flag to enter/continue Study Mode.
             study_session_id (str): Optional UUID of an owned Study Mode session.
         """
+        from pwanimate.orchestrator.activity import event, STAGES
+        activity = []
+        downstream_progress = progress_callback
+        def record_progress(value):
+            if isinstance(value,str):
+                if value not in STAGES:
+                    return
+                value = event('stage',STAGES[value],event_id='stage-'+value)
+            if not isinstance(value,dict) or value.get('type') != 'activity':
+                return
+            if len(activity) < 100:
+                activity.append(value)
+            if downstream_progress:
+                downstream_progress(value)
+        progress_callback = record_progress
+        progress_callback(event('stage','Looking at your request',event_id='request'))
         data = request.data or {}
+        if data.get('resume_run_id') or data.get('interaction_id'):
+            from pwanimate.api.agent_runs import resume_run_response
+            return resume_run_response(self,request,activity,progress_callback,token_callback)
         message = data.get("message") if "message" in data else data.get("query")
         if not message or not isinstance(message, str) or not message.strip():
             return Response(
@@ -516,6 +564,10 @@ class PwanimateChatView(APIView):
                 current_topic=str(data.get("current_topic") or "").strip(),
                 context_resources=context_resources,
                 attachments=attachment_objs,
+                unit=data.get("unit") or None,
+                unit_label=str(data.get("unit_label") or "").strip(),
+                target_goal=str(data.get("target_goal") or "").strip(),
+                assessment_mode=str(data.get("assessment_mode") or "").strip(),
             )
             if attachment_objs:
                 with transaction.atomic():
@@ -606,6 +658,10 @@ class PwanimateChatView(APIView):
                 current_topic=initial_topic or clean_query[:160],
                 context_resources=context_resources,
                 attachments=active_attachments,
+                unit=data.get("unit") or None,
+                unit_label=str(data.get("unit_label") or "").strip(),
+                target_goal=str(data.get("target_goal") or "").strip(),
+                assessment_mode=str(data.get("assessment_mode") or "").strip(),
             )
             # Study Mode strictly uses bounded server-side history; client-submitted history/checkpoints are ignored
             history = ConversationService.load_history(
@@ -667,6 +723,7 @@ class PwanimateChatView(APIView):
                 study_mode=study_mode_active,
                 study_context=study_context,
                 conversation_memory=conversation_memory,
+                user_message_id=user_msg.id,
                 request_id=request.headers.get("X-Request-ID") or str(uuid.uuid4()),
             )
             orchestrator = self.get_orchestrator()
@@ -685,11 +742,35 @@ class PwanimateChatView(APIView):
             response.metadata.setdefault("memory_trace", conversation_memory)
             response.metadata.setdefault("retrieval_trace", response.sources or [])
 
+            # Interim Spark updates ("say" events) are real assistant turns,
+            # persisted in order before the final compiled answer.
+            for evt in activity:
+                if isinstance(evt, dict) and evt.get('kind') == 'say':
+                    say_text = str(evt.get('text') or '').strip()
+                    if say_text:
+                        try:
+                            ConversationService.persist_assistant_message(
+                                conversation=conversation,
+                                content=say_text,
+                                provider=response.provider,
+                                model_id=response.model,
+                                task='agent_interim',
+                            )
+                        except Exception:
+                            logger.exception("Could not persist interim Spark message")
+
             # Persist assistant response turn with defensive fallback
             answer_text = (response.answer or "").strip()
             if not answer_text:
                 answer_text = "I'm sorry, I was unable to generate a response. Please try asking again or rephrasing your question."
 
+            # A paused run (clarification/approval) is not a normal answer: keep
+            # the question text for history, but tag the turn so the UI renders
+            # only the activity trail's input block — no answer bubble.
+            awaiting_input = bool(
+                response.metadata.get('awaiting_approval')
+                or response.metadata.get('awaiting_clarification')
+            )
             asst_msg = ConversationService.persist_assistant_message(
                 conversation=conversation,
                 content=answer_text,
@@ -697,14 +778,15 @@ class PwanimateChatView(APIView):
                 sources=response.sources,
                 provider=response.provider,
                 model_id=response.model,
-                task=str(
+                task=('agent_pause' if awaiting_input else str(
                     response.metadata.get("task", "")
                     or response.metadata.get("intent", "")
                     or ""
-                ),
+                )),
                 prompt_tokens=int(response.prompt_tokens or 0),
                 completion_tokens=int(response.completion_tokens or 0),
                 total_tokens=int(response.total_tokens or 0),
+                activity=activity,
             )
             try:
                 from pwanimate.models import PwanimateTurnTrace
@@ -747,6 +829,11 @@ class PwanimateChatView(APIView):
             )
             res_data["conversation_id"] = str(conversation.id)
             res_data["message_id"] = asst_msg.id
+            res_data['activity'] = activity
+            run_id = response.metadata.get('agent_run_id')
+            if run_id:
+                from pwanimate.models import SparkAgentRun
+                SparkAgentRun.objects.filter(pk=run_id,user=request.user).update(activity=activity)
             res_data["user_message_id"] = user_msg.id
             if attachment_objs:
                 res_data["attachments"] = PwanimateAttachmentSerializer(attachment_objs, many=True).data
@@ -1207,7 +1294,10 @@ class PwanimateContextDocumentSearchView(APIView):
                 and any(u.academic_unit_id in enrolled_unit_ids for u in unit_links)
             )
             results.append({
-                "document_id": str(document.share_id),
+                # Canonical identity contract: document_id is the internal
+                # integer PK; document_share_id is the public UUID. The chat
+                # client sends both, and the backend verifies they agree.
+                "document_id": document.id,
                 "document_share_id": str(document.share_id),
                 "document_version_id": str(version.id),
                 "file_id": str(document_file.id),
@@ -1222,6 +1312,186 @@ class PwanimateContextDocumentSearchView(APIView):
                 "url": f"/documents/document/{document.share_id}/",
             })
         return Response({"results": results})
+
+
+def _offline_document_payload(document):
+    """Compact document descriptor shared by the offline library and bundle endpoints."""
+    version = document.latest_version
+    document_file = version.files.first() if version else None
+    unit_links = list(document.academic_units.all())
+    first_unit = unit_links[0].academic_unit if unit_links and unit_links[0].academic_unit_id else None
+    return {
+        "document_id": str(document.share_id),
+        "document_pk": document.id,
+        "document_version_id": str(version.id) if version else None,
+        "title": document.title,
+        "description": document.description or "",
+        "category": document.category.name if document.category_id else "Document",
+        "unit_code": first_unit.code if first_unit else "",
+        "unit_name": first_unit.name if first_unit else "",
+        "units": [
+            {"code": u.academic_unit.code, "name": u.academic_unit.name}
+            for u in unit_links if getattr(u, 'academic_unit', None)
+        ],
+        "file": {
+            "file_id": document_file.id if document_file else None,
+            "filename": document_file.original_filename if document_file else "",
+            "mime_type": document_file.mime_type if document_file else "",
+            "extension": (document_file.extension or "").lstrip(".").lower() if document_file else "",
+            "size_bytes": document_file.size_bytes if document_file else 0,
+            "page_count": document_file.page_count if document_file else None,
+            "url": reverse("pwanimate_api:offline_document_file", kwargs={"share_id": document.share_id}) if document_file else "",
+        },
+        "chunk_count": DocumentChunk.objects.filter(
+            document=document, document_version=version, is_active=True
+        ).count() if version else 0,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+    }
+
+
+class PwanimateOfflineLibraryView(APIView):
+    """List documents the student can save for offline study (have indexed chunks)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from pwanimate.retrieval.services.document_retrieval import (
+            DocumentSemanticRetrievalService,
+        )
+        authorized_doc_ids = (
+            DocumentSemanticRetrievalService()
+            .build_authorized_chunk_queryset(user=request.user)
+            .values('document_id')
+            .distinct()
+        )
+        documents = (
+            Document.objects
+            .filter(id__in=authorized_doc_ids)
+            .select_related('category', 'uploaded_by')
+            .prefetch_related('academic_units__academic_unit')
+            .order_by('title')[:200]
+        )
+        return Response({
+            "documents": [_offline_document_payload(doc) for doc in documents]
+        })
+
+
+class PwanimateOfflineDocumentView(APIView):
+    """Serve an authorized document's metadata + extracted chunks as an offline bundle."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_authorized_document(self, request, share_id):
+        from pwanimate.services.study_session import is_user_authorized_for_document
+        document = get_object_or_404(
+            Document.objects.select_related('category', 'uploaded_by')
+            .prefetch_related('academic_units__academic_unit'),
+            share_id=share_id,
+        )
+        if not is_user_authorized_for_document(request.user, document):
+            raise Http404("Document not found")
+        return document
+
+    def get(self, request, share_id):
+        document = self._get_authorized_document(request, share_id)
+        version = document.latest_version
+        chunks = []
+        if version:
+            chunks = [
+                {
+                    "chunk_index": c.chunk_index,
+                    "chunk_type": c.chunk_type,
+                    "content": c.content,
+                    "page_number": c.page_number,
+                    "page_end": c.page_end,
+                    "slide_number": c.slide_number,
+                    "section_heading": c.section_heading or "",
+                }
+                for c in DocumentChunk.objects.filter(
+                    document=document, document_version=version, is_active=True
+                ).order_by('chunk_index')
+            ]
+        payload = _offline_document_payload(document)
+        payload["chunks"] = chunks
+        return Response(payload)
+
+
+class PwanimateOfflineDocumentFileView(APIView):
+    """Stream the primary file bytes for an authorized document (offline download)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, share_id):
+        from pwanimate.services.study_session import is_user_authorized_for_document
+        document = get_object_or_404(Document.objects.all(), share_id=share_id)
+        if not is_user_authorized_for_document(request.user, document):
+            raise Http404("Document not found")
+        version = document.latest_version
+        document_file = version.files.first() if version else None
+        if not document_file or not document_file.file:
+            raise Http404("File not found")
+        try:
+            file_handle = document_file.file.open('rb')
+        except (ValueError, OSError) as exc:
+            logger.warning("Offline file open failed for document %s: %s", document.id, exc)
+            raise Http404("File not available")
+        response = FileResponse(file_handle, content_type=document_file.mime_type or 'application/octet-stream')
+        safe_name = (document_file.original_filename or 'document').replace('"', '').replace('\r', '').replace('\n', '')
+        response['Content-Disposition'] = f'attachment; filename="{safe_name}"'
+        response['Cache-Control'] = 'private, no-store'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+
+class PwanimateOfflineDocumentSaveView(APIView):
+    """Mirror an offline save into the student's 'Spark Offline' collection.
+
+    Keeps a server-side record so Spark's ranking/context can treat locally
+    saved documents as the student's revision shelf without any client sync.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+    COLLECTION_NAME = 'Spark Offline'
+
+    def _get_authorized_document(self, request, share_id):
+        from pwanimate.services.study_session import is_user_authorized_for_document
+        document = get_object_or_404(Document.objects.all(), share_id=share_id)
+        if not is_user_authorized_for_document(request.user, document):
+            raise Http404("Document not found")
+        return document
+
+    def _collection(self, user):
+        collection = Collection.objects.filter(owner=user, name=self.COLLECTION_NAME).first()
+        if not collection:
+            collection = StudyCollectionService.create_collection(
+                user=user,
+                name=self.COLLECTION_NAME,
+                description='Documents saved for offline study.',
+                visibility='private',
+            )
+        return collection
+
+    def post(self, request, share_id):
+        document = self._get_authorized_document(request, share_id)
+        collection = self._collection(request.user)
+        item, _ = CollectionItem.objects.get_or_create(
+            collection=collection,
+            document=document,
+            defaults={'added_by': request.user},
+        )
+        return Response({
+            'saved': True,
+            'collection': collection.name,
+            'item_id': item.id,
+        })
+
+    def delete(self, request, share_id):
+        document = self._get_authorized_document(request, share_id)
+        collection = Collection.objects.filter(owner=request.user, name=self.COLLECTION_NAME).first()
+        removed = False
+        if collection:
+            removed = CollectionItem.objects.filter(collection=collection, document=document).delete()[0] > 0
+        return Response({'saved': False, 'removed': removed})
 
 
 class PwanimateAttachmentStatusView(APIView):
@@ -1491,6 +1761,10 @@ class PwanimateStudySessionListView(APIView):
             learning_objective=str(data.get("learning_objective") or "").strip(),
             current_topic=str(data.get("current_topic") or "").strip(),
             context_resources=context_resources,
+            unit=data.get("unit") or None,
+            unit_label=str(data.get("unit_label") or "").strip(),
+            target_goal=str(data.get("target_goal") or "").strip(),
+            assessment_mode=str(data.get("assessment_mode") or "").strip(),
         )
         return Response(
             {

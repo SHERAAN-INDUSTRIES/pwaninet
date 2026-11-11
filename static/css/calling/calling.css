@@ -1,0 +1,170 @@
+/* All surfaces inherit PwaniNet's live theme; Bootstrap supplies action colors. */
+#pwani-call-root {
+  --call-surface: var(--card-bg, var(--bs-body-bg));
+  --call-text: var(--text-dark, var(--bs-body-color));
+  --call-muted: var(--text-secondary, var(--bs-secondary-color));
+  --call-border: var(--border, var(--bs-border-color));
+  --call-positive: var(--bs-success);
+  --call-negative: var(--bs-danger);
+  color: var(--call-text);
+  font-family: var(--bs-body-font-family);
+}
+#pwani-call-root [hidden] { display: none !important; }
+.call-screen {
+  position: fixed; inset: 0; margin: 0; width: 100%; max-width: none;
+  height: 100dvh; max-height: 100dvh; border: 0; padding: 0;
+  color: var(--call-text); background: var(--background, var(--bs-body-bg));
+  overflow: auto; overscroll-behavior: contain;
+}
+.call-screen::backdrop { background: var(--background, var(--bs-body-bg)); }
+.call-layout {
+  min-height: 100%; max-width: 48rem; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 1rem;
+  padding: calc(1rem + var(--vasto-safe-area-top, env(safe-area-inset-top)))
+    calc(1.25rem + var(--vasto-safe-area-right, env(safe-area-inset-right)))
+    calc(1.5rem + var(--vasto-safe-area-bottom, env(safe-area-inset-bottom)))
+    calc(1.25rem + var(--vasto-safe-area-left, env(safe-area-inset-left)));
+}
+.call-topbar { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: .5rem; }
+.call-heading { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .65rem; color: var(--call-muted); font-size: .85rem; }
+.call-icon-btn { width: 48px; height: 48px; border: 0; border-radius: .35rem; background: transparent; color: var(--call-text); font-size: 1.2rem; }
+.call-identity { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; min-width: 0; padding: clamp(2rem, 9vh, 5rem) 0 1.25rem; }
+.call-avatar { width: clamp(104px, 32vw, 152px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; background: var(--call-surface); border: 1px solid var(--call-border); outline: none; margin: .75rem 0 1.8rem; overflow: hidden; font-size: 3.5rem; color: var(--call-muted); }
+.call-avatar img, .call-small-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.call-eyebrow { color: var(--call-muted); font-size: .7rem; font-weight: 600; letter-spacing: .14em; margin-bottom: .6rem; }
+#call-person { color: var(--call-text); font-size: clamp(1.6rem, 7vw, 2.25rem); line-height: 1.2; font-weight: 650; overflow-wrap: anywhere; margin: 0 0 .75rem; }
+.call-status { margin: 0; color: var(--call-muted); font-size: 1rem; }
+.call-timer { font-size: .85rem; font-variant-numeric: tabular-nums; margin: 0; padding-left: .65rem; border-left: 1px solid var(--call-border); }
+.call-detail { max-width: 32ch; color: var(--call-muted); font-size: .9rem; line-height: 1.6; margin: .8rem 0 0; }
+.call-detail:empty { display: none; }
+.call-controls-area { display: flex; flex-direction: column; align-items: center; gap: 1.4rem; padding-top: .5rem; }
+.call-controls, .call-incoming-actions { display: flex; justify-content: center; gap: clamp(1.5rem, 9vw, 4rem); width: 100%; }
+.call-control { position: relative; border: none; background: none; color: var(--call-text); display: flex; align-items: center; flex-direction: column; gap: .65rem; min-width: 76px; max-width: 45%; font: inherit; font-size: .85rem; text-align: center; cursor: pointer; }
+.call-control-icon { width: 64px; height: 64px; border-radius: 50%; background: var(--call-surface); border: 1px solid var(--call-border); display: grid; place-items: center; font-size: 1.4rem; }
+.call-control[aria-pressed="true"] .call-control-icon { background: var(--call-text); color: var(--call-surface); }
+.call-answer .call-control-icon, .call-banner-answer { background: var(--call-positive); color: var(--bs-white); border-color: var(--call-positive); }
+.call-decline .call-control-icon, .call-end, .call-pill-end { background: var(--call-negative); color: var(--bs-white); border-color: var(--call-negative); }
+.call-end { min-height: 56px; min-width: 160px; padding: .85rem 1.5rem; border: 0; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: .8rem; font-weight: 600; }
+.call-end i { font-size: 1.3rem; }
+.call-footnote { color: var(--call-muted); font-size: .75rem; margin: 0; }
+.call-outcome-actions { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: center; width: 100%; }
+.call-text-btn { min-height: 48px; border-radius: 999px; padding: .7rem 1.2rem; }
+.call-output select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.call-output:focus-within .call-control-icon { outline: 3px solid var(--primary); outline-offset: 4px; }
+.call-banner, .call-pill { position: fixed; z-index: 1090; background: var(--call-surface); color: var(--call-text); border: 1px solid var(--call-border); box-shadow: var(--bs-box-shadow); }
+.call-banner { top: var(--call-banner-top, calc(64px + var(--vasto-safe-area-top, 0px))); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); max-width: 420px; margin-inline: auto; border-radius: 22px; padding: 12px; }
+.call-banner-person, .call-pill-main { background: none; color: inherit; border: 0; display: flex; align-items: center; gap: .8rem; padding: 4px; min-height: 48px; min-width: 0; text-align: start; }
+.call-banner-person { width: 100%; }
+.call-banner-person > span:last-child, .call-pill-main > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.call-banner-person strong, .call-pill-main strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: .94rem; }
+.call-banner-person span span, .call-pill-main span span { color: var(--call-muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+.call-small-avatar { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--background); display: grid; place-items: center; flex: 0 0 auto; }
+.call-banner-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.call-banner-actions button { flex: 1; min-height: 48px; border-radius: 999px; padding: .55rem .7rem; font-weight: 600; border: 1px solid var(--call-border); }
+.call-banner-decline { background: var(--call-surface); color: var(--call-negative); }
+.call-banner-actions i { margin-right: .35rem; }
+.call-pill { top: var(--call-pill-top, 76px); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); max-width: 370px; margin-inline: auto; border-radius: 999px; display: flex; align-items: center; gap: .5rem; padding: 6px 8px 6px 14px; }
+.call-pill-main { flex: 1; overflow: hidden; }
+.call-pill-indicator { color: var(--call-positive); width: 30px; flex-shrink: 0; }
+.call-pill-end { height: 48px; width: 48px; border-radius: 50%; border: 0; font-size: 1.2rem; flex-shrink: 0; }
+.call-pill-active .messages-area { padding-top: 96px !important; }
+.call-pill-active:not(.in-conversation-active) #page-content-target { padding-top: 96px; }
+.call-entry {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex-shrink: 0; padding: 0;
+  border: 0; background: transparent; color: var(--text-dark, var(--bs-body-color));
+  font-size: 1.15rem; cursor: pointer; border-radius: .35rem;
+}
+[data-theme="dark"] .call-entry, [data-bs-theme="dark"] .call-entry { color: var(--bs-white); }
+.call-entry:disabled { opacity: .55; cursor: wait; }
+#pwani-call-root button:focus-visible, .call-entry:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
+#pwani-call-root button:disabled { opacity: .55; cursor: wait; }
+#pwani-call-root button { touch-action: manipulation; }
+@media (min-width: 992px) {
+  .call-pill { margin-inline: 0; left: auto; right: 24px; }
+  .call-banner { margin-inline: 0; left: auto; right: 24px; }
+  .call-layout { padding-top: 2rem; padding-bottom: 2rem; }
+}
+@media (max-height: 540px) {
+  .call-layout { gap: .5rem; }
+  .call-identity { padding: .5rem 0; }
+  .call-avatar { width: 72px; font-size: 2rem; outline: none; margin: .25rem 0 1rem; }
+  .call-controls-area { gap: .8rem; }
+  .call-control-icon { width: 48px; height: 48px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .call-screen[open] .call-layout { animation: call-enter 160ms ease-out; }
+  @keyframes call-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+}
+@media (prefers-reduced-motion: reduce) {
+  #pwani-call-root *, #pwani-call-root *::before, #pwani-call-root *::after { animation: none !important; transition: none !important; }
+}
+
+.call-control-pill { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: .75rem 1rem; border-radius: 999px; background: var(--call-surface); border: 1px solid var(--call-border); max-width: 100%; }
+.call-control-pill .call-controls { display: contents; }
+.call-control-pill .call-control { min-width: 64px; max-width: 100px; gap: .35rem; font-size: .75rem; }
+.call-control-pill .call-control-icon { width: 48px; height: 48px; border: 0; background: transparent; }
+.call-control-pill .call-control[aria-pressed="true"] .call-control-icon { background: var(--call-text); color: var(--call-surface); }
+.call-control-pill.is-live .call-end { width: 56px; height: 56px; min-width: 56px; padding: 0; flex-shrink: 0; }
+.call-control-pill.is-live .call-end span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+@media (max-height: 540px) { .call-identity { padding-top: 1rem; } }
+
+.call-desktop-tools { display: none; }
+.call-pill-speaker { width: 44px; height: 44px; flex-shrink: 0; border: 0; border-radius: 50%; background: transparent; color: var(--call-text); font-size: 1.2rem; }
+.call-speaker[aria-pressed="true"], .call-speaker[aria-pressed="true"] .call-control-icon { background: var(--bs-white); color: var(--bs-dark); }
+.call-control-pill .call-control { min-width: 48px; }
+.call-control-pill { gap: .5rem; padding-inline: .75rem; }
+/* Explicit speaker action replaces the hardware dropdown in the compact controls. */
+#call-output-control { display: none !important; }
+@media (min-width: 992px) {
+  .call-screen, .call-screen[open] {
+    position: fixed; inset: auto; left: var(--call-panel-x, 24px); top: var(--call-panel-y, auto);
+    bottom: var(--call-panel-bottom, 24px); width: 440px; height: auto;
+    min-width: 340px; min-height: 190px; max-width: min(680px, calc(100vw - 32px));
+    max-height: min(520px, calc(100dvh - 32px)); padding: 16px;
+    border: 1px solid var(--call-border); border-radius: 24px;
+    background: var(--call-surface); box-shadow: var(--bs-box-shadow); resize: both; overflow: auto; z-index: 1095;
+  }
+  .call-screen.is-expanded { width: 600px; min-height: 300px; }
+  .call-layout { position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 8px 20px; min-height: 0; padding: 0; max-width: none; }
+  .call-desktop-tools { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; }
+  .call-desktop-tools .call-icon-btn { width: 44px; height: 44px; }
+  .call-drag-handle { flex: 1; min-height: 44px; border: 0; background: transparent; color: var(--call-muted); cursor: grab; touch-action: none; text-align: left; }
+  .call-topbar { grid-column: 2; grid-row: 2; display: block; }
+  .call-topbar > .call-icon-btn { display: none; }
+  .call-heading { justify-content: center; }
+  .call-identity { display: contents; padding: 0; }
+  .call-avatar { grid-column: 1; grid-row: 2 / 6; width: 80px; margin: 0; align-self: center; font-size: 2rem; }
+  #call-person { grid-column: 2; grid-row: 3; font-size: 1.1rem; text-align: center; margin: 0; }
+  .call-status { grid-column: 2; grid-row: 4; text-align: center; font-size: .8rem; }
+  .call-detail { grid-column: 1 / -1; max-width: none; font-size: .8rem; }
+  .call-controls-area { grid-column: 2; grid-row: 5; gap: .5rem; padding: 0; }
+  .call-control-pill { border: 0; background: transparent; padding: 0; }
+  .call-control-pill .call-controls { display: contents; }
+  .call-control-pill .call-speaker { display: none; }
+  .call-control-pill .call-end { min-height: 48px; height: 48px; width: 48px; min-width: 48px; }
+  .call-control-pill .call-end span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .call-incoming-actions { gap: .75rem; }
+  .call-incoming-actions .call-control-icon { width: 48px; height: 48px; }
+  .call-footnote { font-size: .65rem; text-align: center; }
+  .call-banner, .call-pill { display: none !important; }
+}
+
+.call-control.call-speaker[aria-pressed="true"] { background: transparent; color: var(--call-text); }
+
+/* Keep the hang-up action readable in every call surface. */
+.call-control-pill.is-live .call-end, .call-control-pill .call-end {
+  width: auto; min-width: 92px; padding: 0 14px; gap: 6px; border-radius: 999px;
+}
+.call-control-pill.is-live .call-end span, .call-control-pill .call-end span {
+  position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: nowrap;
+}
+.call-pill-end { width: auto; min-width: 88px; padding: 0 12px; border-radius: 999px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.call-pill-end span { font-size: .75rem; white-space: nowrap; }
+.voice-call-bubble .voice-call-summary { display: flex; align-items: center; gap: 12px; padding: 4px 2px; min-width: 172px; }
+.voice-call-summary > i { font-size: 1.4rem; }
+.voice-call-summary > span { display: grid; gap: 3px; }
+.voice-call-summary strong { font-weight: 600; }
+.voice-call-summary span span, .voice-call-summary time { font-size: .78rem; opacity: .8; }
+
+.voice-call-summary > i { color: var(--bs-success, #198754); }

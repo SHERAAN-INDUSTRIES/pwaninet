@@ -377,6 +377,21 @@ def _document_owner_recipient(event_data: Dict[str, Any]) -> List[int]:
         return []
 
 
+def _timetable_owner_recipient(event_data: Dict[str, Any]) -> List[int]:
+    """Recipient: Timetable uploader."""
+    from documents.academic.models import ProgrammeTimetable
+
+    target_id = event_data.get('target_id')
+    if not target_id:
+        return []
+
+    try:
+        timetable = ProgrammeTimetable.objects.get(id=target_id)
+        return [timetable.uploaded_by.id] if timetable.uploaded_by else []
+    except ProgrammeTimetable.DoesNotExist:
+        return []
+
+
 def _course_creator_recipient(event_data: Dict[str, Any]) -> List[int]:
     """Recipient: Course creator."""
     from courses.models import Course
@@ -1144,6 +1159,31 @@ SECURITY_DEVICE_BLOCKED_RULE = NotificationRule(
     summary_template="The blocked device was signed out and cannot sign in again.",
 )
 
+TIMETABLE_READY_RULE = NotificationRule(
+    name="timetable_ready",
+    trigger="documents.timetable.ready",
+    condition=None,
+    notification_type="DOCUMENT",
+    category="DOCUMENT",
+    priority="NORMAL",
+    delivery_policy="IMMEDIATE",
+    aggregation_policy="ALLOWED",
+    recipients=_timetable_owner_recipient,
+    title_template="Your timetable is ready",
+    summary_template="Spark finished analyzing your timetable — it's live in your academic workspace.",
+    actions=lambda event: [
+        {
+            'action_type': 'VIEW',
+            'label': 'View Timetable',
+            'url': '/documents/academic/dashboard/?section=timetable',
+            'method': 'GET',
+            'is_primary': True,
+            'order': 0,
+            'style': 'primary'
+        }
+    ]
+)
+
 # All rules registry (device security rules appended further down)
 RULES_REGISTRY = [
     POST_LIKE_RULE,
@@ -1168,6 +1208,7 @@ RULES_REGISTRY = [
     DOCUMENT_DOWNLOADED_RULE,
     DOCUMENT_BOOKMARKED_RULE,
     DOCUMENT_RATED_RULE,
+    TIMETABLE_READY_RULE,
     COURSE_CREATED_RULE,
     UNIT_CREATED_RULE,
     MESSAGE_SENT_RULE,

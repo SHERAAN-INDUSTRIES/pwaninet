@@ -73,7 +73,7 @@ class BuildStudentContextTestCase(SimpleTestCase):
         self.assertEqual(student_ctx.collaboration_status, "open_to_projects")
 
     def test_student_context_for_general_knowledge(self):
-        """General knowledge should only include preferences."""
+        """General knowledge retains academic grounding alongside preferences."""
         student_ctx = self.engine.build_student_context(
             self.mock_user_context,
             IntentCategory.GENERAL_KNOWLEDGE,
@@ -82,8 +82,7 @@ class BuildStudentContextTestCase(SimpleTestCase):
         
         self.assertIsNotNone(student_ctx)
         self.assertEqual(student_ctx.nickname, "Dev")
-        # Academic fields should not be included
-        self.assertIsNone(student_ctx.programme_name)
+        self.assertEqual(student_ctx.programme_name, 'Computer Science')
         self.assertEqual(len(student_ctx.relevant_interests), 0)
         self.assertEqual(len(student_ctx.relevant_skills), 0)
 
@@ -91,7 +90,7 @@ class BuildStudentContextTestCase(SimpleTestCase):
         """vasto knowledge should include programme/level."""
         student_ctx = self.engine.build_student_context(
             self.mock_user_context,
-            IntentCategory.vasto_KNOWLEDGE,
+            IntentCategory.Vasto_KNOWLEDGE,
             "What are the CS prerequisites?"
         )
         

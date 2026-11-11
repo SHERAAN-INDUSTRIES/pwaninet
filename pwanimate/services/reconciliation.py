@@ -56,7 +56,7 @@ def classify_version_health(
         return "FAILED"
     if pending_chunks > 0 or failed_chunks > 0:
         return "EMBEDDING INCOMPLETE"
-    return "UNKNOWN"
+    return "EMBEDDING INCOMPLETE"
 
 
 class DocumentReconciliationService:
@@ -84,7 +84,10 @@ class DocumentReconciliationService:
         Build an efficient queryset using database-side conditional aggregations.
         Calculates chunk and file counts without loading chunk contents or vectors.
         """
+        from pwanimate.ai.embeddings.factory import get_embedding_provider
+        active_model = get_embedding_provider().get_model_name()
         qs = DocumentVersion.objects.filter(
+            is_latest=True,
             document__status="ready",
             document__is_available=True,
         ).annotate(
@@ -92,7 +95,9 @@ class DocumentReconciliationService:
             chunk_count=Count("chunks", distinct=True),
             pending_count=Count("chunks", filter=Q(chunks__embedding_status="pending"), distinct=True),
             failed_count=Count("chunks", filter=Q(chunks__embedding_status="failed"), distinct=True),
-            completed_count=Count("chunks", filter=Q(chunks__embedding_status="completed"), distinct=True),
+            completed_count=Count("chunks", filter=Q(chunks__embedding_status="completed",
+                chunks__is_active=True, chunks__embedding__isnull=False,
+                chunks__embedding_model=active_model), distinct=True),
             active_count=Count("chunks", filter=Q(chunks__is_active=True), distinct=True),
         ).select_related("document").prefetch_related("files")
 
@@ -101,7 +106,11 @@ class DocumentReconciliationService:
         if version_id is not None:
             qs = qs.filter(id=version_id)
 
-        return qs.order_by("document_id", "version_number")
+        return qs.annotate(_repair_priority=models.Case(
+            models.When(file_count=0, then=models.Value(2)),
+            models.When(chunk_count=models.F('completed_count'), then=models.Value(1)),
+            default=models.Value(0), output_field=models.IntegerField(),
+        )).order_by('_repair_priority', 'document_id', 'version_number')
 
     def acquire_dispatch_lock(self, lock_prefix: str, version_id: int, timeout: int = TASK_LOCK_TIMEOUT) -> bool:
         """

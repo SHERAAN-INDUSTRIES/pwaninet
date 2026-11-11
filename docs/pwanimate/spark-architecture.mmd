@@ -1,0 +1,71 @@
+---
+config:
+  theme: base
+  themeVariables:
+    fontFamily: 'Inter, Arial, sans-serif'
+    primaryColor: '#eff6ff'
+    primaryTextColor: '#142741'
+    primaryBorderColor: '#93b4e3'
+    lineColor: '#7792b7'
+    secondaryColor: '#ecfdf5'
+    tertiaryColor: '#f8fafc'
+    clusterBkg: '#f8fafc'
+    clusterBorder: '#d8e3ef'
+  flowchart:
+    curve: basis
+    nodeSpacing: 32
+    rankSpacing: 55
+---
+flowchart TB
+    Student(["STUDENT<br/>Spark chat · Spark settings · Android"])
+    Auth["IDENTITY & OWNERSHIP<br/>Authenticated student · persisted turn"]
+    Student --> Auth
+    subgraph Continuity["01 / CONTINUITY"]
+      Recent["Recent conversation<br/>Bounded history"]
+      Memory[("Study memory<br/>Source-linked summaries + vectors")]
+      Welcome["Personalized welcome<br/>Generated after study · fast database read"]
+      Privacy["Memory controls<br/>Pause · inspect · forget with cutoff"]
+      Memory --> Welcome
+      Privacy -.-> Memory
+    end
+    Auth --> Recent
+    Auth --> Memory
+    Welcome -.-> Student
+    subgraph Thinking["02 / REASON & ACT"]
+      Plan["Study agent<br/>Plan → execute → observe"]
+      Guard["Server-enforced boundaries<br/>3 rounds · 6 calls · strict schemas<br/>Owner scope · write intent · idempotency"]
+      Answer["One grounded answer<br/>Streaming · citations · truthful action outcomes"]
+      Plan --> Guard
+      Guard -->|observations| Plan
+      Plan --> Answer
+    end
+    Recent --> Plan
+    Memory --> Plan
+    subgraph Evidence["03 / SOURCES & CAPABILITIES"]
+      RAG["Document RAG<br/>pgvector + authorized lexical fallback"]
+      Web["Public web<br/>Current evidence + source URLs"]
+      Campus["Campus tools<br/>Posts · notifications · unread chats<br/>Official cohort timetable"]
+      Personal["Personal planner<br/>Study plans · reminder records"]
+    end
+    Guard --> RAG & Web & Campus & Personal
+    RAG & Web & Campus & Personal --> Answer
+    Answer --> Student
+    Answer -.->|after message commit| Memory
+    subgraph Delivery["04 / DURABLE REMINDERS"]
+      SQL[("Reminder database<br/>UTC due time · timezone · cancel state")]
+      Phone["Android local scheduler<br/>Permission → schedule → acknowledge"]
+      Sweep["Restart-safe due sweep<br/>Inbox delivery + push fallback"]
+      Alert(["Study reminder"])
+      SQL --> Phone --> Alert
+      SQL --> Sweep --> Alert
+    end
+    Personal --> SQL
+    Student -.->|review / cancel| SQL
+    classDef entry fill:#142741,color:#fff,stroke:#142741,stroke-width:2px;
+    classDef agent fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px;
+    classDef memory fill:#eef2ff,color:#312e81,stroke:#a5b4fc;
+    classDef action fill:#ecfdf5,color:#065f46,stroke:#6ee7b7;
+    class Student,Alert entry;
+    class Plan,Answer agent;
+    class Memory,Welcome,Privacy memory;
+    class Personal,SQL,Phone,Sweep action;

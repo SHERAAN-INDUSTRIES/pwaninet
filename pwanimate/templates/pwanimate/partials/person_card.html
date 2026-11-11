@@ -49,7 +49,7 @@
 
                 {% if person.academic_level or person.programme_name %}
                     <div class="pwanimate-person-academic small pwanimate-line-clamp-2 mb-2">
-                        <i class="bi bi-mortarboard me-1"></i>
+                        <i data-lucide="graduation-cap" class="me-1"></i>
                         {% if person.academic_level %}{{ person.academic_level }}{% if person.programme_name %} • {% endif %}{% endif %}{{ person.programme_name }}
                     </div>
                 {% endif %}
@@ -64,49 +64,49 @@
                 <div class="d-flex flex-wrap gap-1 pwanimate-person-badges mb-2">
                     {% if person.collaboration_status == 'open_to_projects' %}
                         <span class="badge pwanimate-badge-collab">
-                            <i class="bi bi-code-slash me-1"></i>{% trans "Open to Projects" %}
+                            <i data-lucide="code" class="me-1"></i>{% trans "Open to Projects" %}
                         </span>
                     {% elif person.collaboration_status == 'open_to_study_groups' %}
                         <span class="badge pwanimate-badge-collab">
-                            <i class="bi bi-book me-1"></i>{% trans "Open to Study Groups" %}
+                            <i data-lucide="book-open" class="me-1"></i>{% trans "Open to Study Groups" %}
                         </span>
                     {% elif person.collaboration_status == 'open_to_networking' %}
                         <span class="badge pwanimate-badge-collab">
-                            <i class="bi bi-people me-1"></i>{% trans "Open to Networking" %}
+                            <i data-lucide="users" class="me-1"></i>{% trans "Open to Networking" %}
                         </span>
                     {% elif person.collaboration_status == 'any_open' %}
                         <span class="badge pwanimate-badge-collab">
-                            <i class="bi bi-person-check me-1"></i>{% trans "Open to Collaborate" %}
+                            <i data-lucide="user-check" class="me-1"></i>{% trans "Open to Collaborate" %}
                         </span>
                     {% endif %}
 
                     {% for skill in person.matched_skills %}
                         <span class="badge pwanimate-badge-skill">
-                            <i class="bi bi-check2 me-1"></i>{{ skill }}
+                            <i data-lucide="check" class="me-1"></i>{{ skill }}
                         </span>
                     {% endfor %}
 
                     {% for interest in person.matched_interests %}
                         <span class="badge pwanimate-badge-interest">
-                            <i class="bi bi-star me-1"></i>{{ interest }}
+                            <i data-lucide="star" class="me-1"></i>{{ interest }}
                         </span>
                     {% endfor %}
 
                     {% if person.evidence.academic_alignment %}
                         <span class="badge pwanimate-badge-evidence">
-                            <i class="bi bi-mortarboard-fill me-1"></i>{{ person.evidence.academic_alignment }}
+                            <i data-lucide="graduation-cap" class="me-1"></i>{{ person.evidence.academic_alignment }}
                         </span>
                     {% endif %}
 
                     {% if person.evidence.mutual_connections_count %}
                         <span class="badge pwanimate-badge-evidence">
-                            <i class="bi bi-people-fill me-1"></i>{{ person.evidence.mutual_connections_count }} {% trans "mutual" %}
+                            <i data-lucide="users" class="me-1"></i>{{ person.evidence.mutual_connections_count }} {% trans "mutual" %}
                         </span>
                     {% endif %}
 
                     {% if person.evidence.shared_groups_count %}
                         <span class="badge pwanimate-badge-evidence">
-                            <i class="bi bi-collection-fill me-1"></i>{{ person.evidence.shared_groups_count }} {% trans "groups" %}
+                            <i data-lucide="library" class="me-1"></i>{{ person.evidence.shared_groups_count }} {% trans "groups" %}
                         </span>
                     {% endif %}
                 </div>
@@ -124,7 +124,7 @@
                             data-programme-name="{{ person.programme_name|default:''|escape }}"
                             data-bio="{{ person.bio|default:''|escape }}"
                             style="font-size: 0.78rem;">
-                        <i class="bi bi-layout-sidebar-inset me-1"></i>{% trans "Preview here" %}
+                        <i data-lucide="panel-right-open" class="me-1"></i>{% trans "Preview here" %}
                     </button>
                     <a href="{{ person.profile_url }}"
                        class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 pwanimate-view-profile-btn"
@@ -134,7 +134,7 @@
                        hx-push-url="true"
                        hx-history="true"
                        style="font-size: 0.78rem;">
-                        <i class="bi bi-person me-1"></i>{% trans "View Profile" %}
+                        <i data-lucide="user" class="me-1"></i>{% trans "View Profile" %}
                     </a>
                 </div>
             </div>

@@ -16,7 +16,7 @@
 
     {% if success %}
     <div class="alert alert-success d-flex align-items-center py-2 px-3 mb-4 rounded-3 shadow-sm border-0" role="alert">
-        <i class="bi bi-check-circle-fill me-2 fs-5 text-success"></i>
+        <i data-lucide="circle-check-big" class="me-2 fs-5 text-success"></i>
         <div>
             <strong>{% trans "Saved!" %}</strong> {% trans "Your Spark preferences have been updated." %}
         </div>
@@ -26,7 +26,7 @@
     {% if errors %}
     <div class="alert alert-danger py-2 px-3 mb-4 rounded-3 shadow-sm border-0" role="alert">
         <div class="d-flex align-items-center mb-1">
-            <i class="bi bi-exclamation-triangle-fill me-2 fs-5 text-danger"></i>
+            <i data-lucide="triangle-alert" class="me-2 fs-5 text-danger"></i>
             <strong>{% trans "Please correct the following errors:" %}</strong>
         </div>
         <ul class="mb-0 ps-3 small">
@@ -192,7 +192,7 @@
     <div class="d-flex justify-content-end pt-3 border-top">
         <button type="submit" id="pwanimate-save-pref-btn" class="btn {% if success %}btn-success{% else %}btn-primary{% endif %} px-4 d-inline-flex align-items-center gap-2">
             <span class="spinner-border spinner-border-sm d-none pwanimate-save-spinner" role="status" aria-hidden="true"></span>
-            <i class="bi bi-check2 pwanimate-save-icon"></i>
+            <i data-lucide="check" class="pwanimate-save-icon"></i>
             <span class="pwanimate-save-text fw-semibold">
                 {% if success %}{% trans "Saved" %}{% else %}{% trans "Save Preferences" %}{% endif %}
             </span>

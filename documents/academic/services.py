@@ -889,6 +889,37 @@ class StudentAcademicEnrollmentService:
 
 
 
+def document_academic_context(document, max_units=3) -> str:
+    """Short academic provenance header for embedding/retrieval context.
+
+    e.g. "Academic context: Unit MAT 101 Linear Algebra; Level Year 2; Semester 1."
+    Returns '' when the document has no academic links.
+    """
+    try:
+        links = list(
+            document.academic_units
+            .select_related('academic_unit', 'academic_level', 'semester__academic_year')
+            [:max_units]
+        )
+    except Exception:
+        return ''
+    if not links:
+        return ''
+    parts = []
+    for link in links:
+        unit = getattr(link, 'academic_unit', None)
+        if unit is None:
+            continue
+        entry = f"{unit.code} {unit.name}".strip()
+        level = getattr(link, 'academic_level', None)
+        if level is not None:
+            entry += f" ({level.name})"
+        parts.append(entry)
+    if not parts:
+        return ''
+    return "Academic context: " + "; ".join(parts) + "."
+
+
 class DocumentAcademicLinkService:
     """Resiliently links Documents to AcademicUnits and syncs DocumentSearchIndex."""
 
@@ -989,6 +1020,79 @@ class DocumentAcademicLinkService:
 
         cls._sync_search_index_units(document)
         return doc_unit
+
+    @classmethod
+    def infer_units_from_text(cls, text, limit=3):
+        """Match academic units mentioned in free text by code or name.
+
+        Codes match on word boundaries in both canonical ("MAT 101") and
+        compact ("MAT101") forms; names must be >=6 chars and match on word
+        boundaries to avoid substring noise ("Data" vs "Database Systems").
+        """
+        text = (text or '').strip()
+        if len(text) < 3:
+            return []
+        haystack = text.upper()
+        haystack_lower = text.lower()
+        # Separator-normalized copy so "CSC-201" / "CSC_201" / "CSC.201" all
+        # compare equal to the spaced canonical form "CSC 201".
+        haystack_norm = re.sub(r'[\s\-_\.]+', ' ', haystack)
+        matches = []
+        for unit in AcademicUnit.objects.filter(is_active=True).only('id', 'code', 'name'):
+            code = (unit.code or '').strip()
+            compact = re.sub(r'[\s\-_\.]+', '', code).upper()
+            spaced = re.sub(r'([A-Z]+)([A-Z0-9].*)', r'\1 \2', compact)
+            code_hit = False
+            for variant in {code.upper(), compact}:
+                if variant and re.search(r'\b' + re.escape(variant) + r'\b', haystack):
+                    code_hit = True
+                    break
+            if not code_hit and spaced and re.search(
+                r'\b' + re.escape(spaced) + r'\b', haystack_norm
+            ):
+                code_hit = True
+            name = (unit.name or '').strip()
+            name_hit = len(name) >= 6 and re.search(
+                r'\b' + re.escape(name.lower()) + r'\b', haystack_lower
+            ) is not None
+            if code_hit or name_hit:
+                # Code matches are more precise than name matches.
+                matches.append((0 if code_hit else 1, unit))
+        matches.sort(key=lambda item: item[0])
+        return [unit for _, unit in matches[:limit]]
+
+    @classmethod
+    def auto_link_document(cls, document, limit=3):
+        """Tag a document with inferred academic units when it has none.
+
+        Used by ingestion/backfill so untagged uploads still participate in
+        unit-scoped retrieval and academic ranking. Returns linked units.
+        """
+        if not document or document.academic_units.exists():
+            return []
+        parts = [document.title or '', document.description or '']
+        try:
+            parts.extend(dt.tag.name for dt in document.document_tags.select_related('tag'))
+        except Exception:
+            pass
+        units = cls.infer_units_from_text(' '.join(parts), limit=limit)
+        linked = []
+        for unit in units:
+            try:
+                cls.link_document_to_unit(
+                    document=document,
+                    academic_unit_id=unit.id,
+                    uploader=getattr(document, 'uploaded_by', None),
+                    replace_existing=False,
+                )
+                linked.append(unit)
+            except Exception as exc:
+                logger.warning("Auto-link failed for document %s unit %s: %s",
+                               getattr(document, 'id', None), unit.code, exc)
+        if linked:
+            logger.info("Auto-linked document %s (%r) to units %s",
+                        document.id, document.title, [u.code for u in linked])
+        return linked
 
     @classmethod
     def _sync_search_index_units(cls, document) -> None:

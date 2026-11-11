@@ -306,7 +306,7 @@ def academic_dashboard(request):
     active_timetable = None
     if selected_programme and selected_level_obj:
         active_timetable = ProgrammeTimetableManager.get_active_timetable(
-            institution=getattr(user, 'institution', None),
+            institution=getattr(user, 'institution', None) or (selected_programme.get_institution() if selected_programme else None),
             programme=selected_programme,
             academic_level=selected_level_obj,
             semester=summary.get('semester') or getattr(user, 'semester', None),
@@ -617,7 +617,8 @@ def upload_timetable_view(request):
     ProgrammeTimetable record at status=PROCESSING, fires the Celery extraction
     task, and responds immediately — the student never waits for AI.
 
-    Phase 2 (Celery task): process_timetable_image_task calls Gemini Vision,
+    Phase 2 (Celery task): process_timetable_image_task calls the configured
+    local vision provider,
     populates schedule_data, and marks the record ACTIVE.
     """
     user = request.user
@@ -656,6 +657,8 @@ def upload_timetable_view(request):
         semester = getattr(user, 'semester', None)
 
     institution = getattr(user, 'institution', None)
+    if not institution and programme:
+        institution = programme.get_institution()
     if not institution:
         institution = Institution.objects.filter(is_active=True).first()
 
@@ -677,12 +680,15 @@ def upload_timetable_view(request):
 
     # HTMX path: render the timetable panel immediately in "processing" state
     if request.headers.get('HX-Request'):
+        summary = StudentAcademicEnrollmentService.get_student_academic_summary(user)
         context = {
             'active_timetable': timetable,
-            'academic_summary': StudentAcademicEnrollmentService.get_student_academic_summary(user),
+            'academic_summary': summary,
             'selected_programme': programme,
             'selected_level_obj': academic_level,
-            'week_grid': _workspace_week_grid(timetable, StudentAcademicEnrollmentService.get_student_academic_summary(user)),
+            'selected_year_num': academic_level.level if academic_level else (summary.get('academic_level_number') or 1),
+            'selected_sem_num': semester.number if semester else (summary.get('semester_number') or 1),
+            'week_grid': _workspace_week_grid(timetable, summary),
         }
         return render(request, 'documents/academic_workspace/sections/timetable.html', context)
 
@@ -724,14 +730,20 @@ def timetable_status_api(request, timetable_id: int):
     if timetable.status == TimetableStatus.ACTIVE and timetable.is_active:
         payload['schedule_data'] = timetable.schedule_data
 
-    # If HTMX request and timetable is now active, return a fully rendered panel
-    if request.headers.get('HX-Request') and timetable.status == TimetableStatus.ACTIVE:
+    # If HTMX request, render the timetable template for ALL states (PROCESSING, ACTIVE, FAILED).
+    # This keeps the processing spinner active while background AI extraction runs,
+    # and prevents raw JSON from leaking into the DOM.
+    if request.headers.get('HX-Request'):
         summary = StudentAcademicEnrollmentService.get_student_academic_summary(request.user)
+        selected_year_num = timetable.academic_level.level if timetable.academic_level else (summary.get('academic_level_number') or 1)
+        selected_sem_num = timetable.semester.number if timetable.semester else (summary.get('semester_number') or 1)
         context = {
             'active_timetable': timetable,
             'academic_summary': summary,
             'selected_programme': timetable.programme,
             'selected_level_obj': timetable.academic_level,
+            'selected_year_num': selected_year_num,
+            'selected_sem_num': selected_sem_num,
             'week_grid': _workspace_week_grid(timetable, summary),
         }
         return render(request, 'documents/academic_workspace/sections/timetable.html', context)
@@ -820,6 +832,5 @@ def timetable_slot_mutation_view(request, timetable_id: int):
         'message': f"Timetable slot {action}d successfully.",
         'schedule_data': updated_tt.schedule_data,
     })
-
 
 

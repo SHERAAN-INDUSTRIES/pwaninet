@@ -116,3 +116,7 @@ serve.sh
 
 # Local development service logs and PID files
 .dev-services/
+
+
+# Existing offline UI runtime copied into the APK by the build.
+/www/offline-assets/

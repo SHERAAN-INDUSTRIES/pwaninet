@@ -489,8 +489,8 @@ class AcademicUnit(models.Model):
     code = models.CharField(
         max_length=20,
         unique=True,
-        validators=[RegexValidator(r'^[A-Z]{3}\d{3}$', 'Code must be like CSC221')],
-        help_text="Unique unit code (e.g., 'CSC221')"
+        validators=[RegexValidator(r'^[A-Z]{3} [A-Z]\d{3}$', "Code must be like 'SCS B101'")],
+        help_text="Unique unit code (e.g., 'SCS B101')"
     )
     name = models.CharField(
         max_length=200,

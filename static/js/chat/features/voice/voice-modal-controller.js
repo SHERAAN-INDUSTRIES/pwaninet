@@ -159,19 +159,6 @@ export class VoiceModalController {
         }
         return;
       }
-
-      // Desktop click on voiceBtn (when NOT in send mode)
-      const voiceBtn = e.target.closest('#voiceBtn');
-      if (voiceBtn && !voiceBtn.classList.contains('send-mode')) {
-        if (e.pointerType !== 'touch') {
-          e.preventDefault();
-          if (voiceService.isRecording) {
-            voiceService.stopRecording();
-          } else {
-            this.startVoiceRecording();
-          }
-        }
-      }
     });
   }
 

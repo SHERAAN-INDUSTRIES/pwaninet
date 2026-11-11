@@ -121,8 +121,8 @@ class ActionConfirmationTests(TestCase):
         self.tool = SendMessageTool()
 
     def _propose(self, message="See you at 8"):
-        self.tool.execute(user=self.student, username="confirm_friend", message=message)
-        return PendingAction.objects.get()
+        result = self.tool.execute(user=self.student, username="confirm_friend", message=message)
+        return PendingAction.objects.get(pk=result.data["action"]["id"])
 
     def test_confirming_sends_the_message(self):
         from messaging.models import Message

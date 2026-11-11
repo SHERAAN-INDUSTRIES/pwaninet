@@ -17,7 +17,7 @@
                     class="pwanimate-subscription-close"
                     data-close-subscription
                     aria-label="{% trans 'Close' %}">
-                <i class="bi bi-x-lg" aria-hidden="true"></i>
+                <i data-lucide="x" aria-hidden="true"></i>
             </button>
         </header>
 
@@ -42,7 +42,7 @@
                 {% endif %}
                 <ul class="pwanimate-subscription-includes">
                     {% for line in tier.includes %}
-                    <li><i class="bi bi-check2" aria-hidden="true"></i>{{ line.label }} <span class="text-muted">— {{ line.value }}</span></li>
+                    <li><i data-lucide="check" aria-hidden="true"></i>{{ line.label }} <span class="text-muted">— {{ line.value }}</span></li>
                     {% endfor %}
                 </ul>
                 <button type="button"
@@ -69,7 +69,7 @@
                    placeholder="07xx xxx xxx">
             <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-primary btn-sm" data-submit-payment>
-                    <i class="bi bi-phone me-1" aria-hidden="true"></i>
+                    <i data-lucide="phone" class="me-1" aria-hidden="true"></i>
                     <span id="pwanimatePaymentButtonLabel">{% trans "Send payment request" %}</span>
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm d-none" data-demo-complete>

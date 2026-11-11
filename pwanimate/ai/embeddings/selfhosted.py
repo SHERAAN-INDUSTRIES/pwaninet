@@ -7,6 +7,7 @@ key concept; an optional shared bearer token is supported.
 """
 
 import logging
+import math
 from typing import List, Optional
 
 import requests
@@ -161,12 +162,15 @@ class SelfHostedEmbeddingProvider(BaseEmbeddingProvider):
                 f"spark-vector returned {count} embeddings for {len(texts)} inputs."
             )
 
-        # Preserve index order (OpenAI-style payloads may arrive unordered).
-        if all(isinstance(item, dict) and "index" in item for item in raw):
-            ordered = [
-                item
-                for _, item in sorted(((int(item["index"]), item) for item in raw), key=lambda pair: pair[0])
-            ]
+        reported_model = data.get('model')
+        if reported_model and reported_model != self.model_name:
+            raise EmbeddingMalformedResponseError('spark-vector returned a different embedding model.')
+        indexes = [item.get('index') if isinstance(item, dict) else None for item in raw]
+        if any(index is not None for index in indexes):
+            if (any(type(index) is not int for index in indexes) or
+                    sorted(indexes) != list(range(len(texts)))):
+                raise EmbeddingMalformedResponseError('spark-vector returned invalid or duplicate indexes.')
+            ordered = sorted(raw, key=lambda item: item['index'])
         else:
             ordered = raw
 
@@ -178,6 +182,9 @@ class SelfHostedEmbeddingProvider(BaseEmbeddingProvider):
                 raise EmbeddingDimensionMismatchError(
                     f"spark-vector vector index {idx} has {size} dimensions, expected {self.dimensions}."
                 )
+            if (any(type(value) not in (int, float) or not math.isfinite(value) for value in vector)
+                    or not any(value != 0 for value in vector)):
+                raise EmbeddingMalformedResponseError('spark-vector returned a non-finite, non-numeric or zero vector.')
             vectors.append(vector)
 
         return vectors

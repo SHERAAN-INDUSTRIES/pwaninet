@@ -5,7 +5,7 @@
     <div class="chat-header d-flex align-items-center justify-content-between px-3 border-bottom" data-conversation-id="{{ conversation.id }}">
       <div class="d-flex align-items-center gap-2 overflow-hidden flex-grow-1" style="min-width: 0;">
         <!-- Left Back Chevron -->
-        <button type="button" class="chat-back-btn btn btn-link p-0 text-decoration-none d-flex align-items-center justify-content-center me-1 d-lg-none" id="chatBackBtn" onclick="window.location.href='/messaging/';" style="color: var(--text-primary); width: 36px; height: 36px; flex-shrink: 0;" aria-label="Back">
+        <button type="button" class="chat-back-btn btn btn-link p-0 text-decoration-none d-flex align-items-center justify-content-center me-1 d-lg-none" id="chatBackBtn" style="color: var(--text-primary); width: 36px; height: 36px; flex-shrink: 0;" aria-label="Back">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
@@ -59,6 +59,17 @@
 
       <!-- Actions on Far Right End: Dedicated Media Button + 3-Dots Dropdown -->
       <div class="d-flex align-items-center gap-1 flex-shrink-0">
+        {% if conversation.type == 'direct' and not conversation.group_id %}
+        {% for member in conversation.members.all %}{% if member.user != request.user %}
+        <button type="button" class="call-entry"
+                data-start-voice-call data-conversation-id="{{ conversation.id }}"
+                data-call-name="{% if member.user.first_name %}{{ member.user.first_name }}{% if member.user.second_name %} {{ member.user.second_name }}{% elif member.user.last_name %} {{ member.user.last_name }}{% endif %}{% else %}{{ member.user.username }}{% endif %}"
+                data-call-avatar="{% if member.user.profile_pic %}{{ member.user.profile_pic.url }}{% endif %}"
+                aria-label="Call {% if member.user.first_name %}{{ member.user.first_name }}{% if member.user.second_name %} {{ member.user.second_name }}{% elif member.user.last_name %} {{ member.user.last_name }}{% endif %}{% else %}{{ member.user.username }}{% endif %}" title="Voice call">
+          <i class="bi bi-telephone" aria-hidden="true"></i>
+        </button>
+        {% endif %}{% endfor %}
+        {% endif %}
         {% if conversation.group_id %}
         <a href="{% url 'groups:groups_detail' conversation.group_id %}" class="btn btn-outline-primary btn-sm rounded-pill" hx-boost="false" aria-label="Back to group profile">Group</a>
         {% endif %}

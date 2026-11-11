@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load i18n %}
+
+{% block title %}{% trans "Study Sessions - Spark" %}{% endblock %}
+{% block html_class %}pwanimate-active{% endblock %}
+{% block body_class %}pwanimate-active{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261109-pause">
+{% endblock %}
+
+{% block header %}
+<nav class="navbar navbar-expand-lg navbar-top fixed-top p-0" id="navbar-top">
+    {% include 'pwanimate/partials/pwanimate_top_nav.html' %}
+</nav>
+{% endblock %}
+
+{% block left_rail %}
+    {% include 'pwanimate/partials/pwanimate_left_rail.html' %}
+{% endblock %}
+
+{% block context_rail %}
+    {% include 'pwanimate/partials/pwanimate_context_rail.html' %}
+{% endblock %}
+
+{% block content %}
+    <script>
+        document.documentElement.classList.add('pwanimate-active');
+        document.body.classList.add('pwanimate-active');
+    </script>
+    {% include 'pwanimate/sessions/mobile_page.html' %}
+{% endblock %}
+
+{% block extra_js %}
+    {{ block.super }}
+    <script src="{% static 'vendor/lucide/lucide.min.js' %}"></script>
+    <script src="{% static 'js/pwanimate/spark-icons.js' %}"></script>
+{% endblock %}
+
+{% block mobile_bottom_nav %}{% endblock %}
+{% block footer %}{% endblock %}

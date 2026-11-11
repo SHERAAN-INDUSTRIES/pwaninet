@@ -37,9 +37,10 @@ class ContentSearchTool(BaseDomainTool):
     parameters_schema = {"type": "object", "properties": {
         "query": {"type": "string"}, "content_type": {"type": "string"},
         "limit": {"type": "integer"},
+        "document_ids": {"type": "array", "items": {"type": "integer"}},
     }, "required": ["query", "content_type"]}
 
-    def execute(self, user, query, content_type, limit=5, **kwargs):
+    def execute(self, user, query, content_type, limit=5, document_ids=None, **kwargs):
         from pwanimate.retrieval.adapters.pwaninet_search import pwaninetSearchAdapter
         from pwanimate.retrieval.types import RetrievalRequest
         query = str(query).strip()[:300]
@@ -47,7 +48,18 @@ class ContentSearchTool(BaseDomainTool):
             raise ToolValidationError("Search type must be post or document.", tool_name=self.name)
         if not query:
             raise ToolValidationError("Please provide search terms.", tool_name=self.name)
-        request = RetrievalRequest(query=query, user=user, limit=min(max(int(limit), 1), 10))
+        filters = {}
+        if content_type == "document" and document_ids:
+            # Optional authorized-document scoping (e.g. the student's selected
+            # context document). The search adapter applies its own access
+            # rules, so this can only narrow, never widen, visibility.
+            try:
+                scoped = [int(value) for value in document_ids][:10]
+            except (TypeError, ValueError):
+                scoped = []
+            if scoped:
+                filters["document_ids"] = scoped
+        request = RetrievalRequest(query=query, user=user, limit=min(max(int(limit), 1), 10), filters=filters)
         adapter = pwaninetSearchAdapter()
         results = adapter.search_posts(request) if content_type == "post" else adapter.search_documents_lexical(request)
         return ToolResult.ok([{

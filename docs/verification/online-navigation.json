@@ -1,0 +1,27 @@
+{
+  "passed": [
+    "eligible rendered page saved under account 1",
+    "media cards keep the existing download control without an extra offline-save button",
+    "rendered pagination persisted after DOM update",
+    "CSRF values, original scripts and duplicate post IDs excluded",
+    "offline navigation restores all loaded posts in order",
+    "visited Pwanimate conversation opens offline",
+    "saved route history/back navigation works",
+    "unvisited route resumes saved content without a blocking page",
+    "message transactions commit in order and group/direct IDs stay isolated",
+    "conversation opens offline with current and older loaded messages",
+    "saved group gateway opens the canonical conversation offline",
+    "saved conversation automatically resumes online and receives new messages",
+    "notification history and loaded pagination open offline",
+    "saved notifications automatically refresh when online",
+    "late pre-switch response cannot restore the previous account",
+    "account switch purges account 1 snapshots and message databases",
+    "logout prevents reopening prior managed pages",
+    "successful feed refresh retains authorized earlier pages",
+    "slow online navigation ignores saved flag and waits for the live page",
+    "online server 503 is not replaced with an offline page",
+    "release config starts from bundled assets"
+  ],
+  "page_errors": [],
+  "scope": "Real Chromium service worker with fixture pages; media-card extra offline control removed."
+}

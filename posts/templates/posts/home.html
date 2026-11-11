@@ -8,8 +8,9 @@
     --primary: #2563eb;
     --primary-hover: #1d4ed8;
     --primary-light: #dbeafe;
-    --search-bg: #e9ecef;
-    --search-bg-focus: #fff;
+    --search-bg: #ffffff;
+    --search-bg-focus: #ffffff;
+    --search-shadow: 0 4px 16px rgba(15, 23, 42, 0.10);
     --header-blur-bg: rgba(255, 255, 255, 0.88);
     --text-main: #0f172a;
     --text-muted: #64748b;
@@ -26,6 +27,7 @@
     --primary-light: #312e81;
     --search-bg: #3a3b3c;
     --search-bg-focus: #4e4f50;
+    --search-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
     --header-blur-bg: rgba(24, 25, 31, 0.88);
     --text-main: #e4e6eb;
     --text-muted: #e4e6eb;
@@ -42,10 +44,10 @@
     position: relative !important;
     top: auto !important;
     z-index: 10;
-    background: var(--header-blur-bg);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--border-soft);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: none;
     padding: 8px 16px;
   }
 
@@ -88,7 +90,7 @@
     object-fit: cover;
     display: block;
     border: 2px solid #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.16);
   }
 
   /* ── Search Form ── */
@@ -110,13 +112,14 @@
   .search-input {
     width: 100%;
     background: var(--search-bg);
-    border: 0;
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius-pill);
     padding: 11px 38px 11px 38px;
     font-size: 14px;
     font-weight: 500;
     color: var(--text-main);
     outline: none;
+    box-shadow: var(--search-shadow);
     transition:
       background var(--transition-smooth),
       box-shadow var(--transition-smooth);
@@ -125,7 +128,7 @@
   .search-input::placeholder { color: var(--text-muted); font-weight: 400; }
   .search-input:focus {
     background: var(--search-bg-focus);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    box-shadow: var(--search-shadow), 0 0 0 3px rgba(37, 99, 235, 0.12);
   }
   .search-input:focus ~ .search-icon,
   .search-form:focus-within .search-icon { color: var(--primary); }

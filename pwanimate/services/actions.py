@@ -147,6 +147,18 @@ class ActionService:
     # ------------------------------------------------------------ confirming
     @classmethod
     def confirm(cls, user, action_id):
+        failure = None
+        with transaction.atomic():
+            try:
+                result = cls._confirm_locked(user, action_id)
+            except ActionError as exc:
+                failure = exc
+        if failure:
+            raise failure
+        return result
+
+    @classmethod
+    def _confirm_locked(cls, user, action_id):
         """
         Execute a pending action the student approved.
 
@@ -155,7 +167,7 @@ class ActionService:
         """
         from pwanimate.models import PendingAction
 
-        action = PendingAction.objects.filter(id=action_id).first()
+        action = PendingAction.objects.select_for_update().filter(id=action_id).first()
         if action is None:
             raise ActionError("That action is no longer available.")
         if action.user_id != getattr(user, "id", None):

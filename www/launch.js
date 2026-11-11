@@ -1,26 +1,34 @@
-window.showVastoLaunchState = state => {
-    const params = new URLSearchParams(location.search);
-    const route = params.get('route');
-    if (state.signedOut) {
-        document.querySelector('#state').textContent = 'You are signed out. Connect to sign in again. Managed saved pages are unavailable after sign-out.';
-    } else if (state.returning) {
-        document.querySelector('#title').textContent = 'Your saved Vasto';
-        document.querySelector('#state').textContent = 'Open previously visited pages, or connect to refresh them. A network outage keeps your last saved view available.';
+/* No replacement app screens: resume the last original page saved on this phone. */
+(() => {
+    const params=new URLSearchParams(location.search);
+    if(params.has('empty')) {
+        const note=document.createElement('div');
+        note.textContent='You are offline viewing cached pages';
+        note.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font:12px system-ui;white-space:nowrap;color:#64748b';
+        document.body.append(note);
+        window.AndroidBridge?.notifyPageReady?.();
+        const reopenLive = async()=>{
+            let saved={};try{saved=await window.Capacitor?.Plugins?.OfflineStore?.status({});}catch(_){}
+            location.replace((saved?.origin||'https://pwaninet.app')+(params.get('route')||'/'));
+        };
+        window.addEventListener('online',reopenLive);
+        if(navigator.onLine !== false)reopenLive();
+        return;
     }
-    if (route) {
-        document.querySelector('#state').textContent = 'This page could not be reached. Connect for an initial visit, or open a previously saved page using navigation.';
+    let launched = false;
+    async function resume(legacy = {}) {
+        if (launched) return;
+        launched = true;
+        let saved = {};
+        try { saved = await window.Capacitor?.Plugins?.OfflineStore?.status({}); } catch (_) {}
+        const origin = saved.origin || legacy.origin || 'https://pwaninet.app';
+        const target = new URL(saved?.snapshotRoute || (!legacy.signedOut && legacy.route) || '/', origin);
+        if (target.origin !== origin) target.href = origin + '/';
+        ['offline_saved', 'view_cache', 'cached'].forEach(key => target.searchParams.delete(key));
+        if (navigator.onLine === false && (saved?.snapshotRoute || legacy.returning)) target.searchParams.set('offline_saved', '1');
+        location.replace(target.href);
     }
-    const resume = document.querySelector('#resume');
-    const path = route || state.route || '/';
-    const url = new URL(path, 'https://pwaninet.app');
-    if (url.origin === 'https://pwaninet.app') {
-        url.searchParams.set('offline_saved', '1');
-        resume.href = url.href;
-    }
-    if (state.returning && !route && !sessionStorage.getItem('vasto-resumed')) {
-        sessionStorage.setItem('vasto-resumed', '1');
-        // Let the local navigation paint before asking the hosted worker for a saved route.
-        setTimeout(() => location.assign(resume.href), 150);
-    }
-};
-if (window.AndroidBridge?.notifyPageReady) window.AndroidBridge.notifyPageReady();
+    window.showVastoLaunchState = resume;
+    // Native onPageLoaded supplies the last route. The timeout covers older app builds.
+    setTimeout(() => resume({}), 800);
+})();

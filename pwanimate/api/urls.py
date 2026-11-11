@@ -18,6 +18,10 @@ from pwanimate.api.views import (
     PwanimateFeedbackSummaryView,
     PwanimateGeneratedResourceView,
     PwanimateMessageFeedbackView,
+    PwanimateOfflineDocumentFileView,
+    PwanimateOfflineDocumentSaveView,
+    PwanimateOfflineDocumentView,
+    PwanimateOfflineLibraryView,
     PwanimateQuotaStatusView,
     PwanimateSpeechSynthesisView,
     PwanimateStudyCheckpointView,
@@ -40,7 +44,24 @@ from pwanimate.billing.api import (
 
 app_name = "pwanimate_api"
 
+from pwanimate.api.study_assistant import (AssessmentView, MemoryView, StudyReportView,
+                                           WelcomeView, ReminderView, ReminderDeviceView, StudyPlansView)
+
+from pwanimate.api.agent_runs import (
+    AgentRunCancelView, AgentRunEventsView, AgentRunRetryView, AgentRunView,
+)
+
 urlpatterns = [
+    path('agent-runs/<uuid:run_id>/', AgentRunView.as_view(), name='agent_run'),
+    path('agent-runs/<uuid:run_id>/events/', AgentRunEventsView.as_view(), name='agent_run_events'),
+    path('agent-runs/<uuid:run_id>/cancel/', AgentRunCancelView.as_view(), name='agent_run_cancel'),
+    path('agent-runs/<uuid:run_id>/retry/', AgentRunRetryView.as_view(), name='agent_run_retry'),
+    path('memory/', MemoryView.as_view(), name='memory'),
+    path('memory/welcome/', WelcomeView.as_view(), name='memory_welcome'),
+    path('reminders/', ReminderView.as_view(), name='reminders'),
+    path('reminders/<uuid:reminder_id>/', ReminderView.as_view(), name='reminder_detail'),
+    path('reminders/<uuid:reminder_id>/device/', ReminderDeviceView.as_view(), name='reminder_device'),
+    path('study-plans/', StudyPlansView.as_view(), name='study_plans'),
     path("chat/", PwanimateChatView.as_view(), name="chat"),
     path("billing/quota/", PwanimateBillingQuotaView.as_view(), name="billing_quota"),
     path("billing/usage/", PwanimateBillingUsageView.as_view(), name="billing_usage"),
@@ -66,11 +87,17 @@ urlpatterns = [
         PwanimateStudySummarySaveCollectionView.as_view(),
         name="study_session_save_collection",
     ),
+    path("study-sessions/<uuid:session_id>/assessments/", AssessmentView.as_view(), name="study_session_assessments"),
+    path("study-sessions/<uuid:session_id>/report/", StudyReportView.as_view(), name="study_session_report"),
     path("collections/", PwanimateCollectionListCreateView.as_view(), name="collection_list_create"),
     path("quota-status/", PwanimateQuotaStatusView.as_view(), name="quota_status"),
     path("voice/transcribe/", PwanimateVoiceTranscriptionView.as_view(), name="voice_transcribe"),
     path("voice/synthesize/", PwanimateSpeechSynthesisView.as_view(), name="voice_synthesize"),
     path("context/documents/", PwanimateContextDocumentSearchView.as_view(), name="context_document_search"),
+    path("offline/library/", PwanimateOfflineLibraryView.as_view(), name="offline_library"),
+    path("offline/documents/<uuid:share_id>/", PwanimateOfflineDocumentView.as_view(), name="offline_document"),
+    path("offline/documents/<uuid:share_id>/file/", PwanimateOfflineDocumentFileView.as_view(), name="offline_document_file"),
+    path("offline/documents/<uuid:share_id>/save/", PwanimateOfflineDocumentSaveView.as_view(), name="offline_document_save"),
     path("attachments/upload/", PwanimateAttachmentUploadView.as_view(), name="attachment_upload"),
     path("attachments/<uuid:attachment_id>/status/", PwanimateAttachmentStatusView.as_view(), name="attachment_status"),
     path("attachments/<uuid:attachment_id>/vision-policy/", PwanimateAttachmentVisionPolicyView.as_view(), name="attachment_vision_policy"),

@@ -1,0 +1,18 @@
+{
+  "provider": "ollama",
+  "model": "deepseek-ocr:pwanimate-q4_K_M",
+  "text": "PWANIMATE OCR TEST\n\nTotal: 42",
+  "seconds": 102.51,
+  "tokens": 601,
+  "focused_tests": 19,
+  "original_model_retained": true,
+  "original_model_oom": true,
+  "quantized_vision_tensors_retained": 476,
+  "quantized_bytes": 2760988384,
+  "broad_regression": {
+    "passed": 78,
+    "failed": 1,
+    "preexisting_failure": "test_gemini_successful_generation expects gemini-2.5-flash; existing configured default is gemini-3.8-flash"
+  },
+  "production_deployed": false
+}

@@ -5,7 +5,7 @@ Unit and integration tests for Pwanimate automatic document ingestion reconcilia
 from unittest.mock import patch, MagicMock
 from django.conf import settings
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 
 from documents.models import Document, DocumentVersion, DocumentFile, Category
@@ -24,6 +24,7 @@ from pwanimate.tasks.reconciliation import reconcile_document_ingestion
 User = get_user_model()
 
 
+@override_settings(PWANIMATE_EMBEDDING_PROVIDER='mock')
 class DocumentReconciliationTestCase(TestCase):
     def setUp(self):
         cache.clear()
@@ -341,3 +342,15 @@ class DocumentReconciliationTestCase(TestCase):
         self.assertEqual(config["task"], "pwanimate.tasks.reconciliation.reconcile_document_ingestion")
         self.assertEqual(config["schedule"], 600.0)
         self.assertEqual(config["options"]["queue"], "docs_queue")
+
+    def test_completed_but_unusable_vectors_are_recovered(self):
+        self.chunk_healthy.is_active = False
+        self.chunk_healthy.save(update_fields=['is_active'])
+        result = DocumentReconciliationService().reconcile(dry_run=True)
+        self.assertGreaterEqual(result['embedding_incomplete_found'], 3)
+
+    def test_old_model_is_not_classified_as_ready(self):
+        self.chunk_healthy.embedding_model = 'retired-model'
+        self.chunk_healthy.save(update_fields=['embedding_model'])
+        version = DocumentReconciliationService().get_annotated_versions_queryset(version_id=self.v_healthy.pk).get()
+        self.assertEqual(version.completed_count, 0)

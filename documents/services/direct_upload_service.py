@@ -9,6 +9,7 @@ whatever they were doing.
 
 import logging
 import os
+import uuid
 
 from django.db import transaction
 from django.utils import timezone
@@ -47,7 +48,7 @@ class DocumentUploadError(Exception):
 def storage_path_for(filename):
     """Storage-relative path for a document file, matching the classic flow."""
     from django.utils import timezone as _tz
-    return f"documents/{_tz.now():%Y/%m/%d}/{os.path.basename(filename)}"
+    return f"documents/{_tz.now():%Y/%m/%d}/{uuid.uuid4().hex}/{os.path.basename(filename)}"
 
 
 def _resolve_category(raw_category):

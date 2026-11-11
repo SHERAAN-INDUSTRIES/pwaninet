@@ -267,6 +267,7 @@ class PwanimateMessage(models.Model):
         db_index=True,
     )
     content = models.TextField()
+    activity = models.JSONField(default=list, blank=True)
     citations = models.JSONField(
         default=list,
         blank=True,
@@ -836,6 +837,55 @@ class PwanimateStudySession(models.Model):
         default="",
         help_text="Current topic or focus question",
     )
+    unit = models.ForeignKey(
+        "documents.AcademicUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Enrolled academic unit this study session focuses on",
+    )
+    unit_label = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Display label for the unit (custom units allowed)",
+    )
+    unit_scope = models.CharField(
+        max_length=140,
+        default="general",
+        db_index=True,
+        help_text="Dedup key for the per-unit active-session constraint: unit code, normalized label, or 'general'",
+    )
+    target_goal = models.TextField(
+        blank=True,
+        default="",
+        help_text="End-of-session goal the student or Spark set for this unit",
+    )
+    target_set_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current target was set; progress restarts on a new target",
+    )
+    progress_percent = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="0-100 progress toward target; only assessed answers move it",
+    )
+    assessment_mode = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Preferred quiz format: 'immediate' Q+A, 'deferred' answers later, 'mcq'",
+    )
+    roadmap = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Study roadmap sections: [{label, status: pending|doing|done}] — coverage gate for progress",
+    )
+    mastery_percent = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="0-100 mastery toward target; ONLY correctly assessed test answers move it",
+    )
     context_state = models.JSONField(
         default=dict,
         blank=True,
@@ -878,9 +928,9 @@ class PwanimateStudySession(models.Model):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["user"],
+                fields=["user", "unit_scope"],
                 condition=models.Q(status="active"),
-                name="pwanimate_unique_active_study_session_per_user",
+                name="pwanimate_unique_active_study_session_per_unit",
             ),
         ]
 
@@ -1073,3 +1123,338 @@ class PendingAction(models.Model):
     @property
     def is_actionable(self) -> bool:
         return self.status == self.STATUS_PENDING and self.expires_at > timezone.now()
+
+
+class SparkMemoryPreference(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    enabled = models.BooleanField(default=True)
+    reset_at = models.DateTimeField(null=True, blank=True)
+
+
+class SparkConversationDigest(models.Model):
+    conversation = models.OneToOneField(PwanimateConversation, on_delete=models.CASCADE)
+    through_message = models.ForeignKey(PwanimateMessage, on_delete=models.CASCADE)
+    topic = models.CharField(max_length=180)
+    summary = models.TextField()
+    next_step = models.CharField(max_length=400, blank=True)
+    welcome = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SparkStudyPlan(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    title = models.CharField(max_length=180)
+    objective = models.TextField(blank=True)
+    sessions = models.JSONField(default=list)
+    idempotency_key = models.CharField(max_length=100, null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "idempotency_key"], name="spark_plan_idempotency")]
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SparkStudyBlock(models.Model):
+    """A personal self-study block Spark or the student schedules alongside the official timetable."""
+    STATUS_SCHEDULED = 'scheduled'
+    STATUS_DONE = 'done'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [(STATUS_SCHEDULED, 'Scheduled'), (STATUS_DONE, 'Done'), (STATUS_CANCELLED, 'Cancelled')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='spark_study_blocks')
+    unit = models.ForeignKey('documents.AcademicUnit', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    unit_label = models.CharField(max_length=120, blank=True, default='')
+    title = models.CharField(max_length=180)
+    scheduled_at = models.DateTimeField(db_index=True)
+    timezone_name = models.CharField(max_length=80, default='UTC')
+    minutes = models.PositiveSmallIntegerField(default=25)
+    recurrence = models.CharField(max_length=16, default='none')
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_SCHEDULED, db_index=True)
+    source = models.CharField(max_length=10, default='user')
+    idempotency_key = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['scheduled_at']
+        indexes = [models.Index(fields=['user', 'status', 'scheduled_at'], name='spark_block_user_status_idx')]
+        constraints = [models.UniqueConstraint(fields=['user', 'idempotency_key'], name='spark_studyblock_idempotency')]
+
+
+class SparkAssessment(models.Model):
+    """A quiz/test Spark administers inside a study session.
+
+    `questions` stores the answer key server-side only; API serializers must
+    strip it. `correct` per item is set exclusively by server-side grading —
+    self-reported understanding never counts.
+    """
+    MODE_IMMEDIATE = 'immediate'   # answer each question as it is asked
+    MODE_DEFERRED = 'deferred'     # all questions first, answers reviewed later
+    MODE_MCQ = 'mcq'               # multiple-choice only
+    MODE_CHOICES = [(MODE_IMMEDIATE, 'Immediate'), (MODE_DEFERRED, 'Deferred'), (MODE_MCQ, 'Multiple choice')]
+
+    STATUS_ACTIVE = 'active'
+    STATUS_COMPLETED = 'completed'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(PwanimateStudySession, on_delete=models.CASCADE, related_name='assessments')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='spark_assessments')
+    mode = models.CharField(max_length=16, choices=MODE_CHOICES, default=MODE_IMMEDIATE)
+    status = models.CharField(max_length=16, default=STATUS_ACTIVE, db_index=True)
+    title = models.CharField(max_length=180, blank=True, default='')
+    questions = models.JSONField(default=list)
+    counts_toward_mastery = models.BooleanField(
+        default=True,
+        help_text='False for practice packs — graded for feedback but excluded from mastery',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['user', 'status'], name='spark_assess_user_idx')]
+
+
+class SparkStudyArtifact(models.Model):
+    """A durable study material Spark produced for a session: report, practice
+    pack reference, or summary — students revisit these to track progress."""
+    KIND_REPORT = 'report'
+    KIND_SUMMARY = 'summary'
+    KIND_PRACTICE = 'practice'
+    KIND_CHOICES = [(KIND_REPORT, 'Report'), (KIND_SUMMARY, 'Summary'), (KIND_PRACTICE, 'Practice')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(PwanimateStudySession, on_delete=models.CASCADE, related_name='artifacts')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='spark_study_artifacts')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, db_index=True)
+    title = models.CharField(max_length=180)
+    payload = models.JSONField(default=dict, blank=True)
+    markdown = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['user', 'kind'], name='spark_artifact_user_kind_idx')]
+
+
+class SparkReminder(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    title = models.CharField(max_length=180)
+    due_at = models.DateTimeField(db_index=True)
+    timezone_name = models.CharField(max_length=80)
+    status = models.CharField(max_length=16, default='scheduled', db_index=True)
+    idempotency_key = models.CharField(max_length=100)
+    notification_id = models.PositiveIntegerField(unique=True)
+    remind_before_minutes = models.PositiveSmallIntegerField(default=0)
+    recurrence = models.CharField(max_length=16, default='none')
+    alert_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    push_status = models.CharField(max_length=20, default='pending')
+    push_attempts = models.PositiveSmallIntegerField(default=0)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'idempotency_key'], name='spark_reminder_idempotency')]
+        indexes = [models.Index(fields=['status', 'due_at'])]
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SparkReminderDevice(models.Model):
+    reminder = models.ForeignKey(SparkReminder, on_delete=models.CASCADE, related_name='devices')
+    installation = models.CharField(max_length=100)
+    scheduled_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['reminder', 'installation'], name='spark_reminder_device_unique')]
+
+
+class SparkAgentRun(models.Model):
+    """Owner-scoped continuation checkpoint; approval never grants future blanket access."""
+    # Lifecycle statuses. 'waiting' covers both input and approval pauses;
+    # wait_reason disambiguates ('clarification' | 'approval' | '').
+    STATUS_QUEUED = 'queued'
+    STATUS_RUNNING = 'running'
+    STATUS_WAITING = 'waiting'
+    STATUS_INTERRUPTED = 'interrupted'
+    STATUS_COMPLETED = 'completed'
+    STATUS_FAILED = 'failed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_EXPIRED = 'expired'
+    WAIT_CLARIFICATION = 'clarification'
+    WAIT_APPROVAL = 'approval'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user_message = models.OneToOneField(PwanimateMessage, on_delete=models.CASCADE)
+    status = models.CharField(max_length=24, default='waiting', db_index=True)
+    wait_reason = models.CharField(max_length=24, blank=True, default='')
+    snapshot = models.JSONField(default=dict)
+    state = models.JSONField(default=dict)
+    action_ids = models.JSONField(default=list)
+    activity = models.JSONField(default=list)
+    # Execution ownership: one attempt owns the run at a time; the lease
+    # bounds how long a crashed attempt may hold it before recovery.
+    attempt_id = models.CharField(max_length=64, blank=True, default='')
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    cancel_requested = models.BooleanField(default=False)
+    # The pending continuation payload (query suffix, note, kind, interaction)
+    # captured at claim time so retries re-dispatch identical work.
+    continuation = models.JSONField(default=dict, blank=True)
+    result_message = models.ForeignKey(
+        PwanimateMessage, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+')
+    expires_at = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SparkAgentInteraction(models.Model):
+    """A structured question Spark asked during a run, resolved exactly once.
+
+    Free-text clarifications and structured choices share this record so the
+    embedded widget, the main composer, and any future client all resolve the
+    same pending interaction through one authoritative path. Approval of
+    side-effecting actions stays with PendingAction/ActionService — approval
+    interactions only reference those actions, they never execute them.
+    """
+    KIND_CLARIFICATION = 'clarification'
+    KIND_APPROVAL = 'approval'
+    INPUT_TEXT = 'text'
+    INPUT_SINGLE = 'single_choice'
+    INPUT_MULTI = 'multi_choice'
+    INPUT_CONFIRM = 'confirm'
+    # A grouped clarification: `options` holds the question list
+    # ([{id,prompt,input_type,options,required,allow_custom_answer}]) and
+    # `answer` holds {'answers': {qid: {...}}, 'text': readable summary}.
+    INPUT_GROUP = 'group'
+    INPUT_CHOICES = [
+        (INPUT_TEXT, 'Free text'),
+        (INPUT_SINGLE, 'Single choice'),
+        (INPUT_MULTI, 'Multiple choice'),
+        (INPUT_CONFIRM, 'Confirmation'),
+        (INPUT_GROUP, 'Grouped questions'),
+    ]
+    STATUS_PENDING = 'pending'
+    STATUS_ANSWERED = 'answered'
+    STATUS_EXPIRED = 'expired'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ANSWERED, 'Answered'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    MAX_ANSWER_CHARS = 2000
+    MAX_OPTIONS = 8
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(SparkAgentRun, on_delete=models.CASCADE, related_name='interactions')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='spark_interactions')
+    conversation = models.ForeignKey(PwanimateConversation, on_delete=models.CASCADE, null=True, blank=True, related_name='spark_interactions')
+    kind = models.CharField(max_length=24, default=KIND_CLARIFICATION, db_index=True)
+    input_type = models.CharField(max_length=24, choices=INPUT_CHOICES, default=INPUT_TEXT)
+    prompt = models.TextField()
+    options = models.JSONField(default=list, blank=True)
+    allow_custom_answer = models.BooleanField(default=True)
+    required = models.BooleanField(default=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    # Structured answer: {'text': str|None, 'selected': [option_id,...]}
+    answer = models.JSONField(null=True, blank=True)
+    submitted_via = models.CharField(max_length=32, blank=True, default='')
+    version = models.PositiveIntegerField(default=1)
+    expires_at = models.DateTimeField(db_index=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['run', 'status'], name='spark_inter_run_status_idx')]
+
+    def serialize(self):
+        payload = {'interaction_id': str(self.id), 'run_id': str(self.run_id),
+                'kind': self.kind, 'input_type': self.input_type, 'prompt': self.prompt,
+                'options': list(self.options or []), 'allow_custom_answer': self.allow_custom_answer,
+                'required': self.required, 'status': self.status,
+                'answer': self.answer, 'expires_at': self.expires_at.isoformat(),
+                'version': self.version}
+        if self.input_type == self.INPUT_GROUP:
+            payload['questions'] = list(self.options or [])
+        return payload
+
+    def __str__(self):
+        return f"{self.kind}/{self.input_type} for run {self.run_id} ({self.status})"
+
+
+class SparkAgentEvent(models.Model):
+    """Append-only journal of public agent execution events.
+
+    The authoritative basis for reconstructing a run's activity trail after
+    reconnect. Payloads are the same sanitized public events the SSE stream
+    already emits — never raw reasoning, prompts, credentials, or tool
+    argument dumps. `seq` is the replay cursor; `dedupe_key` makes journal
+    writes idempotent when the same in-memory activity is flushed twice.
+    """
+    run = models.ForeignKey(SparkAgentRun, on_delete=models.CASCADE, related_name='journal')
+    seq = models.PositiveIntegerField()
+    type = models.CharField(max_length=48, default='activity')
+    payload = models.JSONField(default=dict)
+    dedupe_key = models.CharField(max_length=64, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['seq']
+        constraints = [
+            models.UniqueConstraint(fields=['run', 'seq'], name='spark_agentevent_run_seq_uniq'),
+            models.UniqueConstraint(fields=['run', 'dedupe_key'], name='spark_agentevent_run_dedupe_uniq'),
+        ]
+        indexes = [models.Index(fields=['run', 'seq'], name='spark_agentevent_run_seq_idx')]
+
+    def __str__(self):
+        return f"event {self.seq} for run {self.run_id} ({self.type})"
+
+
+class SparkAgentPlanStep(models.Model):
+    """One durable step in a run's dynamic plan.
+
+    Mirrored from the planner's checklist each round: stable per-run keys let
+    revisions update steps in place instead of churning rows. Completion is
+    only as truthful as the reconciled checklist findings it derives from —
+    the planner's final review ties 'done' to recorded observations.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_RUNNING = 'doing'
+    STATUS_BLOCKED = 'blocked'
+    STATUS_COMPLETED = 'done'
+    STATUS_SKIPPED = 'skipped'
+    STATUS_FAILED = 'failed'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_RUNNING, 'In progress'),
+        (STATUS_BLOCKED, 'Blocked'),
+        (STATUS_COMPLETED, 'Done'),
+        (STATUS_SKIPPED, 'Skipped'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    run = models.ForeignKey(SparkAgentRun, on_delete=models.CASCADE, related_name='plan_steps')
+    key = models.CharField(max_length=160)
+    seq = models.PositiveIntegerField(default=0)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    depends_on = models.JSONField(default=list, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    finding = models.CharField(max_length=400, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['seq', 'created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['run', 'key'], name='spark_planstep_run_key_uniq'),
+        ]
+        indexes = [models.Index(fields=['run', 'status'], name='spark_planstep_run_status_idx')]
+
+    def __str__(self):
+        return f"step {self.seq} '{self.title}' ({self.status})"

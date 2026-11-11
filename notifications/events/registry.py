@@ -72,6 +72,7 @@ class EventTypes(Enum):
     DOCUMENTS_DOCUMENT_PUBLISHED = "documents.document.published"
     DOCUMENTS_DOCUMENT_BOOKMARKED = "documents.document.bookmarked"
     DOCUMENTS_DOCUMENT_RATED = "documents.document.rated"
+    DOCUMENTS_TIMETABLE_READY = "documents.timetable.ready"
     
     # Courses Events
     COURSES_COURSE_CREATED = "courses.course.created"

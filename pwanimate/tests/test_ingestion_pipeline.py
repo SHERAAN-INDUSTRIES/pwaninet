@@ -182,3 +182,56 @@ class IngestionPipelineTestCase(TestCase):
 
             # Confirm that process_document called ingest_document_version.delay(latest_version.id)
             mock_pwanimate_delay.assert_called_once_with(self.version_v2.id)
+
+    def test_existing_chunks_resume_embedding_only_after_commit(self):
+        ingest_document_version(version_id=self.version_v1.pk)
+        ids = list(self.version_v1.chunks.values_list('pk', flat=True))
+        with patch('pwanimate.tasks.embeddings.embed_document_version.delay') as dispatch:
+            with self.captureOnCommitCallbacks(execute=True):
+                result = ingest_document_version(version_id=self.version_v1.pk)
+                dispatch.assert_not_called()
+            dispatch.assert_called_once_with(version_id=self.version_v1.pk)
+        self.assertEqual(result['status'], 'already_ingested')
+        self.assertEqual(list(self.version_v1.chunks.values_list('pk', flat=True)), ids)
+
+    def test_broker_failure_is_not_silently_swallowed(self):
+        ingest_document_version(version_id=self.version_v1.pk)
+        with patch('pwanimate.tasks.embeddings.embed_document_version.delay', side_effect=OSError('broker down')):
+            with self.assertRaises(OSError):
+                with self.captureOnCommitCallbacks(execute=True):
+                    ingest_document_version(version_id=self.version_v1.pk)
+        self.assertTrue(self.version_v1.chunks.exists())
+
+    def test_retry_dispatch_is_not_scheduled_twice(self):
+        from celery.exceptions import Retry
+        with patch('pwanimate.tasks.embeddings.embed_document_version.delay', side_effect=OSError('broker down')):
+            with patch.object(ingest_document_version, 'retry', side_effect=Retry('retrying')) as retry:
+                with patch('pwanimate.tasks.ingestion.transaction.on_commit', side_effect=lambda callback: callback()):
+                    with self.assertRaises(Retry):
+                        ingest_document_version(version_id=self.version_v1.pk)
+        self.assertEqual(retry.call_count, 1)
+        self.assertTrue(self.version_v1.chunks.exists())
+
+    def test_ingestion_includes_all_files_with_stable_source_provenance(self):
+        first_file = self.version_v1.files.first()
+        second = DocumentFile.objects.create(document_version=self.version_v1,
+            original_filename='second.txt', extension='txt', mime_type='text/plain',
+            storage_path=self.file_v2.storage_path if hasattr(self, 'file_v2') else first_file.storage_path,
+            uploaded_by=self.user, size_bytes=10)
+        second.file.name = first_file.file.name
+        second.save(update_fields=['file'])
+        with patch('pwanimate.tasks.embeddings.embed_document_version.delay'):
+            result = ingest_document_version(version_id=self.version_v1.pk)
+        self.assertEqual(result['status'], 'success')
+        chunks = list(self.version_v1.chunks.order_by('chunk_index'))
+        self.assertEqual({c.metadata['document_file_id'] for c in chunks}, {first_file.pk, second.pk})
+        self.assertEqual([c.chunk_index for c in chunks], list(range(len(chunks))))
+
+    def test_unreadable_sources_are_backed_off_after_repeated_failures(self):
+        from pwanimate.ingestion.exceptions import CorruptFileError
+        from pwanimate.services.reconciliation import DocumentReconciliationService
+        with patch('pwanimate.tasks.ingestion.extract_document', side_effect=CorruptFileError('missing source')):
+            for _ in range(3):
+                result = ingest_document_version(version_id=self.version_v1.pk)
+                self.assertEqual(result['status'], 'unreadable_file')
+        self.assertTrue(DocumentReconciliationService().is_backed_off(self.version_v1.pk))

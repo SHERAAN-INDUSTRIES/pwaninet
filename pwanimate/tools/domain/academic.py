@@ -278,6 +278,8 @@ class StudentTimetableTool(BaseDomainTool):
                 programme=programme,
                 academic_level=academic_level,
                 semester=getattr(user, "semester", None),
+                academic_year=getattr(user, "academic_year", None),
+                include_processing=False,
             )
 
             if not timetable or not timetable.schedule_data:
@@ -295,7 +297,8 @@ class StudentTimetableTool(BaseDomainTool):
             action = (action or "get_today_schedule").lower().strip()
 
             if action == "get_today_schedule":
-                today_name = datetime.now().strftime("%A")
+                from django.utils import timezone
+                today_name = timezone.localdate().strftime("%A")
                 today_classes = [s for s in weekly_schedule if s.get("day", "").lower() == today_name.lower()]
                 today_free = [f for f in free_slots if f.get("day", "").lower() == today_name.lower()]
 

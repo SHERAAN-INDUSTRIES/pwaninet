@@ -226,7 +226,7 @@ class TimetableSystemTests(TestCase):
         """
         with patch(
             'documents.tasks.timetable.process_timetable_image_task.apply_async'
-        ) as mock_dispatch:
+        ) as mock_dispatch, self.captureOnCommitCallbacks(execute=True):
             tt = ProgrammeTimetableManager.save_timetable_image(
                 user=self.user,
                 image_file=self._create_sample_image(),
@@ -323,6 +323,39 @@ class TimetableSystemTests(TestCase):
         self.assertTrue(data["is_active"])
         self.assertIn("schedule_data", data)
 
+    def test_timetable_status_api_htmx_processing_returns_html_spinner(self):
+        """HTMX GET /timetable/<id>/status/ when PROCESSING returns HTML section with spinner (never raw JSON)."""
+        with patch('documents.tasks.timetable.process_timetable_image_task.apply_async'):
+            tt = ProgrammeTimetableManager.save_timetable_image(
+                user=self.user,
+                image_file=self._create_sample_image(),
+                institution=self.institution,
+                programme=self.programme,
+                academic_level=self.academic_level,
+                semester=self.semester,
+            )
+        url = reverse("documents:academic:timetable_status", kwargs={"timetable_id": tt.id})
+        response = self.client.get(url, HTTP_HX_REQUEST="true")
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Spark AI is analyzing your timetable", content)
+        self.assertIn("spinner-border", content)
+        self.assertNotIn('"found": true', content)
+
+    def test_horizontal_timetable_layout_adaptive_bounds(self):
+        """build_week_grid dynamically adapts axis bounds and produces day_rows with lecturer/venue."""
+        tt = self._save_active_timetable()
+        from documents.academic.workspace import build_week_grid
+        grid = build_week_grid(tt.schedule_data)
+        self.assertIn("day_rows", grid)
+        self.assertIn("time_headers", grid)
+        self.assertTrue(len(grid["time_headers"]) > 0)
+        # Check Monday row has slots with lecturer and venue
+        mon = next(r for r in grid["day_rows"] if r["name"] == "Monday")
+        self.assertTrue(len(mon["slots"]) > 0)
+        self.assertEqual(mon["slots"][0]["unit_code"], "CSC 221")
+        self.assertEqual(mon["slots"][0]["venue"], "LH1")
+
     def test_spark_context_formatting(self):
         """StudentContext formats <weekly_timetable> XML with both lecture and free slots."""
         sched_data = {
@@ -366,3 +399,87 @@ class TimetableSystemTests(TestCase):
         result_weekly = tool.execute(user=self.user, action="get_weekly_schedule")
         self.assertTrue(result_weekly.success)
         self.assertEqual(result_weekly.data.get("programme"), self.programme.code)
+
+    def test_spark_retains_valid_schedule_during_replacement_and_failure(self):
+        old = self._save_active_timetable()
+        with patch('documents.tasks.timetable.process_timetable_image_task.apply_async'):
+            pending = ProgrammeTimetableManager.save_timetable_image(user=self.user,
+                image_file=self._create_sample_image(), institution=self.institution,
+                programme=self.programme, academic_level=self.academic_level, semester=self.semester)
+        old.refresh_from_db()
+        self.assertTrue(old.is_active)
+        current = ProgrammeTimetableManager.get_active_timetable(institution=self.institution,
+            programme=self.programme, academic_level=self.academic_level,
+            semester=self.semester, include_processing=False)
+        self.assertEqual(current.pk, old.pk)
+        from documents.tasks.timetable import _mark_failed
+        _mark_failed(pending)
+        self.assertTrue(StudentTimetableTool().execute(user=self.user, action='get_weekly_schedule').data['has_timetable'])
+
+    def test_late_older_extraction_cannot_replace_newer_schedule(self):
+        first = self._save_active_timetable()
+        latest = self._save_active_timetable()
+        activated = ProgrammeTimetableManager.activate_timetable(first, SAMPLE_SCHEDULE)
+        self.assertFalse(activated)
+        latest.refresh_from_db()
+        self.assertTrue(latest.is_active)
+        self.assertEqual(first.status, TimetableStatus.SUPERSEDED)
+
+    def test_other_semester_schedule_is_not_used_as_current_schedule(self):
+        self._save_active_timetable()
+        other, _ = Semester.objects.get_or_create(academic_year=self.academic_year, number=2,
+            defaults={'start_date': self.semester.start_date, 'end_date': self.semester.end_date})
+        result = ProgrammeTimetableManager.get_active_timetable(institution=self.institution,
+            programme=self.programme, academic_level=self.academic_level,
+            semester=other, include_processing=False)
+        self.assertIsNone(result)
+
+    @patch('documents.academic.timetable_service.TimetableExtractionService._resolve_ocr_chain', return_value=[])
+    def test_failed_extraction_does_not_invent_a_schedule(self, _):
+        with self.assertRaises(ValueError):
+            TimetableExtractionService.extract_from_image(b'invalid-image')
+
+    def test_invalid_schedule_times_cannot_activate(self):
+        import copy
+        from documents.academic.timetable_service import validate_schedule_data
+        invalid = copy.deepcopy(SAMPLE_SCHEDULE)
+        invalid['weekly_schedule'][0]['end_time'] = '07:00'
+        with self.assertRaises(ValueError):
+            validate_schedule_data(invalid)
+
+    def test_health_command_quarantines_only_known_placeholder_data(self):
+        import io, json
+        from django.core.management import call_command
+        timetable = self._save_active_timetable()
+        fake = {'weekly_schedule': [
+            {'id': 'mon_0800_session1', 'unit_code': 'LEC 101'},
+            {'id': 'wed_1000_session2', 'unit_code': 'LEC 102'},
+            {'id': 'fri_1400_session3', 'unit_code': 'PRA 103'},
+        ]}
+        ProgrammeTimetable.objects.filter(pk=timetable.pk).update(schedule_data=fake)
+        output = io.StringIO()
+        call_command('spark_health', quarantine_placeholders=True, stdout=output)
+        self.assertEqual(json.loads(output.getvalue())['quarantined_placeholders'], 1)
+        timetable.refresh_from_db()
+        self.assertFalse(timetable.is_active)
+        self.assertEqual(timetable.schedule_data, fake)
+        self.assertTrue(timetable.source_image.name)
+
+    def test_saved_timetable_reaches_spark_on_later_context_builds(self):
+        from pwanimate.context.user_context import UserContextService
+        from pwanimate.context.engine import ContextEngine
+        from pwanimate.context.types import IntentCategory
+        timetable = self._save_active_timetable()
+        first = UserContextService().build(self.user)
+        self.assertEqual(first.weekly_timetable['weekly_schedule'][0]['unit_code'], 'CSC 221')
+        ProgrammeTimetableManager.mutate_timetable_slot(timetable=timetable, action='update',
+            slot_id='mon_0800_csc221', slot_data={'venue': 'New Hall'}, user=self.user)
+        later = UserContextService().build(self.user)
+        selected = ContextEngine().build_student_context(later, IntentCategory.MIXED, 'What classes do I have today?')
+        self.assertIn('New Hall', selected.format_context_block())
+
+    def test_free_slots_remain_inside_the_study_day(self):
+        slots = compute_free_slots([{'day': 'Monday', 'start_time': '18:00', 'end_time': '20:00'}])
+        monday = [slot for slot in slots if slot['day'] == 'Monday']
+        self.assertEqual(monday[0]['start_time'], '08:00')
+        self.assertEqual(monday[0]['end_time'], '17:00')

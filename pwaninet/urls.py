@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function:  from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from pwaninet import native_offline
 from django.contrib import admin
 from pwaninet.offline import offline_post_access, offline_message_access, offline_notification_access
 from django.urls import path, include
@@ -319,6 +320,9 @@ def qr_code_svg(request):
     return response
 
 urlpatterns = [
+    path('api/calling/', include('calling.urls')),
+    path('offline/native-state/', native_offline.state, name='native_offline_state'),
+    path('offline/native-reel/<uuid:share_id>/', native_offline.reel, name='native_offline_reel'),
     # Favicon at root (browsers auto-request /favicon.ico)
     path('favicon.ico', serve_favicon, name='favicon'),
     path('admin/', admin.site.urls),

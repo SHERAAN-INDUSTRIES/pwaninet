@@ -520,6 +520,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(10px);
     z-index: 10000;
@@ -534,6 +535,8 @@
 }
 
 .media-viewer-container {
+    box-sizing: border-box;
+    padding: var(--vasto-safe-area-top, env(safe-area-inset-top, 0px)) var(--vasto-safe-area-right, env(safe-area-inset-right, 0px)) var(--vasto-safe-area-bottom, env(safe-area-inset-bottom, 0px)) var(--vasto-safe-area-left, env(safe-area-inset-left, 0px));
     width: 100%;
     height: 100%;
     display: flex;
@@ -542,15 +545,14 @@
 }
 
 .media-viewer-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    padding: 16px 24px;
+    position: relative;
+    flex-shrink: 0;
+    padding: 12px;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
     z-index: 10;
 }
 
@@ -559,8 +561,9 @@
     background: rgba(255, 255, 255, 0.12);
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -577,6 +580,7 @@
 
 .media-viewer-main {
     flex: 1;
+    min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -585,19 +589,34 @@
 }
 
 .media-viewer-content {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+}
+.media-viewer-image {
+    display: block;
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    transition: transform 0.1s ease;
+    flex-shrink: 0;
+    transform-origin: center;
+    cursor: zoom-in;
 }
-
-.media-viewer-content.zoomed {
-    cursor: grab;
-}
-
-.media-viewer-content.zoomed:active {
-    cursor: grabbing;
-}
+.media-viewer-content.zoomed .media-viewer-image { cursor: grab; }
+.media-viewer-content.zoomed:active .media-viewer-image { cursor: grabbing; }
+.media-viewer-zoom-controls { display: flex; gap: 4px; margin-right: auto; }
+.media-viewer-zoom-controls[hidden] { display: none; }
+.media-viewer-zoom-controls .media-viewer-btn { font-size: 24px; }
+.media-viewer-zoom-controls .media-viewer-zoom-reset { width: 60px; border-radius: 22px; font-size: 13px; }
+.media-viewer-btn:disabled { opacity: 0.4; cursor: default; }
+.media-viewer-btn:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 
 .media-viewer-nav {
     position: absolute;
@@ -630,11 +649,10 @@
 }
 
 .media-viewer-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 16px 24px;
+    position: relative;
+    flex-shrink: 0;
+    padding: 12px;
+    gap: 8px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -642,6 +660,8 @@
 }
 
 .media-viewer-counter {
+    flex-shrink: 0;
+    white-space: nowrap;
     color: white;
     font-size: 14px;
     background: rgba(0, 0, 0, 0.5);
@@ -657,12 +677,20 @@
     background: rgba(0, 0, 0, 0.5);
     border-radius: 8px;
     max-width: 600px;
+    max-height: 20dvh;
+    overflow: auto;
+    overflow-wrap: anywhere;
 }
+
+
+.media-viewer-caption:empty { display: none; }
 
 /* ==================== VIDEO IN VIEWER (REEL PLAYER STYLE) ==================== */
 
 .media-viewer-video-container {
     position: relative;
+    width: 100%;
+    height: 100%;
     max-width: 100%;
     max-height: 100%;
     display: flex;
@@ -672,8 +700,8 @@
 }
 
 .media-viewer-video {
-    max-width: 100vw;
-    max-height: 100vh;
+    max-width: 100%;
+    max-height: 100%;
     object-fit: contain;
     display: block;
     cursor: pointer;

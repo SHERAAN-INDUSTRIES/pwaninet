@@ -7,50 +7,86 @@
          role="separator"
          aria-orientation="vertical"
          aria-label="{% trans 'Resize context rail' %}"
-         aria-valuenow="360"
+         aria-valuenow="720"
          aria-valuemin="280"
-         aria-valuemax="650"
+         aria-valuemax="2400"
          tabindex="0"
          title="{% trans 'Drag to resize context rail' %}"></div>
 
-    <!-- Context Rail Header: Tabs (Left) | Collapse Toggle (Right) -->
-    <div class="d-flex align-items-center justify-content-between px-3 border-bottom flex-shrink-0 pwanimate-context-rail-header" style="height: 48px; min-height: 48px;">
+    <!-- Context Rail Header: Tabs (Left) | Document Title | Menu + Close (Right) -->
+    <div class="d-flex align-items-center gap-1 px-2 border-bottom flex-shrink-0 pwanimate-context-rail-header" style="height: 40px; min-height: 40px;">
         <ul class="nav nav-pills pwanimate-workspace-tabs gap-1" id="desktopWorkspaceTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active d-flex align-items-center justify-content-center gap-1 py-1 px-3"
+                <button class="nav-link active d-flex align-items-center justify-content-center gap-1 py-1 px-2"
                         id="desktopTabPreviewBtn"
                         type="button"
                         role="tab"
                         aria-controls="desktopTabPreviewPane"
                         aria-selected="true"
                         onclick="if (window.pwanimateWorkspace) window.pwanimateWorkspace.switchWorkspaceTab('preview');"
-                        style="font-size: 0.82rem;">
-                    <i class="bi bi-eye"></i>
+                        style="font-size: 0.8rem;">
+                    <i data-lucide="eye"></i>
                     <span>{% trans "Preview" %}</span>
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link d-flex align-items-center justify-content-center gap-1 py-1 px-3"
+                <button class="nav-link d-flex align-items-center justify-content-center gap-1 py-1 px-2"
                         id="desktopTabContextBtn"
                         type="button"
                         role="tab"
                         aria-controls="desktopTabContextPane"
                         aria-selected="false"
                         onclick="if (window.pwanimateWorkspace) window.pwanimateWorkspace.switchWorkspaceTab('context');"
-                        style="font-size: 0.82rem;">
-                    <i class="bi bi-collection"></i>
+                        style="font-size: 0.8rem;">
+                    <i data-lucide="library"></i>
                     <span>{% trans "Context" %}</span>
                     <span class="badge rounded-pill bg-primary ms-1" id="desktopContextCountBadge">0</span>
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link d-flex align-items-center justify-content-center gap-1 py-1 px-2"
+                        id="desktopTabOfflineBtn"
+                        type="button"
+                        role="tab"
+                        aria-controls="desktopTabOfflinePane"
+                        aria-selected="false"
+                        onclick="if (window.pwanimateWorkspace) window.pwanimateWorkspace.switchWorkspaceTab('offline');"
+                        style="font-size: 0.8rem;">
+                    <i data-lucide="hard-drive-download"></i>
+                    <span>{% trans "Offline" %}</span>
+                </button>
+            </li>
         </ul>
+        <span class="flex-grow-1 text-truncate small d-none px-1" id="desktopRailDocTitle" title=""></span>
+        <div class="dropdown flex-shrink-0">
+            <button type="button"
+                    class="pwanimate-collapse-toggle-btn"
+                    id="desktopRailMenuBtn"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    aria-label="{% trans 'Document actions' %}"
+                    title="{% trans 'Document actions' %}">
+                <i data-lucide="ellipsis-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" id="desktopRailMenu" style="font-size: 0.85rem;">
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="open-original"><i data-lucide="external-link" style="width:14px;height:14px;"></i>{% trans "Open original" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="download"><i data-lucide="download" style="width:14px;height:14px;"></i>{% trans "Download" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="save-offline"><i data-lucide="hard-drive-download" style="width:14px;height:14px;"></i>{% trans "Save offline" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="refresh"><i data-lucide="arrow-clockwise" style="width:14px;height:14px;"></i>{% trans "Refresh" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="fullscreen"><i data-lucide="arrows-fullscreen" style="width:14px;height:14px;"></i>{% trans "Fullscreen" %}</button></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="add-context"><i data-lucide="plus" style="width:14px;height:14px;"></i>{% trans "Add to context" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="remove-context"><i data-lucide="trash-2" style="width:14px;height:14px;"></i>{% trans "Remove from context" %}</button></li>
+                <li><button type="button" class="dropdown-item d-flex align-items-center gap-2" data-rail-action="close-preview"><i data-lucide="x" style="width:14px;height:14px;"></i>{% trans "Close preview" %}</button></li>
+            </ul>
+        </div>
         <button type="button"
                 class="pwanimate-collapse-toggle-btn"
                 id="pwanimateContextRailCloseBtn"
                 onclick="if (window.pwanimateWorkspace) window.pwanimateWorkspace.closeContextRail();"
                 aria-label="{% trans 'Close context rail' %}"
                 title="{% trans 'Close context rail' %}">
-            <i class="bi bi-layout-sidebar-inset-reverse"></i>
+            <i data-lucide="panel-right-close"></i>
         </button>
     </div>
 
@@ -65,12 +101,12 @@
                 <!-- Empty Preview State (State B: Rail open + no active preview reference) -->
                 <div class="d-flex flex-column align-items-center justify-content-center text-center p-4 h-100 flex-grow-1 pwanimate-preview-empty-state" id="desktopPreviewEmpty">
                     <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 mb-3" style="width: 48px; height: 48px;">
-                        <i class="bi bi-eye text-primary fs-4"></i>
+                        <i data-lucide="eye" class="text-primary fs-4"></i>
                     </div>
                     <h6 class="fw-semibold mb-1 small text-body">{% trans "Reference Inspection" %}</h6>
                     <p class="small text-muted mb-3" style="max-width: 320px;">{% trans "Click any citation badge in the conversation to inspect documents, posts, or media here without modifying your working context." %}</p>
                     <div class="p-2 rounded pwanimate-empty-hint-box text-muted small" style="max-width: 340px;">
-                        <i class="bi bi-info-circle me-1"></i>{% trans "The open preview is included with your next question. Add it to Context to keep it attached while you chat." %}
+                        <i data-lucide="info" class="me-1"></i>{% trans "The open preview is included with your next question. Add it to Context to keep it attached while you chat." %}
                     </div>
                 </div>
 
@@ -80,20 +116,20 @@
                     <div class="pwanimate-preview-card-header px-3 py-2 d-flex justify-content-between align-items-center border-bottom flex-shrink-0">
                         <div class="d-flex align-items-center gap-2 text-truncate">
                             <span class="pwanimate-preview-badge badge rounded-pill px-2 py-1" id="desktopPreviewCategoryBadge">
-                                <i class="bi bi-file-earmark me-1" id="desktopPreviewCategoryIcon"></i>
+                                <i data-lucide="file" class="me-1" id="desktopPreviewCategoryIcon"></i>
                                 <span id="desktopPreviewCategoryText">{% trans "Document" %}</span>
                             </span>
                             <span class="badge rounded-pill pwanimate-meta-pill d-none" id="desktopPreviewLocationBadge">
-                                <i class="bi bi-bookmark me-1"></i><span id="desktopPreviewLocationText">p. 1</span>
+                                <i data-lucide="bookmark" class="me-1"></i><span id="desktopPreviewLocationText">p. 1</span>
                             </span>
                         </div>
                         <div class="d-flex align-items-center gap-1">
                             <button type="button" class="btn btn-sm btn-primary rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1" id="desktopPreviewAddToContextBtn" style="font-size: 0.78rem; height: 26px;">
-                                <i class="bi bi-plus-lg"></i>
+                                <i data-lucide="plus"></i>
                                 <span id="desktopPreviewAddToContextText">{% trans "+ Add to Context" %}</span>
                             </button>
                             <button type="button" id="desktopPreviewCloseBtn" class="btn btn-sm btn-ghost-secondary rounded-circle d-flex align-items-center justify-content-center p-0 ms-1" style="width: 26px; height: 26px;" aria-label="{% trans 'Close preview' %}" title="{% trans 'Close preview' %}">
-                                <i class="bi bi-x-lg"></i>
+                                <i data-lucide="x"></i>
                             </button>
                         </div>
                     </div>
@@ -124,7 +160,7 @@
                                 <img id="desktopPreviewDocThumbnail" src="" alt="{% trans 'Thumbnail' %}" class="img-fluid rounded" style="max-height: 200px; object-fit: contain;">
                             </div>
                             <div class="pwanimate-preview-doc-icon mb-3" id="desktopPreviewDocIconWrapper">
-                                <i class="bi bi-file-earmark-pdf-fill text-danger" id="desktopPreviewDocIcon" style="font-size: 3.2rem;"></i>
+                                <i data-lucide="file-text" class="text-danger" id="desktopPreviewDocIcon" style="width: 3.2rem; height: 3.2rem;"></i>
                             </div>
                             <h6 class="fw-bold mb-1 text-break" id="desktopPreviewDocTitle" style="font-size: 0.95rem;"></h6>
                             <div class="text-muted small mb-2" id="desktopPreviewDocMeta"></div>
@@ -141,11 +177,11 @@
                         <div class="d-flex align-items-center gap-2">
                             <a href="#" id="desktopPreviewPrimaryAction" class="btn btn-sm btn-primary flex-grow-1 rounded-pill d-flex align-items-center justify-content-center gap-1"
                                target="_blank" rel="noopener">
-                                <i class="bi bi-box-arrow-up-right me-1" id="desktopPreviewPrimaryIcon"></i>
+                                <i data-lucide="external-link" class="me-1" id="desktopPreviewPrimaryIcon"></i>
                                 <span id="desktopPreviewPrimaryText">{% trans "Open Document" %}</span>
                             </a>
                             <a href="#" id="desktopPreviewOriginalLink" class="btn btn-sm btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener" title="{% trans 'Open in new tab' %}">
-                                <i class="bi bi-box-arrow-up-right"></i>
+                                <i data-lucide="external-link"></i>
                             </a>
                         </div>
                     </div>
@@ -158,28 +194,28 @@
                 <!-- Empty Context State (0 attached items) -->
                 <div class="d-flex flex-column align-items-center justify-content-center text-center p-4 h-100 flex-grow-1 pwanimate-preview-empty-state" id="desktopContextEmpty">
                     <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 mb-3" style="width: 48px; height: 48px;">
-                        <i class="bi bi-folder2 text-primary fs-4"></i>
+                        <i data-lucide="folder" class="text-primary fs-4"></i>
                     </div>
                     <h6 class="fw-semibold mb-1 small text-body">{% trans "Working Context" %}</h6>
                     <p class="small text-muted mb-3" style="max-width: 320px;">{% trans "No working materials attached yet. Inspect citations in the Preview tab and click '+ Add to Context' to keep key references attached while you chat." %}</p>
                     <div class="p-2 rounded pwanimate-empty-hint-box text-muted small" style="max-width: 340px;">
-                        <i class="bi bi-check2-circle text-success me-1"></i>{% trans "Attached resources remain pinned across tab switches and citations." %}
+                        <i data-lucide="circle-check" class="text-success me-1"></i>{% trans "Attached resources remain pinned across tab switches and citations." %}
                     </div>
                     <button type="button" class="btn btn-primary rounded-pill mt-3" data-pwanimate-open-context-picker>
-                        <i class="bi bi-plus-lg me-1"></i>{% trans "Add context item" %}
+                        <i data-lucide="plus" class="me-1"></i>{% trans "Add context item" %}
                     </button>
                 </div>
 
                 <!-- Active Context State (1+ attached items) -->
                 <div class="d-none flex-column h-100 pwanimate-context-active-wrapper flex-grow-1 overflow-hidden" id="desktopContextActive">
                     
-                    <!-- Attached Resources Selector Strip -->
-                    <div class="pwanimate-context-strip-wrapper px-3 py-2 border-bottom flex-shrink-0" style="background-color: var(--pwanimate-bg);">
-                        <div class="pwanimate-context-chips-list d-flex gap-2 overflow-x-auto pb-1" id="desktopContextChipsList" role="tablist">
+                    <!-- Attached Resources Selector Strip (compact single row) -->
+                    <div class="pwanimate-context-strip-wrapper px-2 py-1 border-bottom flex-shrink-0 d-flex align-items-center gap-1" style="background-color: var(--pwanimate-bg);">
+                        <div class="pwanimate-context-chips-list d-flex gap-1 overflow-x-auto pb-1 flex-grow-1" id="desktopContextChipsList" role="tablist">
                             <!-- Populated dynamically by SparkChat -->
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-2" data-pwanimate-open-context-picker>
-                            <i class="bi bi-plus-lg me-1"></i>{% trans "Add a book" %}
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill flex-shrink-0 d-inline-flex align-items-center gap-1 px-2" data-pwanimate-open-context-picker title="{% trans 'Add a book' %}" aria-label="{% trans 'Add a book' %}" style="font-size: 0.75rem; height: 26px;">
+                            <i data-lucide="plus"></i>
                         </button>
                     </div>
 
@@ -189,15 +225,15 @@
                         <div class="pwanimate-preview-card-header px-3 py-2 d-flex justify-content-between align-items-center border-bottom flex-shrink-0">
                             <div class="d-flex align-items-center gap-2 text-truncate">
                                 <span class="pwanimate-preview-badge badge rounded-pill px-2 py-1" id="desktopContextCategoryBadge">
-                                    <i class="bi bi-file-earmark me-1" id="desktopContextCategoryIcon"></i>
+                                    <i data-lucide="file" class="me-1" id="desktopContextCategoryIcon"></i>
                                     <span id="desktopContextCategoryText">{% trans "Document" %}</span>
                                 </span>
                                 <span class="badge rounded-pill pwanimate-meta-pill" id="desktopContextLocationBadge">
-                                    <i class="bi bi-bookmark me-1"></i><span id="desktopContextLocationText">p. 1</span>
+                                    <i data-lucide="bookmark" class="me-1"></i><span id="desktopContextLocationText">p. 1</span>
                                 </span>
                             </div>
                             <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1" id="desktopContextRemoveBtn" style="font-size: 0.78rem; height: 26px;" title="{% trans 'Remove from working context' %}">
-                                <i class="bi bi-trash3"></i>
+                                <i data-lucide="trash-2"></i>
                                 <span>{% trans "Remove" %}</span>
                             </button>
                         </div>
@@ -225,7 +261,7 @@
                                     <img id="desktopContextDocThumbnail" src="" alt="{% trans 'Thumbnail' %}" class="img-fluid rounded" style="max-height: 200px; object-fit: contain;">
                                 </div>
                                 <div class="pwanimate-preview-doc-icon mb-3" id="desktopContextDocIconWrapper">
-                                    <i class="bi bi-file-earmark-pdf-fill text-danger" id="desktopContextDocIcon" style="font-size: 3.2rem;"></i>
+                                    <i data-lucide="file-text" class="text-danger" id="desktopContextDocIcon" style="width: 3.2rem; height: 3.2rem;"></i>
                                 </div>
                                 <h6 class="fw-bold mb-1 text-break" id="desktopContextDocTitle" style="font-size: 0.95rem;"></h6>
                                 <div class="text-muted small mb-2" id="desktopContextDocMeta"></div>
@@ -241,15 +277,28 @@
                             </div>
                             <div class="d-flex align-items-center gap-2">
                                 <a href="#" id="desktopContextPrimaryAction" class="btn btn-sm btn-primary flex-grow-1 rounded-pill d-flex align-items-center justify-content-center gap-1" target="_blank" rel="noopener">
-                                    <i class="bi bi-box-arrow-up-right me-1" id="desktopContextPrimaryIcon"></i>
+                                    <i data-lucide="external-link" class="me-1" id="desktopContextPrimaryIcon"></i>
                                     <span id="desktopContextPrimaryText">{% trans "Open Original" %}</span>
                                 </a>
                                 <a href="#" id="desktopContextOriginalLink" class="btn btn-sm btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener" title="{% trans 'Open in new tab' %}">
-                                    <i class="bi bi-box-arrow-up-right"></i>
+                                    <i data-lucide="external-link"></i>
                                 </a>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- 3. OFFLINE TAB PANE -->
+            <div class="tab-pane fade h-100 d-flex flex-column overflow-hidden flex-grow-1" id="desktopTabOfflinePane" role="tabpanel" aria-labelledby="desktopTabOfflineBtn">
+                <div class="px-2 py-2 border-bottom flex-shrink-0" style="background-color: var(--pwanimate-bg);">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text border-0 bg-transparent"><i data-lucide="search" style="width:14px;height:14px;"></i></span>
+                        <input type="search" class="form-control border-0 bg-transparent" id="desktopOfflineSearch" placeholder="{% trans 'Search saved documents' %}" aria-label="{% trans 'Search saved documents' %}" style="font-size: 0.85rem;">
+                    </div>
+                </div>
+                <div class="flex-grow-1 overflow-auto p-2" id="desktopOfflineList" role="list">
+                    <div class="text-center text-muted small py-4">{% trans "Loading offline library…" %}</div>
                 </div>
             </div>
 

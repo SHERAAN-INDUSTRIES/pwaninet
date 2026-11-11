@@ -243,6 +243,7 @@ class ConversationService:
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         total_tokens: int = 0,
+        activity: Optional[list] = None,
     ) -> PwanimateMessage:
         """
         Persist an assistant turn with grounding citations and source provenance.
@@ -258,6 +259,7 @@ class ConversationService:
                 conversation=conversation,
                 role="assistant",
                 content=content.strip(),
+                activity=activity or [],
                 citations=citations or [],
                 sources=sources or [],
                 provider=str(provider or "")[:32],
@@ -269,6 +271,7 @@ class ConversationService:
             )
             conversation.save(update_fields=["updated_at"])
             transaction.on_commit(lambda: ConversationService.schedule_embedding(msg.id))
+            transaction.on_commit(lambda: ConversationService.schedule_digest(str(conversation.id)))
             return msg
 
     @staticmethod
@@ -282,3 +285,12 @@ class ConversationService:
                 delay_fn(message_id)
         except Exception:
             logger.warning("Could not schedule conversation message embedding", exc_info=True)
+
+
+    @staticmethod
+    def schedule_digest(conversation_id):
+        try:
+            from pwanimate.tasks.study_memory import refresh_study_memory
+            refresh_study_memory.delay(conversation_id)
+        except Exception:
+            logger.warning("Could not queue study memory refresh", exc_info=True)

@@ -19,19 +19,21 @@
         <div class="offcanvas-header border-bottom">
             <h5 class="offcanvas-title fw-bold" id="pwanimateMobileMenuLabel">
                 <img src="{% static 'images/pwanimate/pwanimate-transparent.png' %}" alt="Spark" style="width: 24px; height: 24px; object-fit: contain; margin-right: 8px;">
-                <span>PWANI<span class="brand-net">MATE</span></span>
+                <span>SPARK</span>
             </h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="{% trans 'Close' %}"></button>
         </div>
         
         <div class="offcanvas-body p-3 d-flex flex-column">
+            <!-- Menu pane: stays mounted so embedded panels never touch the chat -->
+            <div id="pwanimate-offcanvas-menu" class="d-flex flex-column flex-grow-1" style="min-height: 0;">
             <!-- Current Header Contents for Mobile -->
             <div class="mb-4 d-flex flex-column gap-2 flex-shrink-0">
                 <a href="{% url 'posts:home' %}"
                    class="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center"
                    data-bypass-htmx="true"
                    hx-boost="false">
-                    <i class="bi bi-box-arrow-left me-2"></i> Back to vasto
+                    <i data-lucide="arrow-left" class="me-2"></i> Back to vasto
                 </a>
 
                 {% if request.user.is_authenticated %}
@@ -39,23 +41,24 @@
                    class="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center"
                    data-bypass-htmx="true"
                    hx-boost="false">
-                    <i class="bi bi-person me-2"></i> Profile
+                    <i data-lucide="user" class="me-2"></i> Profile
+                </a>
+                <a href="{% url 'pwanimate:sessions' %}"
+                   class="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center"
+                   onclick="event.preventDefault(); window.sparkOpenOffcanvasPanel(this.href);">
+                    <i data-lucide="book-open-check" class="me-2"></i> {% trans "Study Sessions" %}
                 </a>
                 <a href="{% url 'pwanimate:settings_personalization' %}"
                    class="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center"
-                   data-bs-dismiss="offcanvas"
-                   hx-get="{% url 'pwanimate:settings_personalization' %}"
-                   hx-target="#page-content-target"
-                   hx-swap="innerHTML"
-                   hx-push-url="true">
-                    <i class="bi bi-gear me-2"></i> {% trans "Settings" %}
+                   onclick="event.preventDefault(); window.sparkOpenOffcanvasPanel(this.href);">
+                    <i data-lucide="settings" class="me-2"></i> {% trans "Settings" %}
                 </a>
                 {% endif %}
                 
                 <div class="btn-group w-100" role="group" aria-label="Theme toggle">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('light')" title="Light Mode"><i class="bi bi-sun-fill"></i></button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('dark')" title="Dark Mode"><i class="bi bi-moon-stars-fill"></i></button>
-                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('system')" title="System Theme"><i class="bi bi-laptop"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('light')" title="Light Mode"><i data-lucide="sun"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('dark')" title="Dark Mode"><i data-lucide="moon-star"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="setTheme('system')" title="System Theme"><i data-lucide="laptop"></i></button>
                 </div>
             </div>
 
@@ -68,7 +71,7 @@
                    hx-target="#page-content-target"
                    hx-swap="innerHTML"
                    hx-push-url="true">
-                    <i class="bi bi-plus-lg"></i>
+                    <i data-lucide="plus"></i>
                     <span class="fw-semibold">{% trans "New Chat" %}</span>
                 </a>
                 <a href="{% url 'pwanimate:index' %}?study=1"
@@ -78,7 +81,7 @@
                    hx-target="#page-content-target"
                    hx-swap="innerHTML"
                    hx-push-url="true">
-                    <i class="bi bi-mortarboard-fill"></i>
+                    <i data-lucide="graduation-cap"></i>
                     <span class="fw-semibold">{% trans "Study" %}</span>
                 </a>
             </div>
@@ -101,7 +104,7 @@
                             hx-target="#pwanimate-mobile-list"
                             hx-swap="innerHTML"
                             onclick="this.parentElement.querySelectorAll('button').forEach(b => { b.classList.remove('btn-primary', 'active'); b.classList.add('btn-outline-secondary'); }); this.classList.remove('btn-outline-secondary'); this.classList.add('btn-primary', 'active');">
-                        <i class="bi bi-mortarboard-fill me-1"></i>{% trans "Study" %}
+                        <i data-lucide="graduation-cap" class="me-1"></i>{% trans "Study" %}
                     </button>
                 </div>
             </div>
@@ -114,16 +117,22 @@
                 <form method="post" action="{% url 'logout' %}" class="m-0 p-0">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-danger btn-sm w-100 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-box-arrow-right me-2"></i> {% trans 'Logout' %}
+                        <i data-lucide="log-out" class="me-2"></i> {% trans 'Logout' %}
                     </button>
                 </form>
             </div>
             {% endif %}
+            </div>
+
+            <!-- Embedded panel pane: Settings / Study Sessions load here so the
+                 chat workspace, scroll position and any live generation are
+                 never unmounted. -->
+            <div id="pwanimate-offcanvas-panel" class="d-none flex-column flex-grow-1 overflow-hidden" style="min-height: 0;"></div>
         </div>
     </div>
 
     <!-- Resource Preview Bottom Sheet (Mobile): Structured Card Layout with Tabs -->
-    <div class="offcanvas offcanvas-bottom pwanimate-offcanvas d-xl-none" tabindex="-1" id="pwanimateResourcePreviewSheet" aria-labelledby="previewSheetTitle" style="height: 85vh; max-height: 90vh; background-color: var(--pwanimate-bg); color: var(--pwanimate-asst-text);">
+    <div class="offcanvas offcanvas-bottom pwanimate-offcanvas d-xl-none" tabindex="-1" id="pwanimateResourcePreviewSheet" aria-labelledby="previewSheetTitle" style="height: 85dvh; max-height: 90dvh; background-color: var(--pwanimate-bg); color: var(--pwanimate-asst-text);">
         <div class="pwanimate-bottom-sheet-handle" data-bottom-sheet-handle aria-hidden="true"></div>
         <!-- 1. Header: Tabs (Left) | Close Button (Right) -->
         <div class="offcanvas-header border-bottom px-3 py-2 d-flex align-items-center" style="border-color: var(--pwanimate-border) !important;">
@@ -136,7 +145,7 @@
                             aria-controls="mobileTabPreviewPane"
                             aria-selected="true"
                             style="font-size: 0.85rem;">
-                        <i class="bi bi-eye"></i>
+                        <i data-lucide="eye"></i>
                         <span>{% trans "Preview" %}</span>
                     </button>
                 </li>
@@ -148,14 +157,26 @@
                             aria-controls="mobileTabContextPane"
                             aria-selected="false"
                             style="font-size: 0.85rem;">
-                        <i class="bi bi-collection"></i>
+                        <i data-lucide="library"></i>
                         <span>{% trans "Context" %}</span>
                         <span class="badge rounded-pill bg-primary ms-1" id="mobileContextCountBadge">0</span>
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link d-flex align-items-center justify-content-center gap-1 py-1 px-3"
+                            id="mobileTabOfflineBtn"
+                            type="button"
+                            role="tab"
+                            aria-controls="mobileTabOfflinePane"
+                            aria-selected="false"
+                            style="font-size: 0.85rem;">
+                        <i data-lucide="hard-drive-download"></i>
+                        <span>{% trans "Offline" %}</span>
+                    </button>
+                </li>
             </ul>
             <button type="button" class="btn btn-sm btn-ghost-secondary rounded-circle d-flex align-items-center justify-content-center p-0" data-bs-dismiss="offcanvas" aria-label="{% trans 'Close' %}" style="width: 32px; height: 32px; color: var(--pwanimate-asst-text);">
-                <i class="bi bi-x-lg"></i>
+                <i data-lucide="x"></i>
             </button>
         </div>
 
@@ -169,15 +190,15 @@
                     <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center flex-shrink-0" style="background-color: var(--pwanimate-bg); border-color: var(--pwanimate-border) !important;">
                         <div class="d-flex align-items-center gap-2 text-truncate">
                             <span class="pwanimate-preview-badge badge rounded-pill px-2 py-1" id="previewSheetCategoryBadge">
-                                <i class="bi bi-file-earmark me-1" id="previewSheetCategoryIcon"></i>
+                                <i data-lucide="file" class="me-1" id="previewSheetCategoryIcon"></i>
                                 <span id="previewSheetCategoryText">{% trans "Document" %}</span>
                             </span>
                             <span class="badge rounded-pill pwanimate-meta-pill d-none" id="previewSheetLocationBadge">
-                                <i class="bi bi-bookmark me-1"></i><span id="previewSheetLocationText">p. 1</span>
+                                <i data-lucide="bookmark" class="me-1"></i><span id="previewSheetLocationText">p. 1</span>
                             </span>
                         </div>
                         <button type="button" class="btn btn-sm btn-primary rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1" id="previewSheetAddToContextBtn" style="font-size: 0.78rem; height: 26px;">
-                            <i class="bi bi-plus-lg"></i>
+                            <i data-lucide="plus"></i>
                             <span id="previewSheetAddToContextText">{% trans "+ Add to Context" %}</span>
                         </button>
                     </div>
@@ -208,7 +229,7 @@
                                 <img id="previewSheetDocThumbnail" src="" alt="{% trans 'Thumbnail' %}" class="img-fluid rounded" style="max-height: 200px; object-fit: contain;">
                             </div>
                             <div class="pwanimate-preview-doc-icon mb-3" id="previewSheetDocIconWrapper">
-                                <i class="bi bi-file-earmark-pdf-fill text-danger" id="previewSheetDocIcon" style="font-size: 3.2rem;"></i>
+                                <i data-lucide="file-text" class="text-danger" id="previewSheetDocIcon" style="width: 3.2rem; height: 3.2rem;"></i>
                             </div>
                             <h6 class="fw-bold mb-1 text-break" id="previewSheetDocTitle" style="font-size: 0.95rem;"></h6>
                             <div class="text-muted small mb-2" id="previewSheetDocMeta"></div>
@@ -225,11 +246,11 @@
                         <div class="d-flex align-items-center gap-2">
                             <a href="#" id="previewSheetPrimaryAction" class="btn btn-sm btn-primary flex-grow-1 rounded-pill d-flex align-items-center justify-content-center gap-1"
                                target="_blank" rel="noopener">
-                                <i class="bi bi-box-arrow-up-right me-1" id="previewSheetPrimaryIcon"></i>
+                                <i data-lucide="external-link" class="me-1" id="previewSheetPrimaryIcon"></i>
                                 <span id="previewSheetPrimaryText">{% trans "Open Document" %}</span>
                             </a>
                             <a href="#" id="previewSheetOriginalLink" class="btn btn-sm btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener" title="{% trans 'Open in new tab' %}">
-                                <i class="bi bi-box-arrow-up-right"></i>
+                                <i data-lucide="external-link"></i>
                             </a>
                         </div>
                     </div>
@@ -240,12 +261,12 @@
                     <!-- Empty State for Context -->
                     <div class="d-flex flex-column align-items-start text-start p-4 pwanimate-preview-empty-card" id="mobileContextEmpty">
                         <div class="d-flex align-items-center gap-2 mb-2 text-muted">
-                            <i class="bi bi-folder2 text-primary"></i>
+                            <i data-lucide="folder" class="text-primary"></i>
                             <h6 class="fw-semibold mb-0 small text-body">{% trans "Working Context" %}</h6>
                         </div>
                         <p class="small text-muted mb-3">{% trans "No working materials attached yet. Inspect citations in the Preview tab and click '+ Add to Context' to keep key references attached while you chat." %}</p>
                         <button type="button" class="btn btn-primary btn-sm rounded-pill" data-pwanimate-open-context-picker>
-                            <i class="bi bi-plus-lg me-1"></i>{% trans "Add context item" %}
+                            <i data-lucide="plus" class="me-1"></i>{% trans "Add context item" %}
                         </button>
                     </div>
 
@@ -255,7 +276,7 @@
                         <div class="px-3 pt-2 pb-1 border-bottom flex-shrink-0" style="background-color: var(--pwanimate-bg); border-color: var(--pwanimate-border) !important;">
                             <div class="pwanimate-context-chips-list d-flex gap-2 overflow-x-auto pb-1" id="mobileContextChipsList" role="tablist"></div>
                             <button type="button" class="btn btn-sm btn-outline-primary rounded-pill mt-2" data-pwanimate-open-context-picker>
-                                <i class="bi bi-plus-lg me-1"></i>{% trans "Add a book" %}
+                                <i data-lucide="plus" class="me-1"></i>{% trans "Add a book" %}
                             </button>
                         </div>
 
@@ -263,15 +284,15 @@
                         <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center flex-shrink-0" style="background-color: var(--pwanimate-bg); border-color: var(--pwanimate-border) !important;">
                             <div class="d-flex align-items-center gap-2 text-truncate">
                                 <span class="pwanimate-preview-badge badge rounded-pill px-2 py-1" id="mobileContextCategoryBadge">
-                                    <i class="bi bi-file-earmark me-1" id="mobileContextCategoryIcon"></i>
+                                    <i data-lucide="file" class="me-1" id="mobileContextCategoryIcon"></i>
                                     <span id="mobileContextCategoryText">{% trans "Document" %}</span>
                                 </span>
                                 <span class="badge rounded-pill pwanimate-meta-pill" id="mobileContextLocationBadge">
-                                    <i class="bi bi-bookmark me-1"></i><span id="mobileContextLocationText">p. 1</span>
+                                    <i data-lucide="bookmark" class="me-1"></i><span id="mobileContextLocationText">p. 1</span>
                                 </span>
                             </div>
                             <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1" id="mobileContextRemoveBtn" style="font-size: 0.78rem; height: 26px;" title="{% trans 'Remove from working context' %}">
-                                <i class="bi bi-trash3"></i>
+                                <i data-lucide="trash-2"></i>
                                 <span>{% trans "Remove" %}</span>
                             </button>
                         </div>
@@ -295,7 +316,7 @@
                                     <img id="mobileContextDocThumbnail" src="" alt="{% trans 'Thumbnail' %}" class="img-fluid rounded" style="max-height: 200px; object-fit: contain;">
                                 </div>
                                 <div class="pwanimate-preview-doc-icon mb-3" id="mobileContextDocIconWrapper">
-                                    <i class="bi bi-file-earmark-pdf-fill text-danger" id="mobileContextDocIcon" style="font-size: 3.2rem;"></i>
+                                    <i data-lucide="file-text" class="text-danger" id="mobileContextDocIcon" style="width: 3.2rem; height: 3.2rem;"></i>
                                 </div>
                                 <h6 class="fw-bold mb-1 text-break" id="mobileContextDocTitle" style="font-size: 0.95rem;"></h6>
                                 <div class="text-muted small mb-2" id="mobileContextDocMeta"></div>
@@ -311,14 +332,27 @@
                             </div>
                             <div class="d-flex align-items-center gap-2">
                                 <a href="#" id="mobileContextPrimaryAction" class="btn btn-sm btn-primary flex-grow-1 rounded-pill d-flex align-items-center justify-content-center gap-1" target="_blank" rel="noopener">
-                                    <i class="bi bi-box-arrow-up-right me-1" id="mobileContextPrimaryIcon"></i>
+                                    <i data-lucide="external-link" class="me-1" id="mobileContextPrimaryIcon"></i>
                                     <span id="mobileContextPrimaryText">{% trans "Open Original" %}</span>
                                 </a>
                                 <a href="#" id="mobileContextOriginalLink" class="btn btn-sm btn-outline-secondary rounded-pill px-3" target="_blank" rel="noopener" title="{% trans 'Open in new tab' %}">
-                                    <i class="bi bi-box-arrow-up-right"></i>
+                                    <i data-lucide="external-link"></i>
                                 </a>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: OFFLINE -->
+                <div class="tab-pane fade h-100 d-flex flex-column overflow-hidden" id="mobileTabOfflinePane" role="tabpanel" aria-labelledby="mobileTabOfflineBtn">
+                    <div class="px-3 py-2 border-bottom flex-shrink-0" style="background-color: var(--pwanimate-bg); border-color: var(--pwanimate-border) !important;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text border-0 bg-transparent"><i data-lucide="search" style="width:14px;height:14px;"></i></span>
+                            <input type="search" class="form-control border-0 bg-transparent" id="mobileOfflineSearch" placeholder="{% trans 'Search saved documents' %}" aria-label="{% trans 'Search saved documents' %}" style="font-size: 0.85rem;">
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 overflow-auto p-2" id="mobileOfflineList" role="list">
+                        <div class="text-center text-muted small py-4">{% trans "Loading offline library…" %}</div>
                     </div>
                 </div>
 
@@ -337,7 +371,7 @@
                     onclick="if (window.pwanimateWorkspace) window.pwanimateWorkspace.openContextRail();"
                     title="{% trans 'Open Context Rail' %}"
                     aria-label="{% trans 'Open Context Rail' %}">
-                <i class="bi bi-layout-sidebar-reverse"></i>
+                <i data-lucide="panel-right"></i>
                 <span class="small ms-1">{% trans "Context" %}</span>
             </button>
         </div>
@@ -351,7 +385,7 @@
              aria-live="polite">
             <div class="pwanimate-study-banner-main">
                 <span class="badge rounded-pill pwanimate-study-status-badge status-{{ active_study_session.status|default:'active' }}" id="pwanimateStudyBannerStatusBadge">
-                    <i class="bi bi-mortarboard-fill"></i>
+                    <i data-lucide="graduation-cap"></i>
                     <span id="pwanimateStudyBannerStatusText" class="pwanimate-study-status-label">
                         {% if active_study_session.status == 'paused' %}
                             {% trans "Paused" %}
@@ -373,17 +407,26 @@
                     • {% if active_study_session %}{% if active_study_session.current_topic %}{{ active_study_session.current_topic }}{% elif active_study_session.learning_objective %}{{ active_study_session.learning_objective }}{% endif %}{% endif %}
                 </span>
                 <span class="pwanimate-study-banner-next d-none d-xl-inline-flex align-items-center text-truncate {% if not active_study_session.latest_checkpoint or not active_study_session.latest_checkpoint.recommended_next_step %}d-none{% endif %}" id="pwanimateStudyBannerNextStep">
-                    <i class="bi bi-compass text-primary me-1"></i>
+                    <i data-lucide="compass" class="text-primary me-1"></i>
                     <span id="pwanimateStudyBannerNextStepText">{{ active_study_session.latest_checkpoint.recommended_next_step|default:'' }}</span>
                 </span>
             </div>
             <div class="pwanimate-study-banner-actions">
                 <button type="button"
                         class="pwanimate-study-header-btn"
+                        id="pwanimateStudySessionsBtn"
+                        title="{% trans 'All study sessions, roadmaps, and progress' %}"
+                        aria-label="{% trans 'Study sessions' %}"
+                        onclick="if (typeof window.openSparkSessions === 'function') window.openSparkSessions();">
+                    <i data-lucide="book-open-check"></i>
+                    <span class="pwanimate-study-btn-label">{% trans "Sessions" %}</span>
+                </button>
+                <button type="button"
+                        class="pwanimate-study-header-btn"
                         id="pwanimateStudyCheckpointBtn"
                         title="{% trans 'View or save learning checkpoint' %}"
                         aria-label="{% trans 'Checkpoint' %}">
-                    <i class="bi bi-flag-fill"></i>
+                    <i data-lucide="flag"></i>
                     <span class="pwanimate-study-btn-label">{% trans "Checkpoint" %}</span>
                 </button>
                 <button type="button"
@@ -391,7 +434,7 @@
                         id="pwanimateStudySummaryBtn"
                         title="{% trans 'Generate study summary, export PDF/Word, or save to Collection' %}"
                         aria-label="{% trans 'Summary & Save' %}">
-                    <i class="bi bi-journal-text"></i>
+                    <i data-lucide="notebook-text"></i>
                     <span class="pwanimate-study-btn-label">{% trans "Summary" %}</span>
                 </button>
                 <button type="button"
@@ -401,7 +444,7 @@
                         data-study-status-action="{% if active_study_session.status == 'paused' %}resume{% else %}pause{% endif %}"
                         title="{% if active_study_session.status == 'paused' %}{% trans 'Resume study session' %}{% else %}{% trans 'Pause study session' %}{% endif %}"
                         aria-label="{% if active_study_session.status == 'paused' %}{% trans 'Resume' %}{% else %}{% trans 'Pause' %}{% endif %}">
-                    <i class="bi {% if active_study_session.status == 'paused' %}bi-play-fill{% else %}bi-pause-fill{% endif %}" id="pwanimateStudyPauseResumeIcon"></i>
+                    <i data-lucide="{% if active_study_session.status == 'paused' %}play{% else %}pause{% endif %}" id="pwanimateStudyPauseResumeIcon"></i>
                     <span class="pwanimate-study-btn-label" id="pwanimateStudyPauseResumeText">
                         {% if active_study_session.status == 'paused' %}{% trans "Resume" %}{% else %}{% trans "Pause" %}{% endif %}
                     </span>
@@ -411,7 +454,7 @@
                         id="pwanimateStudyEndBtn"
                         title="{% trans 'End study session (preserves full history)' %}"
                         aria-label="{% trans 'End session' %}">
-                    <i class="bi bi-check2-circle"></i>
+                    <i data-lucide="circle-check"></i>
                     <span class="pwanimate-study-btn-label">{% trans "End" %}</span>
                 </button>
             </div>
@@ -423,7 +466,7 @@
              role="status"
              aria-live="polite">
             <div class="d-flex align-items-start gap-2">
-                <i class="bi bi-exclamation-triangle-fill text-warning mt-1 flex-shrink-0"></i>
+                <i data-lucide="triangle-alert" class="text-warning mt-1 flex-shrink-0"></i>
                 <div class="flex-grow-1 small" id="pwanimate-unavailable-source-list">
                     {% for notice in unavailable_resource_notices %}
                         <div>{{ notice.message }}</div>
@@ -453,7 +496,7 @@
                                                     </a>
                                                 {% else %}
                                                     <a href="{{ att.url }}" class="pwanimate-message-attachment pwanimate-attachment-doc-chip badge text-decoration-none d-inline-flex align-items-center gap-1 p-2" data-attachment-id="{{ att.id }}" data-file-name="{{ att.file_name }}" data-file-type="{{ att.extension }}" data-media-url="{{ att.url }}" data-preview-type="document" title="Preview {{ att.file_name }}">
-                                                        <i class="bi bi-file-earmark-text fs-6"></i>
+                                                        <i data-lucide="file-text" class="fs-6"></i>
                                                         <span class="text-truncate" style="max-width: 140px;">{{ att.file_name }}</span>
                                                     </a>
                                                 {% endif %}
@@ -464,10 +507,10 @@
                                 </div>
                                 <div class="pwanimate-message-actions user-actions">
                                     <button type="button" class="btn pwanimate-action-btn copy-btn" title="{% trans 'Copy message' %}" aria-label="{% trans 'Copy message' %}">
-                                        <i class="bi bi-clipboard"></i>
+                                        <i data-lucide="copy"></i>
                                     </button>
                                     <button type="button" class="btn pwanimate-action-btn edit-btn" title="{% trans 'Edit message' %}" aria-label="{% trans 'Edit message' %}">
-                                        <i class="bi bi-pencil"></i>
+                                        <i data-lucide="pencil"></i>
                                     </button>
                                 </div>
                             </div>
@@ -475,12 +518,18 @@
                     {% elif msg.role == 'assistant' %}
                         <div class="pwanimate-message-row assistant" data-message-id="{{ msg.id }}">
                             <div class="pwanimate-message-content">
-                                <div class="pwanimate-assistant-bubble">
+                                <div class="pwanimate-assistant-bubble{% if msg.task == 'agent_interim' %} pwanimate-interim-bubble{% endif %}">
                                     <div class="pwanimate-assistant-header">
                                         <img src="{% static 'images/pwanimate/pwanimate-transparent.png' %}" class="pwanimate-assistant-avatar" alt="Spark" width="24" height="24">
                                         <span>Spark</span>
                                     </div>
-                                    <div class="pwanimate-markdown-body" data-raw="{{ msg.content|escape }}">{{ msg.content }}</div>
+                                    {% if msg.activity %}<div class="spark-activity-history">{{ msg.activity|json_script }}</div>{% endif %}
+                                    {% if msg.task == 'agent_pause' %}
+                                        {# Paused run: the trail's input block IS the message — no answer bubble. #}
+                                        <div class="pwanimate-markdown-body d-none" data-raw="{{ msg.content|escape }}"></div>
+                                    {% else %}
+                                        <div class="pwanimate-markdown-body" data-raw="{{ msg.content|escape }}">{{ msg.content }}</div>
+                                    {% endif %}
 
                                     {% if msg.people %}
                                         {% include 'pwanimate/partials/people_section.html' with people=msg.people %}
@@ -489,7 +538,7 @@
                                     {% if msg.sources %}
                                         <div class="pwanimate-citations">
                                             <div class="pwanimate-citations-header">
-                                                <i class="bi bi-file-earmark-check"></i>
+                                                <i data-lucide="file-check"></i>
                                                 <span>{% trans "Sources referenced" %}</span>
                                             </div>
                                             <div class="pwanimate-citation-list">
@@ -524,12 +573,12 @@
                                                                data-bio="{{ src.person.bio|default:''|escape }}"
                                                                {% endif %}
                                                                aria-label="View {% if src.title %}{{ src.title|escape }}{% elif src.citation %}{{ src.citation|escape }}{% else %}{% trans 'Document' %}{% endif %}">
-                                                                <i class="bi bi-link-45deg"></i>
+                                                                <i data-lucide="link"></i>
                                                                 <span>{% if src.title %}{{ src.title }}{% elif src.citation %}{{ src.citation }}{% else %}{% trans "Document" %}{% endif %}</span>
                                                             </button>
                                                         {% else %}
                                                             <span class="pwanimate-citation-badge">
-                                                                <i class="bi bi-quote"></i>
+                                                                <i data-lucide="quote"></i>
                                                                 <span>{% if src.title %}{{ src.title }}{% elif src.citation %}{{ src.citation }}{% else %}{% trans "Document" %}{% endif %}</span>
                                                             </span>
                                                         {% endif %}
@@ -540,13 +589,13 @@
                                     {% elif msg.citations and not msg.people %}
                                         <div class="pwanimate-citations">
                                             <div class="pwanimate-citations-header">
-                                                <i class="bi bi-quote"></i>
+                                                <i data-lucide="quote"></i>
                                                 <span>{% trans "Citations" %}</span>
                                             </div>
                                             <div class="pwanimate-citation-list">
                                                 {% for cit in msg.citations %}
                                                     <span class="pwanimate-citation-badge">
-                                                        <i class="bi bi-bookmark-fill"></i>
+                                                        <i data-lucide="bookmark"></i>
                                                         <span>{{ cit }}</span>
                                                     </span>
                                                 {% endfor %}
@@ -557,11 +606,11 @@
                                 <div class="pwanimate-message-actions assistant-actions">
                                     <div class="dropdown pwanimate-resource-export">
                                         <button type="button" class="btn pwanimate-action-btn" data-bs-toggle="dropdown" aria-expanded="false" title="{% trans 'Save response to My Resources' %}" aria-label="{% trans 'Save response to My Resources' %}">
-                                            <i class="bi bi-file-earmark-arrow-down"></i>
+                                            <i data-lucide="file-down"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end pwanimate-resource-export-menu">
-                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i class="bi bi-filetype-pdf me-2"></i>{% trans "Download PDF" %}</button></li>
-                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i class="bi bi-filetype-docx me-2"></i>{% trans "Download Word document" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i data-lucide="file-text" class="me-2"></i>{% trans "Download PDF" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i data-lucide="file-text" class="me-2"></i>{% trans "Download Word document" %}</button></li>
                                         </ul>
                                     </div>
                                     <button type="button"
@@ -569,7 +618,7 @@
                                             data-feedback="helpful"
                                             title="{% trans 'This helped' %}"
                                             aria-label="{% trans 'This helped' %}">
-                                        <i class="bi bi-hand-thumbs-up"></i>
+                                        <i data-lucide="thumbs-up"></i>
                                     </button>
                                     <div class="dropdown pwanimate-feedback-reason">
                                         <button type="button"
@@ -578,7 +627,7 @@
                                                 aria-expanded="false"
                                                 title="{% trans 'This did not help' %}"
                                                 aria-label="{% trans 'This did not help' %}">
-                                            <i class="bi bi-hand-thumbs-down"></i>
+                                            <i data-lucide="thumbs-down"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end pwanimate-feedback-reason-menu">
                                             <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_answer">{% trans "The answer is wrong" %}</button></li>
@@ -594,10 +643,10 @@
                                             title="{% trans 'Read this reply aloud' %}"
                                             aria-label="{% trans 'Read this reply aloud' %}"
                                             aria-pressed="false">
-                                        <i class="bi bi-volume-up-fill" aria-hidden="true"></i>
+                                        <i data-lucide="volume-2" aria-hidden="true"></i>
                                     </button>
                                     <button type="button" class="btn pwanimate-action-btn copy-btn" title="{% trans 'Copy answer' %}" aria-label="{% trans 'Copy answer' %}">
-                                        <i class="bi bi-clipboard"></i>
+                                        <i data-lucide="copy"></i>
                                     </button>
                                 </div>
                             </div>
@@ -629,7 +678,7 @@
                         <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
                             <div class="d-flex align-items-center gap-2 min-w-0">
                                 <div class="pwanimate-resume-study-icon flex-shrink-0">
-                                    <i class="bi bi-mortarboard-fill"></i>
+                                    <i data-lucide="graduation-cap"></i>
                                 </div>
                                 <div class="text-start min-w-0">
                                     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -642,7 +691,7 @@
                                         </span>
                                         {% if resumable_study_session.context_state.active_document_title %}
                                             <span class="badge rounded-pill pwanimate-meta-pill text-truncate" style="max-width: 220px;">
-                                                <i class="bi bi-book-half me-1 text-primary"></i>{{ resumable_study_session.context_state.active_document_title }}
+                                                <i data-lucide="book-open" class="me-1 text-primary"></i>{{ resumable_study_session.context_state.active_document_title }}
                                                 {% if resumable_study_session.context_state.active_page %}
                                                     (p. {{ resumable_study_session.context_state.active_page }})
                                                 {% endif %}
@@ -661,7 +710,7 @@
                                     data-study-session-id="{{ resumable_study_session.id }}"
                                     title="{% trans 'Dismiss banner' %}"
                                     aria-label="{% trans 'Dismiss banner' %}">
-                                <i class="bi bi-x-lg"></i>
+                                <i data-lucide="x"></i>
                             </button>
                         </div>
 
@@ -674,7 +723,7 @@
 
                         {% if resumable_study_session.latest_checkpoint and resumable_study_session.latest_checkpoint.recommended_next_step %}
                             <div class="pwanimate-resume-next-step text-start small mb-3">
-                                <i class="bi bi-compass-fill text-primary me-1"></i>
+                                <i data-lucide="compass" class="text-primary me-1"></i>
                                 <strong>{% trans "Recommended next step:" %}</strong>
                                 <span>{{ resumable_study_session.latest_checkpoint.recommended_next_step }}</span>
                             </div>
@@ -691,7 +740,7 @@
                                hx-target="#page-content-target"
                                hx-swap="innerHTML"
                                hx-push-url="true">
-                                <i class="bi bi-play-circle-fill"></i>
+                                <i data-lucide="circle-play"></i>
                                 <span>{% trans "Resume Session" %}</span>
                             </a>
                             <button type="button"
@@ -699,7 +748,7 @@
                                     id="pwanimateStartNewStudySessionBtn"
                                     data-session-id="{{ resumable_study_session.id }}"
                                     data-study-session-id="{{ resumable_study_session.id }}">
-                                <i class="bi bi-plus-circle"></i>
+                                <i data-lucide="circle-plus"></i>
                                 <span>{% trans "Start New Study Session" %}</span>
                             </button>
                         </div>
@@ -710,13 +759,13 @@
                     <div class="pwanimate-document-study-card d-none" id="pwanimate-document-study-card" aria-live="polite">
                         <div class="pwanimate-study-card-header">
                             <div class="pwanimate-study-card-icon">
-                                <i class="bi bi-journal-bookmark-fill"></i>
+                                <i data-lucide="book-marked"></i>
                             </div>
                             <div class="pwanimate-study-card-info">
                                 <div class="pwanimate-study-card-badges">
                                     <span class="badge rounded-pill bg-primary-subtle text-primary d-none" id="pwanimate-study-card-unit"></span>
                                     <span class="badge rounded-pill pwanimate-meta-pill" id="pwanimate-study-card-page">
-                                        <i class="bi bi-file-earmark-richtext me-1"></i><span>Page 1</span>
+                                        <i data-lucide="file-text" class="me-1"></i><span>Page 1</span>
                                     </span>
                                 </div>
                                 <h3 class="pwanimate-study-card-title" id="pwanimate-study-card-title">Document</h3>
@@ -727,19 +776,19 @@
                         </div>
                         <div class="pwanimate-study-card-actions" id="pwanimate-study-card-actions">
                             <button type="button" class="pwanimate-study-action-btn is-primary" data-study-action="summarize_book">
-                                <i class="bi bi-stars"></i>
+                                <i data-lucide="sparkles"></i>
                                 <span id="pwanimate-study-btn-summarize">{% trans "Summarize entire book" %}</span>
                             </button>
                             <button type="button" class="pwanimate-study-action-btn" data-study-action="explain_page">
-                                <i class="bi bi-book-half"></i>
+                                <i data-lucide="book-open"></i>
                                 <span id="pwanimate-study-btn-explain">{% trans "Explain Page 1" %}</span>
                             </button>
                             <button type="button" class="pwanimate-study-action-btn" data-study-action="page_takeaways">
-                                <i class="bi bi-list-check"></i>
+                                <i data-lucide="list-checks"></i>
                                 <span id="pwanimate-study-btn-takeaways">{% trans "Key takeaways from Page 1" %}</span>
                             </button>
                             <button type="button" class="pwanimate-study-action-btn" data-study-action="quiz_page">
-                                <i class="bi bi-patch-question"></i>
+                                <i data-lucide="circle-help"></i>
                                 <span id="pwanimate-study-btn-quiz">{% trans "Quiz me on this page" %}</span>
                             </button>
                         </div>
@@ -750,7 +799,7 @@
                 </div>
             {% endif %}
             <div class="pwanimate-chat-disclaimer{% if not active_conversation or not messages %} d-none{% endif %}" id="pwanimate-chat-disclaimer">
-                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                <i data-lucide="info" aria-hidden="true"></i>
                 <span>{% trans "Spark can make mistakes. Please verify important details." %}</span>
             </div>
         </div>
@@ -760,26 +809,26 @@
             <!-- Live Page-by-Page Study Bar (Synced with active document & page in Right Context Rail) -->
             <div class="pwanimate-live-page-bar d-none" id="pwanimate-live-page-bar" aria-live="polite">
                 <div class="pwanimate-live-page-info">
-                    <i class="bi bi-book-half text-primary"></i>
+                    <i data-lucide="book-open" class="text-primary"></i>
                     <span class="pwanimate-live-page-title text-truncate" id="pwanimate-live-page-title">Document</span>
                     <span class="badge rounded-pill bg-primary-subtle text-primary d-none" id="pwanimate-live-page-unit"></span>
                     <span class="badge rounded-pill pwanimate-meta-pill" id="pwanimate-live-page-badge">p. 1</span>
                 </div>
                 <div class="pwanimate-live-page-actions">
                     <button type="button" class="pwanimate-live-page-pill" data-study-action="summarize_book" title="{% trans 'Get an overview summary of the entire document' %}">
-                        <i class="bi bi-stars"></i>
+                        <i data-lucide="sparkles"></i>
                         <span>{% trans "Summarize book" %}</span>
                     </button>
                     <button type="button" class="pwanimate-live-page-pill" data-study-action="explain_page">
-                        <i class="bi bi-lightbulb"></i>
+                        <i data-lucide="lightbulb"></i>
                         <span id="pwanimate-live-pill-explain">{% trans "Explain Page 1" %}</span>
                     </button>
                     <button type="button" class="pwanimate-live-page-pill" data-study-action="page_takeaways">
-                        <i class="bi bi-list-check"></i>
+                        <i data-lucide="list-checks"></i>
                         <span id="pwanimate-live-pill-takeaways">{% trans "Key takeaways (p. 1)" %}</span>
                     </button>
                     <button type="button" class="pwanimate-live-page-pill" data-study-action="quiz_page">
-                        <i class="bi bi-patch-question"></i>
+                        <i data-lucide="circle-help"></i>
                         <span id="pwanimate-live-pill-quiz">{% trans "Quiz me on this page" %}</span>
                     </button>
                 </div>
@@ -791,7 +840,7 @@
                 <!-- @study Command Autocomplete Hint -->
                 <div class="pwanimate-study-cmd-hint d-none" id="pwanimate-study-cmd-hint" role="listbox" aria-label="{% trans 'Study command suggestion' %}">
                     <button type="button" class="pwanimate-study-cmd-option" id="pwanimateStudyCmdApplyBtn">
-                        <span class="badge rounded-pill bg-primary me-2"><i class="bi bi-mortarboard-fill me-1"></i>@study</span>
+                        <span class="badge rounded-pill bg-primary me-2"><i data-lucide="graduation-cap" class="me-1"></i>@study</span>
                         <span class="small">{% trans "Activate persistent Study Mode with learning checkpoints & document tracking" %}</span>
                     </button>
                 </div>
@@ -804,18 +853,18 @@
 
                 <div class="pwanimate-voice-capture d-none" id="pwanimate-voice-capture" aria-live="polite">
                     <button type="button" class="pwanimate-voice-cancel" id="pwanimateVoiceCancelBtn" aria-label="Cancel voice recording" title="Cancel">
-                        <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        <i data-lucide="x" aria-hidden="true"></i>
                     </button>
                     <div class="pwanimate-voice-waveform" id="pwanimate-voice-waveform" aria-hidden="true">
                         {% for bar in "12345678901234567890123456789012345678901234567890123456" %}<span></span>{% endfor %}
                     </div>
                     <span class="visually-hidden" id="pwanimate-voice-status">Recording voice message</span>
                     <button type="button" class="pwanimate-voice-stop" id="pwanimateVoiceStopBtn" aria-label="Stop and transcribe" title="Stop and transcribe">
-                        <i class="bi bi-stop-fill" aria-hidden="true"></i>
+                        <i data-lucide="square" aria-hidden="true"></i>
                         <span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
                     </button>
                     <button type="button" class="pwanimate-voice-send" id="pwanimateVoiceSendBtn" aria-label="Transcribe and send" title="Transcribe and send">
-                        <i class="bi bi-arrow-up" aria-hidden="true"></i>
+                        <i data-lucide="arrow-up" aria-hidden="true"></i>
                         <span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
                     </button>
                 </div>
@@ -837,7 +886,7 @@
                                 id="pwanimateAttachBtn"
                                 title="{% trans 'Add attachment' %}"
                                 aria-label="{% trans 'Add attachment' %}">
-                            <i class="bi bi-paperclip"></i>
+                            <i data-lucide="paperclip"></i>
                         </button>
                         <!-- Model Selection Dropdown -->
                         <div class="dropdown pwanimate-model-dropdown">
@@ -848,7 +897,7 @@
                                     aria-expanded="false"
                                     title="{% trans 'Select Spark Engine' %}">
                                 <span id="pwanimate-selected-model-label" class="fw-medium text-truncate" style="max-width: 140px;">Auto</span>
-                                <i class="bi bi-chevron-down ms-1" style="font-size: 0.7rem; opacity: 0.7;"></i>
+                                <i data-lucide="chevron-down" class="ms-1" style="width: 0.7rem; height: 0.7rem; opacity: 0.7;"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-start shadow pwanimate-model-menu" aria-labelledby="pwanimateModelDropdownBtn" id="pwanimate-model-dropdown-menu">
                                 <li><h6 class="dropdown-header text-uppercase fs-xs">{% trans "Spark Engine Selection" %}</h6></li>
@@ -862,7 +911,7 @@
                                             <div class="fw-semibold">{% trans "Auto (Recommended)" %}</div>
                                             <div class="text-muted small">{% trans "Automatic multi-tier failover" %}</div>
                                         </div>
-                                        <i class="bi bi-check2 text-primary pwanimate-check-icon"></i>
+                                        <i data-lucide="check" class="text-primary pwanimate-check-icon"></i>
                                     </button>
                                 </li>
                                 <li><hr class="dropdown-divider my-1"></li>
@@ -875,7 +924,7 @@
                                             type="button"
                                             data-bs-toggle="modal"
                                             data-bs-target="#pwanimateQuotaModal">
-                                        <i class="bi bi-speedometer2"></i>
+                                        <i data-lucide="gauge"></i>
                                         <span>{% trans "View Quotas & Models..." %}</span>
                                     </button>
                                 </li>
@@ -909,7 +958,7 @@
                                 title="{% trans 'Dictate a message' %}"
                                 aria-label="{% trans 'Dictate a message' %}"
                                 aria-pressed="false">
-                            <i class="bi bi-mic-fill" aria-hidden="true"></i>
+                            <i data-lucide="mic" aria-hidden="true"></i>
                         </button>
                         <button type="button"
                                 id="pwanimate-send-btn"
@@ -944,31 +993,31 @@
             <div class="pwanimate-attachment-modal-header">
                 <h4 class="pwanimate-attachment-modal-title">{% trans "Add attachment" %}</h4>
                 <button class="pwanimate-attachment-modal-close" id="closeSparkAttachmentModal" type="button" aria-label="Close">
-                    <i class="bi bi-x-lg"></i>
+                    <i data-lucide="x"></i>
                 </button>
             </div>
             <div class="pwanimate-attachment-options">
                 <div class="pwanimate-attachment-option" id="pwanimateAttachCamera">
                     <div class="pwanimate-attachment-icon-circle">
-                        <i class="bi bi-camera-fill"></i>
+                        <i data-lucide="camera"></i>
                     </div>
                     <span>{% trans "Camera" %}</span>
                 </div>
                 <div class="pwanimate-attachment-option" id="pwanimateAttachPhotos">
                     <div class="pwanimate-attachment-icon-circle">
-                        <i class="bi bi-image-fill"></i>
+                        <i data-lucide="image"></i>
                     </div>
                     <span>{% trans "Photos" %}</span>
                 </div>
                 <div class="pwanimate-attachment-option" id="pwanimateAttachDocs">
                     <div class="pwanimate-attachment-icon-circle">
-                        <i class="bi bi-file-earmark-text-fill"></i>
+                        <i data-lucide="file-text"></i>
                     </div>
                     <span>{% trans "Docs" %}</span>
                 </div>
                 <div class="pwanimate-attachment-option" id="pwanimateAttachFiles">
                     <div class="pwanimate-attachment-icon-circle">
-                        <i class="bi bi-folder-fill"></i>
+                        <i data-lucide="folder"></i>
                     </div>
                     <span>{% trans "Files" %}</span>
                 </div>
@@ -993,7 +1042,7 @@
                 <div class="modal-body">
                     <label class="visually-hidden" for="pwanimateContextDocumentSearch">{% trans "Search repository books" %}</label>
                     <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <span class="input-group-text"><i data-lucide="search"></i></span>
                         <input type="search" class="form-control" id="pwanimateContextDocumentSearch" placeholder="{% trans 'Search books by title or topic…' %}" autocomplete="off">
                     </div>
                     <div id="pwanimateContextDocumentResults" class="pwanimate-context-picker-results" aria-live="polite">
@@ -1010,12 +1059,12 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-cpu text-primary fs-5"></i>
+                        <i data-lucide="cpu" class="text-primary fs-5"></i>
                         <h5 class="modal-title fw-bold" id="pwanimateQuotaModalLabel">{% trans "Spark Engines & Quotas" %}</h5>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                         <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" id="pwanimateRefreshQuotaBtn" title="{% trans 'Refresh quota status' %}">
-                            <i class="bi bi-arrow-clockwise"></i>
+                            <i data-lucide="rotate-cw"></i>
                             <span class="d-none d-sm-inline">{% trans "Refresh" %}</span>
                         </button>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}" style="filter: var(--pwanimate-close-filter, none);"></button>
@@ -1036,7 +1085,7 @@
                 </div>
                 <div class="modal-footer d-flex justify-content-between">
                     <span class="text-muted small">
-                        <i class="bi bi-shield-check text-success me-1"></i>{% trans "Multi-tier rate limit protection active" %}
+                        <i data-lucide="shield-check" class="text-success me-1"></i>{% trans "Multi-tier rate limit protection active" %}
                     </span>
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
                 </div>
@@ -1050,7 +1099,7 @@
             <div class="modal-content">
                 <div class="modal-header border-bottom">
                     <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-mortarboard-fill text-primary fs-5"></i>
+                        <i data-lucide="graduation-cap" class="text-primary fs-5"></i>
                         <h5 class="modal-title fw-bold mb-0" id="pwanimateStudyModalLabel">{% trans "Study Mode Progress & Summary" %}</h5>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
@@ -1064,7 +1113,7 @@
                                     data-bs-target="#pwanimateStudyTabCheckpoint"
                                     type="button"
                                     role="tab">
-                                <i class="bi bi-flag-fill"></i>
+                                <i data-lucide="flag"></i>
                                 <span>{% trans "Learning Checkpoint" %}</span>
                             </button>
                         </li>
@@ -1075,7 +1124,7 @@
                                     data-bs-target="#pwanimateStudyTabSummary"
                                     type="button"
                                     role="tab">
-                                <i class="bi bi-journal-text"></i>
+                                <i data-lucide="notebook-text"></i>
                                 <span>{% trans "Session Summary & Save to Collection" %}</span>
                             </button>
                         </li>
@@ -1101,7 +1150,7 @@
                             <div class="d-flex align-items-center justify-content-between mb-2">
                                 <span class="small fw-bold text-uppercase text-muted">{% trans "Latest Learning Checkpoint" %}</span>
                                 <button type="button" class="btn btn-sm btn-primary rounded-pill d-inline-flex align-items-center gap-1" id="pwanimateGenerateCheckpointNowBtn">
-                                    <i class="bi bi-arrow-repeat"></i>
+                                    <i data-lucide="refresh-cw"></i>
                                     <span>{% trans "Update Checkpoint Now" %}</span>
                                 </button>
                             </div>
@@ -1112,23 +1161,23 @@
                                 </div>
                                 <div class="d-none" id="pwanimateStudyCheckpointDetails">
                                     <div class="mb-2">
-                                        <div class="small fw-semibold text-success"><i class="bi bi-check-circle-fill me-1"></i>{% trans "Concepts Demonstrated by You (Verified)" %}</div>
+                                        <div class="small fw-semibold text-success"><i data-lucide="circle-check-big" class="me-1"></i>{% trans "Concepts Demonstrated by You (Verified)" %}</div>
                                         <ul class="small mb-2 ps-3" id="pwanimateCkptDemonstratedList"></ul>
                                     </div>
                                     <div class="mb-2">
-                                        <div class="small fw-semibold text-primary"><i class="bi bi-book me-1"></i>{% trans "Concepts Explained by Spark" %}</div>
+                                        <div class="small fw-semibold text-primary"><i data-lucide="book-open" class="me-1"></i>{% trans "Concepts Explained by Spark" %}</div>
                                         <ul class="small mb-2 ps-3" id="pwanimateCkptExplainedList"></ul>
                                     </div>
                                     <div class="mb-2">
-                                        <div class="small fw-semibold text-warning-emphasis"><i class="bi bi-question-circle me-1"></i>{% trans "Open Questions & Misconceptions to Revisit" %}</div>
+                                        <div class="small fw-semibold text-warning-emphasis"><i data-lucide="circle-help" class="me-1"></i>{% trans "Open Questions & Misconceptions to Revisit" %}</div>
                                         <ul class="small mb-2 ps-3" id="pwanimateCkptMisconceptionsList"></ul>
                                     </div>
                                     <div class="mb-2">
-                                        <div class="small fw-semibold text-secondary"><i class="bi bi-lightbulb me-1"></i>{% trans "Assistant's Inferred Understanding Note" %}</div>
+                                        <div class="small fw-semibold text-secondary"><i data-lucide="lightbulb" class="me-1"></i>{% trans "Assistant's Inferred Understanding Note" %}</div>
                                         <p class="small text-muted mb-2" id="pwanimateCkptInferredText"></p>
                                     </div>
                                     <div class="p-2 rounded bg-primary-subtle text-primary-emphasis small">
-                                        <strong><i class="bi bi-compass me-1"></i>{% trans "Recommended Next Step:" %}</strong>
+                                        <strong><i data-lucide="compass" class="me-1"></i>{% trans "Recommended Next Step:" %}</strong>
                                         <span id="pwanimateCkptNextStepText"></span>
                                     </div>
                                 </div>
@@ -1143,13 +1192,13 @@
                                 </p>
                                 <div class="d-flex align-items-center gap-1">
                                     <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" id="pwanimateGenerateSummaryNowBtn">
-                                        <i class="bi bi-stars me-1"></i>{% trans "Generate Summary" %}
+                                        <i data-lucide="sparkles" class="me-1"></i>{% trans "Generate Summary" %}
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill pwanimate-export-summary-btn" id="pwanimateExportSummaryPdfBtn" data-format="pdf">
-                                        <i class="bi bi-filetype-pdf me-1"></i>{% trans "PDF" %}
+                                        <i data-lucide="file-text" class="me-1"></i>{% trans "PDF" %}
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill pwanimate-export-summary-btn" id="pwanimateExportSummaryDocxBtn" data-format="docx">
-                                        <i class="bi bi-filetype-docx me-1"></i>{% trans "Word" %}
+                                        <i data-lucide="file-text" class="me-1"></i>{% trans "Word" %}
                                     </button>
                                 </div>
                             </div>
@@ -1165,7 +1214,7 @@
                             <!-- Save to Collection Section -->
                             <div class="p-3 rounded border pwanimate-study-collection-box">
                                 <h6 class="fw-bold small mb-2 d-flex align-items-center gap-1">
-                                    <i class="bi bi-collection-fill text-primary"></i>
+                                    <i data-lucide="library" class="text-primary"></i>
                                     <span>{% trans "Save Summary to a Document Collection" %}</span>
                                 </h6>
                                 <div class="row g-2 align-items-end">
@@ -1192,7 +1241,7 @@
                                     </div>
                                     <div class="col-md-3 d-grid">
                                         <button type="button" class="btn btn-sm btn-primary" id="pwanimateSaveToCollectionBtn">
-                                            <i class="bi bi-bookmark-plus me-1"></i>{% trans "Save to Collection" %}
+                                            <i data-lucide="bookmark-plus" class="me-1"></i>{% trans "Save to Collection" %}
                                         </button>
                                     </div>
                                 </div>
@@ -1207,6 +1256,8 @@
 
     <!-- Spark Dedicated Settings Modal -->
     {% include 'pwanimate/settings/partials/settings_modal.html' %}
+    <!-- Spark Dedicated Study Sessions Modal -->
+    {% include 'pwanimate/sessions/partials/sessions_modal.html' %}
     {# Moved to <body> by the chat script: in the chat column it would paint under the settings modal's backdrop. #}
     {% include 'pwanimate/settings/partials/subscription_overlay.html' %}
 </div>
@@ -1229,7 +1280,7 @@
             scriptsToLoad.push("{% static 'documents/js/document-viewer.js' %}");
         }
         if (typeof window.initSpark !== 'function') {
-            scriptsToLoad.push("{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261026-1");
+            scriptsToLoad.push("{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261109-pause");
         }
 
         function loadNext() {

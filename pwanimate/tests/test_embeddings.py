@@ -296,7 +296,8 @@ class EmbeddingPersistenceAndCeleryTestCase(TestCase):
                 df.file.name = tpath
                 df.save()
 
-                res = ingest_document_version(version_id=self.version_v1.id, force=True)
+                with self.captureOnCommitCallbacks(execute=True):
+                    res = ingest_document_version(version_id=self.version_v1.id, force=True)
                 self.assertEqual(res['status'], 'success')
 
                 # Confirm downstream dispatch of embed_document_version.delay

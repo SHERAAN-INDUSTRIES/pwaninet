@@ -5639,6 +5639,21 @@ body.whatsapp-media-rail-open .whatsapp-media-rail-toggle-wrapper {
   opacity: 0.75;
 }
 
+.group-message-sender {
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--chat-accent, #2563eb);
+  margin-bottom: 3px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.media-card-bubble > .group-message-sender {
+  padding: 3px 5px 0;
+}
+
 .quoted-reply-sender {
   font-size: 0.74rem;
   font-weight: 700;

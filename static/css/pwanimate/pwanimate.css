@@ -10,7 +10,8 @@
     --pwanimate-current-left-rail-width: 240px;
     --pwanimate-context-rail-width: 0px;
     --pwanimate-context-min-width: 280px;
-    --pwanimate-context-max-width: 650px;
+    /* Max is computed dynamically in JS (50% split); this is only a fallback hint. */
+    --pwanimate-context-max-width: 50%;
     --pwanimate-center-resting-max: 1050px;
 
     --pwanimate-bg: #f8fafc;
@@ -673,6 +674,11 @@ body:not(.pwanimate-left-collapsed) .pwanimate-left-rail-collapsed {
     height: 24px;
     object-fit: contain;
 }
+
+/* Interim Spark updates spoken mid-task: real messages, slightly quieter. */
+.pwanimate-interim-bubble{font-size:0.88rem;opacity:0.85}
+.pwanimate-interim-bubble .pwanimate-assistant-header{margin-bottom:0.35rem;font-size:0.82rem}
+.pwanimate-interim-row{margin-bottom:0.35rem}
 
 /* Markdown typography inside assistant messages */
 /* Readable measure for normal prose (~70-75ch) */
@@ -2045,7 +2051,7 @@ body.pwanimate-active.is-capacitor .pwanimate-transcript {
     .pwanimate-offcanvas.offcanvas-bottom {
         width: 100vw !important;
         max-width: 100% !important;
-        height: min(88dvh, 760px) !important;
+        height: min(90dvh, 800px) !important;
         max-height: calc(100dvh - var(--vasto-safe-area-top, env(safe-area-inset-top, 0px)) - 8px) !important;
         border: 0 !important;
         border-radius: 22px 22px 0 0 !important;
@@ -2058,6 +2064,9 @@ body.pwanimate-active.is-capacitor .pwanimate-transcript {
 
     .pwanimate-offcanvas.offcanvas-bottom .offcanvas-body {
         padding-bottom: var(--vasto-safe-area-bottom, env(safe-area-inset-bottom, 0px)) !important;
+        /* Landscape cutouts/notches on the sides of a bottom sheet. */
+        padding-left: max(0px, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(0px, env(safe-area-inset-right, 0px)) !important;
         box-sizing: border-box !important;
     }
 }
@@ -2123,9 +2132,9 @@ body.pwanimate-active.is-capacitor .pwanimate-transcript {
 }
 
 .pwanimate-context-rail-header {
-    height: 48px;
-    min-height: 48px;
-    max-height: 48px;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
     background-color: var(--pwanimate-sidebar-bg);
     box-sizing: border-box;
 }
@@ -2583,13 +2592,10 @@ body.pwanimate-active .pwanimate-right-rail {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(100, 116, 139, 0.25) transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
-.pwanimate-left-rail-list::-webkit-scrollbar { width: 4px; }
-.pwanimate-left-rail-list::-webkit-scrollbar-track { background: transparent; }
-.pwanimate-left-rail-list::-webkit-scrollbar-thumb { background-color: rgba(100, 116, 139, 0.25); border-radius: 10px; }
-.pwanimate-left-rail-list::-webkit-scrollbar-thumb:hover { background-color: rgba(100, 116, 139, 0.45); }
+.pwanimate-left-rail-list::-webkit-scrollbar { display: none; }
 
 /* Force rails to not scroll globally so inner surfaces can scroll independently */
 body.pwanimate-active .desktop-left-rail {
@@ -3719,6 +3725,24 @@ body.pwanimate-active .pwanimate-settings-mobile,
     font-weight: 600;
 }
 
+@media (max-width: 575.98px) {
+    .pwanimate-settings-nav-pills {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .pwanimate-settings-nav-pills::-webkit-scrollbar {
+        display: none;
+    }
+    .pwanimate-settings-nav-pills .nav-item {
+        flex: 0 0 auto;
+    }
+    .pwanimate-settings-nav-pills .nav-link {
+        white-space: nowrap;
+    }
+}
+
 /* Custom Scrollbars for Settings Modal, Sidebar, and Mobile Containers */
 .pwanimate-settings-main,
 .pwanimate-settings-sidebar,
@@ -4134,6 +4158,61 @@ body.pwanimate-active .pwanimate-settings-mobile,
 #desktopWorkspaceTabContent > .tab-pane.active,
 #mobileWorkspaceTabContent > .tab-pane.active {
     display: flex !important;
+}
+
+/* 4a. Document-first reading surface: the consolidated rail header and the
+   viewer's floating control bar carry title, actions, and page/zoom, so the
+   per-surface card header/footer bands are redundant on desktop documents. */
+#desktopPreviewActive > .pwanimate-preview-card-header,
+#desktopPreviewActive > .pwanimate-preview-card-footer,
+#desktopContextSurfaceCard > .pwanimate-preview-card-header,
+#desktopContextSurfaceCard > .pwanimate-preview-card-footer {
+    display: none !important;
+}
+
+/* Slim the context chips strip to a single compact row. */
+.pwanimate-context-strip-wrapper {
+    min-height: 0;
+}
+.pwanimate-context-chips-list {
+    scrollbar-width: none;
+}
+.pwanimate-context-chips-list::-webkit-scrollbar {
+    display: none;
+}
+
+/* Floating reader controls: auto-hide state (transitions respect the
+   viewer's own inline transition; reduced-motion users never get the class
+   because the JS skips arming auto-hide entirely). */
+.viewer-floating-bar {
+    transition: opacity 0.25s ease, visibility 0.25s ease !important;
+}
+.viewer-floating-bar.viewer-floating-bar-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    .viewer-floating-bar {
+        transition: none !important;
+    }
+}
+
+/* Offline tab list items */
+.pwanimate-offline-item {
+    border: 1px solid var(--pwanimate-border);
+    border-radius: 10px;
+    background-color: var(--pwanimate-card-bg);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.pwanimate-offline-item:hover {
+    border-color: var(--primary, #2563eb);
+}
+.pwanimate-offline-item .pwanimate-offline-actions .btn {
+    font-size: 0.72rem;
+}
+.pwanimate-offline-badge {
+    font-size: 0.65rem;
 }
 
 /* 5. Pwanimate Attachment Button & WhatsApp-Style Bottom Sheet */
@@ -5991,6 +6070,11 @@ body.pwanimate-active .pwanimate-settings-mobile,
     display: none;
 }
 
+.pwanimate-subscription-payment.is-active {
+    border-color: var(--primary, #2563eb);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
 .pwanimate-subscription-payment h5 {
     font-size: 0.95rem;
 }
@@ -6099,3 +6183,191 @@ body.pwanimate-active .pwanimate-settings-mobile,
     font-size: 0.72rem;
     border-radius: 8px;
 }
+
+/* Keep all settings sections reachable on narrow phones without squeezing labels. */
+.pwanimate-settings-nav-pills { flex-wrap: nowrap; overflow-x: auto; }
+.pwanimate-settings-nav-pills .nav-item { flex: 1 0 auto; }
+.pwanimate-settings-nav-pills .nav-link { white-space: nowrap; }
+.spark-study-settings { min-width: 0; }
+.spark-study-settings .pwanimate-choice-card { overflow-wrap: anywhere; }
+.spark-study-settings input[type="datetime-local"] { min-width: 0; max-width: 100%; }
+
+/* Public, collapsible task activity; sits flush on the chat canvas like Spark's replies. */
+.spark-activity{margin:6px 0 14px;font-size:12.5px;max-width:100%;color:var(--pwanimate-muted);background:transparent;border:none;border-radius:0}
+.spark-activity-summary{display:flex;align-items:center;gap:9px;padding:8px 2px;cursor:pointer;list-style:none;font-weight:500;min-height:40px;color:var(--pwanimate-asst-text)}
+.spark-activity-title{flex-shrink:0}
+.spark-activity-checkpoint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;font-size:12px;color:var(--pwanimate-muted)}
+.spark-activity-summary::-webkit-details-marker{display:none}.spark-activity-summary:after{content:'⌄';margin-left:auto;color:var(--pwanimate-muted);flex-shrink:0}
+.spark-activity[open]>.spark-activity-summary:after{transform:rotate(180deg)}
+.spark-activity-count{font-size:11px;color:var(--pwanimate-muted);border:1px solid var(--pwanimate-border);border-radius:20px;padding:0 6px;flex-shrink:0}
+.spark-activity-list{list-style:none;margin:0;padding:2px 0 8px 26px;max-height:440px;overflow-y:auto;overscroll-behavior:contain}
+@media (max-width: 768px){.spark-activity-list{max-height:52vh;padding-left:22px}}
+.spark-activity-step{position:relative;padding:6px 0 8px 16px;border-left:1px solid var(--pwanimate-border);overflow-wrap:anywhere}
+.spark-activity-step:last-child{padding-bottom:0}
+.spark-activity-marker{position:absolute;left:-8.5px;top:8px;width:17px;height:17px;display:flex;align-items:center;justify-content:center;color:var(--pwanimate-muted)}
+.spark-activity-marker svg.lucide{width:17px;height:17px;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.spark-activity-step[data-status=running]>.spark-activity-marker{color:var(--primary,#6366f1);animation:spark-activity-pulse 1.4s infinite}
+.spark-activity-step[data-status=failed]>.spark-activity-marker{color:#dc3545}
+.spark-activity-step[data-status=completed]>.spark-activity-marker{color:#22a67a}
+.spark-activity-step[data-status=blocked]>.spark-activity-marker,.spark-activity-step[data-status=waiting]>.spark-activity-marker{color:#e6a23c}
+.spark-activity-step[data-status=pending]>.spark-activity-marker,.spark-activity-step[data-status=cancelled]>.spark-activity-marker{color:var(--pwanimate-muted)}
+.spark-activity-note{border-left-color:transparent}
+.spark-activity-note>.spark-activity-marker{display:none}
+.spark-activity-note{padding-left:14px}
+.spark-activity-text{margin:0;line-height:1.5;color:var(--pwanimate-asst-text)}
+.spark-activity-note .spark-activity-text{font-size:11.5px;color:var(--pwanimate-muted);font-style:italic}
+.spark-activity-note .spark-activity-text p{margin:0}
+.spark-activity-detail{margin:2px 0 0;font-size:11.5px;line-height:1.5;color:var(--pwanimate-muted)}
+.spark-activity-md p{margin:0 0 4px}.spark-activity-md p:last-child{margin-bottom:0}.spark-activity-md ul,.spark-activity-md ol{margin:2px 0;padding-left:18px}.spark-activity-md code{font-size:11px}
+.spark-thinking{margin:0 0 10px;padding:8px 0 8px 14px;border-left:2px solid var(--pwanimate-border)}
+.spark-thinking-summary{cursor:pointer;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:var(--pwanimate-asst-text);list-style:none;user-select:none}
+.spark-thinking-summary::-webkit-details-marker{display:none}
+.spark-thinking-summary:before{content:'▸';display:inline-block;margin-right:6px;transition:transform .15s;color:var(--pwanimate-muted)}
+.spark-thinking[open]>.spark-thinking-summary:before{transform:rotate(90deg)}
+.spark-thinking-body{margin-top:8px}
+.spark-thinking-line{margin:0 0 7px;font-size:12px;line-height:1.6;color:var(--pwanimate-muted);font-style:italic}
+.spark-thinking-line:last-child{margin-bottom:0}
+.spark-thinking-line p{margin:0}
+.spark-checklist{margin:2px 0 10px;padding:8px 10px 8px 12px;border-left:2px solid var(--pwanimate-border);font-size:12px}
+.spark-checklist[data-state=completed] .spark-checklist-doing .spark-checklist-marker,.spark-checklist[data-state=failed] .spark-checklist-doing .spark-checklist-marker{animation:none;opacity:.6}
+.spark-checklist-title{margin:0 0 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--pwanimate-muted)}
+.spark-checklist-list{list-style:none;margin:0;padding:0}
+.spark-checklist-item{display:flex;gap:8px;padding:3px 0;align-items:flex-start}
+.spark-checklist-marker{flex-shrink:0;width:12px;height:12px;border-radius:50%;border:1.5px solid var(--pwanimate-muted);margin-top:2px;position:relative}
+.spark-checklist-pending .spark-checklist-marker{border-style:dashed}
+.spark-checklist-doing .spark-checklist-marker{border-color:var(--pwanimate-asst-text);background:var(--pwanimate-asst-text);animation:spark-activity-pulse 1.4s infinite}
+.spark-checklist-done .spark-checklist-marker{border-color:#22a67a;background:#22a67a}
+.spark-checklist-done .spark-checklist-marker:after{content:'';position:absolute;left:3px;top:1px;width:4px;height:7px;border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.spark-checklist-blocked .spark-checklist-marker{border-color:#e6a23c;background:#e6a23c}
+.spark-checklist-blocked .spark-checklist-marker:after{content:'';position:absolute;left:4.5px;top:1.5px;width:2px;height:7px;background:#fff;border-radius:1px}
+.spark-checklist-failed .spark-checklist-marker{border-color:#dc3545;background:#dc3545}
+.spark-checklist-failed .spark-checklist-marker:after{content:'×';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;line-height:1;font-weight:700}
+.spark-checklist-skipped .spark-checklist-marker,.spark-checklist-cancelled .spark-checklist-marker{border-color:var(--pwanimate-muted);background:var(--pwanimate-muted)}
+.spark-checklist-skipped .spark-checklist-marker:after,.spark-checklist-cancelled .spark-checklist-marker:after{content:'';position:absolute;left:2px;right:2px;top:50%;height:1.5px;background:#fff;transform:translateY(-50%);border-radius:1px}
+.spark-checklist-skipped .spark-checklist-label,.spark-checklist-cancelled .spark-checklist-label{color:var(--pwanimate-muted)}
+.spark-checklist-body{display:flex;flex-direction:column;min-width:0}
+.spark-checklist-label{color:var(--pwanimate-asst-text);line-height:1.4}
+.spark-checklist-finding{font-size:11px;color:var(--pwanimate-muted);line-height:1.4}
+.spark-checklist-done .spark-checklist-label{color:var(--pwanimate-muted);text-decoration:line-through;text-decoration-color:var(--pwanimate-border)}
+.spark-thinking-summary{display:flex;align-items:center;gap:6px}
+.spark-thinking-icon,.spark-checklist-icon{width:13px;height:13px;flex-shrink:0;color:var(--pwanimate-muted);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.spark-checklist-title{display:flex;align-items:center;gap:6px}
+.spark-clarification{margin-top:8px;padding:2px 0 2px 12px;border-left:2px solid var(--pwanimate-border);max-width:560px}
+.spark-clarification-text{margin:0;font-size:12px;line-height:1.5;color:var(--pwanimate-muted)}
+.spark-clarification-note{margin:2px 0 0;font-size:11px;color:var(--pwanimate-muted);font-style:italic}
+.spark-clarification-resolved{opacity:.6}
+/* Floating interaction block — pending questions/choices sit directly above
+   the composer, sharing its wrapper width, safe-area padding and centering. */
+.spark-interaction-block{pointer-events:auto;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 14px;border:1px solid var(--pwanimate-border);border-radius:14px;background:transparent;color:var(--pwanimate-asst-text);font-size:12.5px}
+.spark-interaction-head{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.spark-interaction-head svg.lucide{width:15px;height:15px;color:var(--pwanimate-muted)}
+.spark-interaction-kind{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--pwanimate-muted)}
+.spark-interaction-prompt{margin:0 0 8px;font-size:13px;line-height:1.5;color:var(--pwanimate-asst-text);white-space:pre-wrap;overflow-wrap:anywhere}
+.spark-interaction-body{display:flex;flex-direction:column;gap:8px}
+.spark-interaction-choices{display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto}
+.spark-interaction-option{min-height:34px;padding:6px 14px;border:1px solid var(--pwanimate-border);border-radius:16px;background:var(--pwanimate-bg);color:var(--pwanimate-asst-text);font-size:12.5px;cursor:pointer;transition:border-color .12s ease,background .12s ease}
+.spark-interaction-option:hover{border-color:var(--primary,#6366f1)}
+.spark-interaction-option.is-selected{border-color:var(--primary,#6366f1);background:color-mix(in srgb,var(--primary,#6366f1) 14%,transparent)}
+.spark-interaction-option:disabled,.spark-interaction-input:disabled,.spark-interaction-submit:disabled,.spark-interaction-link:disabled{opacity:.55;cursor:default}
+.spark-interaction-other{align-self:flex-start}
+.spark-interaction-custom{display:flex;gap:8px;align-items:center}
+.spark-interaction-input{flex:1;min-width:0;min-height:38px;border:1px solid var(--pwanimate-border);border-radius:18px;background:var(--pwanimate-bg);color:var(--pwanimate-asst-text);padding:8px 14px;font-size:13px;outline:none;font-family:inherit}
+.spark-interaction-input:focus{border-color:var(--primary,#6366f1)}
+.spark-interaction-input::placeholder{color:var(--pwanimate-muted)}
+textarea.spark-interaction-input{border-radius:12px;resize:vertical;min-height:56px}
+.spark-interaction-submit{align-self:flex-start;border-radius:18px;padding:0 18px;min-height:36px;font-size:12.5px;flex-shrink:0}
+.spark-interaction-status{margin:6px 0 0;font-size:11.5px;color:var(--pwanimate-muted);min-height:0}
+.spark-interaction-status.is-error{color:#dc3545}
+.spark-interaction-status:empty{display:none}
+.spark-interaction-foot{display:flex;gap:14px;margin-top:8px;padding-top:8px;border-top:1px solid var(--pwanimate-border)}
+.spark-interaction-link{border:none;background:none;color:var(--pwanimate-muted);font-size:11.5px;cursor:pointer;text-decoration:underline;padding:4px 0}
+.spark-interaction-link:hover{color:var(--pwanimate-asst-text)}
+.spark-interaction-progress{margin:0 0 4px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--pwanimate-muted)}
+.spark-interaction-progress[hidden]{display:none}
+.spark-interaction-nav{display:flex;gap:8px;align-items:center;margin-top:10px}
+.spark-interaction-nav-btn{border:1px solid var(--pwanimate-border);border-radius:18px;background:var(--pwanimate-bg);color:var(--pwanimate-asst-text);font-size:12.5px;min-height:36px;padding:0 16px;cursor:pointer}
+.spark-interaction-nav-btn:hover{border-color:var(--primary,#6366f1)}
+.spark-interaction-nav-btn:disabled{opacity:.55;cursor:default}
+.spark-interaction-nav .spark-interaction-submit{margin-left:auto}
+@media (max-width: 768px) {
+    .spark-interaction-block{padding:10px 12px;margin-bottom:6px}
+    .spark-interaction-choices{flex-direction:column;align-items:stretch}
+    .spark-interaction-option{width:100%;text-align:left}
+    .spark-interaction-custom{flex-direction:column;align-items:stretch}
+    .spark-interaction-submit{width:100%}
+}
+.spark-approval{margin-top:10px}.spark-approval-card{padding:12px;border:1px solid var(--pwanimate-border);border-radius:10px;margin-bottom:8px;background:var(--pwanimate-card-bg)}.spark-approval-card p{white-space:pre-wrap;margin:0 0 8px}.spark-approval-controls{display:flex;gap:8px;flex-wrap:wrap}.spark-approval-scope{font-size:11px;color:var(--pwanimate-muted);margin:8px 0 0}
+@keyframes spark-activity-pulse{50%{opacity:.35}}@media(prefers-reduced-motion:reduce){.spark-activity-marker,.spark-checklist-doing .spark-checklist-marker{animation:none!important}}
+
+/* ---- Study Sessions surface (modal + mobile page) ---- */
+.spark-session-card{background:var(--pwanimate-card-bg)!important;transition:border-color .15s ease,box-shadow .15s ease}
+.spark-session-card:hover{border-color:var(--primary,#6366f1)!important}
+.spark-session-progress{background:rgba(100,116,139,.06);border:1px solid var(--pwanimate-border);border-radius:12px;padding:10px 12px}
+.spark-progress{height:8px;border-radius:99px;background:rgba(100,116,139,.15);overflow:hidden}
+.spark-progress-fill{height:100%;border-radius:99px;background:var(--primary,#6366f1);transition:width .35s ease}
+.spark-progress-sm{height:5px;flex:1;min-width:60px}
+.spark-progress-coverage .spark-progress-fill{background:#64748b}
+.spark-progress-mastery .spark-progress-fill{background:#22a67a}
+.spark-meter-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.spark-meter-label{font-size:11px;color:var(--pwanimate-muted);width:92px;flex-shrink:0}
+.spark-meter-value{font-size:11px;font-weight:600;color:var(--pwanimate-asst-text);width:34px;text-align:right;flex-shrink:0}
+.spark-roadmap-details{border-top:1px dashed var(--pwanimate-border);padding-top:6px}
+.spark-roadmap-details>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.spark-roadmap-details>summary::-webkit-details-marker{display:none}
+.spark-roadmap-details>summary:before{content:'\25B8';font-size:10px;transition:transform .15s ease}
+.spark-roadmap-details[open]>summary:before{transform:rotate(90deg)}
+.spark-roadmap{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.spark-roadmap-item{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--pwanimate-asst-text)}
+.spark-roadmap-icon{font-size:12px;margin-top:2px;flex-shrink:0}
+.spark-roadmap-item.pending .spark-roadmap-label{color:var(--pwanimate-muted)}
+.spark-roadmap-item.doing .spark-roadmap-label{font-weight:600}
+.spark-roadmap-item.done .spark-roadmap-label{color:var(--pwanimate-muted);text-decoration:line-through;text-decoration-color:var(--pwanimate-border)}
+.spark-session-panel{background:var(--pwanimate-bg);border-color:var(--pwanimate-border)!important}
+.spark-quiz-question{background:var(--pwanimate-bg);border-color:var(--pwanimate-border)!important}
+.spark-quiz-option{text-align:left}
+.spark-quiz-option:hover{border-color:var(--primary,#6366f1)}
+.spark-artifact-md{white-space:pre-wrap;word-break:break-word;font-family:inherit;max-height:280px;overflow-y:auto;background:var(--pwanimate-card-bg);border:1px solid var(--pwanimate-border);border-radius:8px;padding:8px 10px}
+.spark-session-card .btn.active{background:var(--primary,#6366f1);border-color:var(--primary,#6366f1);color:#fff}
+.pwanimate-sessions-modal .modal-body{background-color:var(--pwanimate-bg)}
+.pwanimate-sessions-mobile .spark-session-card{margin-bottom:0}
+[data-theme="dark"] .spark-progress{background:rgba(255,255,255,.08)}
+[data-bs-theme="dark"] .spark-progress{background:rgba(255,255,255,.08)}
+
+/* Lucide icons — Spark surfaces only (self-hosted lucide.min.js).
+   Scoped under .pwanimate-active so Vasto-wide Bootstrap Icons are untouched.
+   Lucide SVGs inherit currentColor for theme-aware stroke; sizing defaults to
+   1em like the Bootstrap Icons they replace, with message actions pinned to
+   the required 18px / 1.75 stroke treatment. */
+.pwanimate-active svg.lucide {
+    width: 1em;
+    height: 1em;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    color: inherit;
+    flex-shrink: 0;
+    vertical-align: -0.125em;
+}
+
+.pwanimate-message-actions svg.lucide {
+    width: 18px;
+    height: 18px;
+}
+
+/* Lucide SVG equivalents of the legacy `i`-scoped icon rules above. */
+.pwanimate-code-copy-btn.copied svg.lucide,
+.pwanimate-chat-disclaimer svg.lucide { font-size: 8px; }
+.pwanimate-fallback-notice svg.lucide { color: #f59e0b; font-size: 0.8rem; }
+.pwanimate-action-card-header svg.lucide { color: var(--pwanimate-user-bubble, #2563eb); }
+.pwanimate-voice-stop.is-loading svg.lucide,
+.pwanimate-voice-send.is-loading svg.lucide { display: none; }
+.pwanimate-study-action-btn svg.lucide { color: var(--primary, #2563eb); font-size: 0.95rem; flex-shrink: 0; }
+.pwanimate-live-page-pill svg.lucide { color: var(--primary, #2563eb); }
+.pwanimate-study-header-btn svg.lucide { color: var(--primary, #2563eb); font-size: 0.76rem; }
+[data-theme="dark"] .pwanimate-study-header-btn svg.lucide,
+[data-bs-theme="dark"] .pwanimate-study-header-btn svg.lucide { color: #818cf8; }
+.pwanimate-study-header-btn.is-muted svg.lucide { color: var(--pwanimate-muted, #64748b); }
+.pwanimate-study-header-btn.is-danger svg.lucide { color: #dc2626; }
+[data-theme="dark"] .pwanimate-study-header-btn.is-danger svg.lucide,
+[data-bs-theme="dark"] .pwanimate-study-header-btn.is-danger svg.lucide { color: #f87171; }
+.pwanimate-subscription-includes svg.lucide { color: var(--primary, #2563eb); margin-right: 5px; }

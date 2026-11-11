@@ -3,6 +3,7 @@
 
 {% block html_class %}in-conversation-active{% endblock %}
 {% block body_class %}in-conversation-active{% endblock %}
+{% block app_shell_class %} in-conversation-shell{% endblock %}
 
 {% block header %}{% endblock %}
 {% block left_rail %}{% endblock %}
@@ -15,7 +16,7 @@
 <link rel="stylesheet" href="{% static 'css/messaging/chat-presets.css' %}?v=9">
 <link rel="stylesheet" href="{% static 'css/chat_theme.css' %}?v=26">
 <link rel="stylesheet" href="{% static 'css/messaging/media-composer.css' %}?v=28">
-<link rel="stylesheet" href="{% static 'css/chat/telegram-media.css' %}?v=31">
+<link rel="stylesheet" href="{% static 'css/chat/telegram-media.css' %}?v=32">
 <script>
   document.documentElement.classList.add('in-conversation-active');
   document.body.classList.add('in-conversation-active');
@@ -1577,6 +1578,7 @@
       if (backBtn) {
         e.preventDefault();
         e.stopPropagation();
+        if (window.PwaniCalls?.hasSession() && window.PwaniCalls.navigate('/messaging/')) return;
         window.location.href = '/messaging/';
       }
     });

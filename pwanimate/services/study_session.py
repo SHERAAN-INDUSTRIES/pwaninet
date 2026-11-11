@@ -205,16 +205,23 @@ def parse_study_command(raw_message: Optional[str]) -> StudyCommandParseResult:
     return StudyCommandParseResult(True, remainder)
 
 
-def is_user_authorized_for_document(user: Any, document: Optional[Document]) -> bool:
+def is_user_authorized_for_document(
+    user: Any, document: Optional[Document], require_ready: bool = True
+) -> bool:
     """
     Verify whether `user` is currently authorized to read `document` in Pwanimate.
     Enforces publication/ready status, availability, and visibility/enrollment rules.
+
+    `require_ready=False` relaxes ONLY the ready/available gate so callers can
+    distinguish "still processing" / "unavailable" from "inaccessible" for
+    diagnostics. Visibility, ownership, deletion and AI-generation rules are
+    unchanged. Content retrieval must keep the strict default.
     """
     if not document or not getattr(user, "is_authenticated", False):
         return False
-    if document.status != "ready" or not document.is_available:
-        return False
     if getattr(document, "is_deleted", False):
+        return False
+    if require_ready and (document.status != "ready" or not document.is_available):
         return False
 
     if document.uploaded_by_id == user.id:
@@ -577,14 +584,17 @@ class StudySessionService:
         return list(qs.order_by("-last_active_at", "-started_at")[: max(1, min(limit, 100))])
 
     @classmethod
-    def _pause_other_active_sessions(cls, user: Any, exclude_session_id: Optional[uuid.UUID] = None) -> int:
+    def _pause_other_active_sessions(cls, user: Any, exclude_session_id: Optional[uuid.UUID] = None,
+                                     unit_scope: str = "general") -> int:
         """
-        Demote any existing active sessions for `user` to `paused` without deleting history.
-        Caller must run inside `transaction.atomic()`.
+        Demote this user's other active sessions for the SAME unit scope to `paused`.
+        Sessions on different units stay active — a student can study several
+        units in parallel. Caller must run inside `transaction.atomic()`.
         """
         qs = PwanimateStudySession.objects.select_for_update().filter(
             user=user,
             status=PwanimateStudySession.STATUS_ACTIVE,
+            unit_scope=unit_scope,
         )
         if exclude_session_id:
             qs = qs.exclude(id=exclude_session_id)
@@ -602,12 +612,17 @@ class StudySessionService:
         attachments: Optional[List[Any]] = None,
         learning_objective: str = "",
         current_topic: str = "",
+        unit: Any = None,
+        unit_label: str = "",
+        target_goal: str = "",
+        assessment_mode: str = "",
     ) -> PwanimateStudySession:
         """
         Start a new active Study Mode session or continue/activate the session for `conversation`.
 
-        Enforces the single-active-session invariant transactionally: starting or activating
-        a session automatically pauses any other active session owned by `user`.
+        Enforces the per-unit active invariant transactionally: starting or activating
+        a session pauses other active sessions for the SAME unit only, so a student
+        can run parallel sessions across different units.
         """
         if not user or not getattr(user, "is_authenticated", False):
             raise ValueError("Authenticated user is required for Study Mode.")
@@ -619,6 +634,14 @@ class StudySessionService:
         )
         derived_topic = (current_topic or derived_title or clean_query[:120]).strip()[:255]
         derived_objective = (learning_objective or clean_query).strip()
+
+        from pwanimate.services.personal_planner import PersonalPlannerService
+        unit_obj, resolved_label = PersonalPlannerService.resolve_unit(unit, unit_label)
+        unit_scope = PersonalPlannerService.unit_scope_for(unit_obj, resolved_label or unit_label)
+        clean_mode = (assessment_mode or '').strip().lower()
+        if clean_mode not in ('', 'immediate', 'deferred', 'mcq'):
+            raise ValueError("assessment_mode must be 'immediate', 'deferred', or 'mcq'.")
+        clean_goal = (target_goal or '').strip()
 
         merged_resources: Optional[List[Dict[str, Any]]] = (
             list(context_resources) if isinstance(context_resources, list) else None
@@ -646,11 +669,19 @@ class StudySessionService:
                     .first()
                 )
                 if existing:
-                    cls._pause_other_active_sessions(user, exclude_session_id=existing.id)
+                    # Without explicit unit params the session keeps its own
+                    # scope — pause peers of THAT scope, not 'general'.
+                    pause_scope = (unit_scope if (unit_obj is not None or unit_label)
+                                   else (existing.unit_scope or unit_scope))
+                    cls._pause_other_active_sessions(user, exclude_session_id=existing.id, unit_scope=pause_scope)
                     existing.status = PwanimateStudySession.STATUS_ACTIVE
                     existing.ended_at = None
                     existing.last_active_at = now
                     existing.resume_banner_dismissed_at = None
+                    if unit_obj is not None or unit_label:
+                        existing.unit = unit_obj
+                        existing.unit_label = resolved_label
+                        existing.unit_scope = unit_scope
                     if learning_objective:
                         existing.learning_objective = learning_objective.strip()
                     elif not existing.learning_objective and derived_objective:
@@ -659,6 +690,12 @@ class StudySessionService:
                         existing.current_topic = current_topic.strip()[:255]
                     elif derived_topic and not existing.current_topic:
                         existing.current_topic = derived_topic
+                    if clean_goal:
+                        existing.target_goal = clean_goal
+                        existing.target_set_at = now
+                        existing.progress_percent = 0
+                    if clean_mode:
+                        existing.assessment_mode = clean_mode
                     if derived_title and not conversation.title:
                         conversation.title = derived_title
                         conversation.save(update_fields=["title", "updated_at"])
@@ -670,12 +707,19 @@ class StudySessionService:
                             "resume_banner_dismissed_at",
                             "learning_objective",
                             "current_topic",
+                            "unit",
+                            "unit_label",
+                            "unit_scope",
+                            "target_goal",
+                            "target_set_at",
+                            "progress_percent",
+                            "assessment_mode",
                             "updated_at",
                         ]
                     )
                     session = existing
                 else:
-                    cls._pause_other_active_sessions(user)
+                    cls._pause_other_active_sessions(user, unit_scope=unit_scope)
                     if not conversation.title and derived_title:
                         conversation.title = derived_title
                         conversation.save(update_fields=["title", "updated_at"])
@@ -685,10 +729,16 @@ class StudySessionService:
                         status=PwanimateStudySession.STATUS_ACTIVE,
                         learning_objective=derived_objective,
                         current_topic=derived_topic,
+                        unit=unit_obj,
+                        unit_label=resolved_label,
+                        unit_scope=unit_scope,
+                        target_goal=clean_goal,
+                        target_set_at=now if clean_goal else None,
+                        assessment_mode=clean_mode,
                         last_active_at=now,
                     )
             else:
-                cls._pause_other_active_sessions(user)
+                cls._pause_other_active_sessions(user, unit_scope=unit_scope)
                 conversation = ConversationService.create_conversation(
                     user=user,
                     title=derived_title,
@@ -699,6 +749,12 @@ class StudySessionService:
                     status=PwanimateStudySession.STATUS_ACTIVE,
                     learning_objective=derived_objective,
                     current_topic=derived_topic,
+                    unit=unit_obj,
+                    unit_label=resolved_label,
+                    unit_scope=unit_scope,
+                    target_goal=clean_goal,
+                    target_set_at=now if clean_goal else None,
+                    assessment_mode=clean_mode,
                     last_active_at=now,
                 )
 
@@ -706,6 +762,146 @@ class StudySessionService:
                 cls.sync_context_state(session, user, merged_resources)
 
         return cls.get_owned_session(user, session.id) or session
+
+    @classmethod
+    def get_or_create_unit_session(cls, user: Any, unit: Any = None, unit_label: str = "",
+                                   title: str = "", learning_objective: str = "",
+                                   target_goal: str = "", assessment_mode: str = "") -> PwanimateStudySession:
+        """
+        Find or start the dedicated study session for one unit scope.
+
+        Each unit gets its own conversation + session so parallel units never
+        collide. A paused session for the same scope is reactivated and resumes
+        from its latest checkpoint; completed sessions start fresh.
+        """
+        from pwanimate.services.personal_planner import PersonalPlannerService
+        unit_obj, resolved_label = PersonalPlannerService.resolve_unit(unit, unit_label)
+        scope = PersonalPlannerService.unit_scope_for(unit_obj, resolved_label)
+        existing = (
+            PwanimateStudySession.objects.select_related("conversation")
+            .filter(user=user, unit_scope=scope,
+                    status__in=[PwanimateStudySession.STATUS_ACTIVE, PwanimateStudySession.STATUS_PAUSED])
+            .order_by("-last_active_at")
+            .first()
+        )
+        if existing is not None:
+            return cls.start_or_continue_session(
+                user=user, conversation=existing.conversation, unit=unit_obj,
+                unit_label=resolved_label, title=title, learning_objective=learning_objective,
+                target_goal=target_goal, assessment_mode=assessment_mode)
+        label = resolved_label or (getattr(unit_obj, 'name', '') or 'Study')
+        conversation = ConversationService.create_conversation(
+            user=user, title=(title or f"Study — {label}")[:255])
+        return cls.start_or_continue_session(
+            user=user, conversation=conversation, unit=unit_obj, unit_label=resolved_label,
+            title=title, learning_objective=learning_objective,
+            target_goal=target_goal, assessment_mode=assessment_mode)
+
+    ROADMAP_STATUSES = ("pending", "doing", "done")
+    MAX_ROADMAP_ITEMS = 12
+
+    @classmethod
+    def normalize_roadmap(cls, items: Any) -> List[Dict[str, str]]:
+        """Validate a roadmap payload into [{label, status}] rows."""
+        if not isinstance(items, list) or not items:
+            raise ValueError("A roadmap needs at least one section.")
+        if len(items) > cls.MAX_ROADMAP_ITEMS:
+            raise ValueError(f"A roadmap supports at most {cls.MAX_ROADMAP_ITEMS} sections.")
+        clean = []
+        for item in items:
+            if not isinstance(item, dict) or not str(item.get("label") or "").strip():
+                raise ValueError("Every roadmap section needs a label.")
+            status = str(item.get("status") or "pending").strip().lower()
+            if status not in cls.ROADMAP_STATUSES:
+                raise ValueError("Roadmap status must be pending, doing, or done.")
+            clean.append({"label": str(item["label"]).strip()[:200], "status": status})
+        return clean
+
+    @classmethod
+    def roadmap_coverage(cls, session: PwanimateStudySession) -> int:
+        """Percent of roadmap sections marked done; 100 when no roadmap exists."""
+        roadmap = session.roadmap if isinstance(session.roadmap, list) else []
+        if not roadmap:
+            return 100
+        done = sum(1 for item in roadmap if isinstance(item, dict) and item.get("status") == "done")
+        return round(done / len(roadmap) * 100)
+
+    @classmethod
+    def recompute_progress(cls, session: PwanimateStudySession, save: bool = True) -> int:
+        """
+        progress_percent = mean(coverage, mastery) when a roadmap exists, else mastery.
+        Finishing every section without passing tests caps progress at ~50% —
+        tests are the gate to 100%, and self-reported understanding moves nothing.
+        """
+        mastery = max(0, min(100, int(session.mastery_percent or 0)))
+        roadmap = session.roadmap if isinstance(session.roadmap, list) else []
+        if roadmap:
+            progress = round((cls.roadmap_coverage(session) + mastery) / 2)
+        else:
+            progress = mastery
+        progress = max(0, min(100, progress))
+        if session.progress_percent != progress:
+            session.progress_percent = progress
+            if save:
+                session.save(update_fields=["progress_percent", "updated_at"])
+        return progress
+
+    @classmethod
+    def set_roadmap(cls, session: PwanimateStudySession, items: Any) -> PwanimateStudySession:
+        session.roadmap = cls.normalize_roadmap(items)
+        session.save(update_fields=["roadmap", "updated_at"])
+        cls.recompute_progress(session)
+        return session
+
+    @classmethod
+    def update_roadmap_item(cls, session: PwanimateStudySession, index: int,
+                            status: Optional[str] = None) -> PwanimateStudySession:
+        """Move one roadmap section; completing it advances coverage, never mastery."""
+        roadmap = session.roadmap if isinstance(session.roadmap, list) else []
+        if not isinstance(index, int) or not 0 <= index < len(roadmap):
+            raise ValueError("Roadmap section index out of range.")
+        if status is not None:
+            status = str(status).strip().lower()
+            if status not in cls.ROADMAP_STATUSES:
+                raise ValueError("Roadmap status must be pending, doing, or done.")
+            roadmap[index]["status"] = status
+        session.roadmap = roadmap
+        session.save(update_fields=["roadmap", "updated_at"])
+        cls.recompute_progress(session)
+        return session
+
+    @classmethod
+    def set_target(cls, session: PwanimateStudySession, goal: str, unit: Any = None,
+                   unit_label: str = "", assessment_mode: str = "") -> PwanimateStudySession:
+        """Set or replace the session's end goal; a new target restarts assessed progress."""
+        from pwanimate.services.personal_planner import PersonalPlannerService
+        clean_goal = (goal or "").strip()
+        if not clean_goal:
+            raise ValueError("A study target needs a goal.")
+        clean_mode = (assessment_mode or "").strip().lower()
+        if clean_mode not in ("", "immediate", "deferred", "mcq"):
+            raise ValueError("assessment_mode must be 'immediate', 'deferred', or 'mcq'.")
+        unit_obj, resolved_label = PersonalPlannerService.resolve_unit(unit, unit_label or session.unit_label)
+        session.target_goal = clean_goal
+        session.target_set_at = timezone.now()
+        session.progress_percent = 0
+        session.mastery_percent = 0
+        session.roadmap = []
+        if clean_mode:
+            session.assessment_mode = clean_mode
+        scope_changed = False
+        if unit_obj is not None or unit_label:
+            session.unit = unit_obj
+            session.unit_label = resolved_label
+            session.unit_scope = PersonalPlannerService.unit_scope_for(unit_obj, resolved_label)
+            scope_changed = True
+        fields = ["target_goal", "target_set_at", "progress_percent",
+                  "mastery_percent", "roadmap",
+                  "assessment_mode", "unit", "unit_label", "updated_at"]
+        if scope_changed:
+            fields.append("unit_scope")
+        session.save(update_fields=fields)
+        return session
 
     @classmethod
     def pause_session(
@@ -1248,6 +1444,17 @@ class StudySessionService:
             "status": session.status,
             "learning_objective": session.learning_objective or "",
             "current_topic": session.current_topic or "",
+            "unit": str(session.unit_id) if session.unit_id else None,
+            "unit_code": getattr(session.unit, "code", "") if session.unit_id else "",
+            "unit_label": session.unit_label or "",
+            "unit_scope": session.unit_scope or "general",
+            "target_goal": session.target_goal or "",
+            "target_set_at": session.target_set_at.isoformat() if session.target_set_at else None,
+            "progress_percent": session.progress_percent or 0,
+            "mastery_percent": session.mastery_percent or 0,
+            "roadmap_coverage_percent": cls.roadmap_coverage(session) if session.roadmap else None,
+            "roadmap": session.roadmap or [],
+            "assessment_mode": session.assessment_mode or "",
             "active_document": active_doc,
             "context_state": session.context_state or {},
             "latest_checkpoint": cls.serialize_checkpoint(session.latest_checkpoint),

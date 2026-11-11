@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-09",
+  "regression": {
+    "passed": 95,
+    "log": "focused Spark/PostgreSQL regression suite"
+  },
+  "final_feature_suite": {
+    "passed": 18,
+    "overlaps_regression": true
+  },
+  "legacy_suite": {
+    "run": 144,
+    "failures": 18,
+    "note": "17 historical exact prompt wording assertions; greeting task assertion also fails with SPARK_AGENT_ENABLED=False"
+  },
+  "android": {
+    "build": "debug",
+    "result": "passed",
+    "physical_closed_app_test": false
+  },
+  "live_model_probe": {
+    "private_data_used": false,
+    "fixture_tools": [
+      "unread_chats",
+      "notification_summary"
+    ],
+    "both_successful": true
+  },
+  "memory_backfill": {
+    "development_account_summaries_created": 2
+  },
+  "worker": {
+    "ping": "pong",
+    "new_memory_task_roundtrip": "passed; nonexistent source returned False"
+  },
+  "browser": {
+    "checks": [
+      "390px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+      "390px dark: actual template and client; memory loaded; reminder form; no horizontal overflow",
+      "1280px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+      "320px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+      "Reminder form submits correct title, aware timestamp, timezone, and resets after success"
+    ],
+    "page_errors": [],
+    "data": "API fixtures; no real notification was sent"
+  },
+  "native_contract": [
+    {
+      "denied": false,
+      "cancel": false,
+      "fails": false,
+      "passed": true
+    },
+    {
+      "denied": true,
+      "cancel": false,
+      "fails": false,
+      "passed": true
+    },
+    {
+      "denied": false,
+      "cancel": true,
+      "fails": false,
+      "passed": true
+    },
+    {
+      "denied": false,
+      "cancel": false,
+      "fails": true,
+      "passed": true
+    }
+  ],
+  "known_boundaries": [
+    "Physical-phone behavior unverified",
+    "Selected-resource, multimodal and study-session turns retain existing orchestration paths",
+    "Reminder remote cancellation waits for app sync",
+    "Sixteen document sources missing; one version has no file record"
+  ],
+  "automatic_review": "Optional private-count live probe rejected; synthetic fixture verification succeeded instead."
+}

@@ -400,6 +400,8 @@ class UserContextService:
                 programme=programme,
                 academic_level=academic_level,
                 semester=semester,
+                academic_year=academic_year,
+                include_processing=False,
             )
             if tt and tt.schedule_data:
                 weekly_timetable = tt.schedule_data

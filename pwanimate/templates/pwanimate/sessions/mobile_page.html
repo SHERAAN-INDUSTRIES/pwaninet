@@ -1,0 +1,33 @@
+{% load i18n %}
+{% load static %}
+<div class="pwanimate-workspace pwanimate-settings-mobile pwanimate-sessions-mobile" id="pwanimate-workspace">
+    <div class="pwanimate-settings-mobile-container p-3 mx-auto" style="max-width: 720px;">
+        <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+            {% if embed_offcanvas %}
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 rounded-pill px-3"
+                    onclick="window.sparkCloseOffcanvasPanel && window.sparkCloseOffcanvasPanel()">
+                <i data-lucide="arrow-left"></i>
+                <span class="fw-semibold">{% trans "Back" %}</span>
+            </button>
+            {% else %}
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 rounded-pill px-3"
+                    hx-get="{% url 'pwanimate:index' %}"
+                    hx-target="#page-content-target"
+                    hx-swap="innerHTML"
+                    hx-push-url="true">
+                <i data-lucide="arrow-left"></i>
+                <span class="fw-semibold">{% trans "Back to Chat" %}</span>
+            </button>
+            {% endif %}
+            <h5 class="fw-bold mb-0 text-center flex-grow-1">{% trans "Study Sessions" %}</h5>
+            <div style="width: 100px;"></div>
+        </div>
+        {% include 'pwanimate/sessions/partials/sessions_content.html' %}
+    </div>
+</div>
+
+<nav id="navbar-top" class="navbar navbar-expand-lg navbar-top fixed-top p-0" hx-swap-oob="true">
+    {% include 'pwanimate/partials/pwanimate_top_nav.html' %}
+</nav>

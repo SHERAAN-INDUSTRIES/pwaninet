@@ -79,6 +79,7 @@ CSRF_TRUSTED_ORIGINS = list(set([
     'capacitor://localhost',
     'http://localhost',
     'https://localhost',
+    'https://dev.pwaninet.app',
 ] + _detected_origins + _env_csrf))
 
 CORS_ALLOW_ALL_ORIGINS = True
@@ -127,3 +128,16 @@ if not os.environ.get("OIDC_RSA_PRIVATE_KEY") and _local_oidc_key.is_file():
         **OAUTH2_PROVIDER,
         "OIDC_RSA_PRIVATE_KEY": _local_oidc_key.read_text(),
     }
+
+# Read uploaded images/scanned pages on this workstation through Ollama.
+# Production keeps the provider configured in base/production settings.
+PWANIMATE_ATTACHMENT_VISION_PROVIDER = os.environ.get('PWANIMATE_ATTACHMENT_VISION_PROVIDER', 'ollama')
+PWANIMATE_ATTACHMENT_VISION_MODEL = os.environ.get(
+    'PWANIMATE_ATTACHMENT_VISION_MODEL',
+    PWANIMATE_OLLAMA_OCR_MODEL if PWANIMATE_ATTACHMENT_VISION_PROVIDER == 'ollama' else PWANIMATE_VISION_MODEL,
+)
+if PWANIMATE_ATTACHMENT_VISION_PROVIDER == 'ollama':
+    PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS = int(os.environ.get('PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS', '4096'))
+    PWANIMATE_ATTACHMENT_VISION_FALLBACK_CHAIN = [
+        {'provider': 'ollama', 'model': PWANIMATE_ATTACHMENT_VISION_MODEL},
+    ]

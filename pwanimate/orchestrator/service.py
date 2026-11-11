@@ -25,6 +25,7 @@ from pwanimate.ai.exceptions import AIGatewayError
 from pwanimate.ai.gateway.types import AttachmentData
 from pwanimate.context import ContextEngine, ContextPackage, ContextRequest, GroundingMode
 from pwanimate.context.types import AuthorityLevel, ContextItem
+from pwanimate.orchestrator.document_context import DocumentTurnContext
 from pwanimate.orchestrator.prompts import (
     STUDY_MODE_ADAPTIVE_TEACHING_ADDENDUM,
     STUDY_MODE_INSTRUCTION_ADDENDUM,
@@ -210,8 +211,13 @@ def extract_attachment_text(
         if stored_chunks:
             query_str = query or ""
             query_terms = set(re.findall(r"[a-z0-9]{3,}", query_str.lower()))
-            page_match = re.search(r"\b(?:page|p\.)\s*(\d+)\b", query_str, re.IGNORECASE)
-            explicit_query_page = int(page_match.group(1)) if page_match else None
+            # Shared page-intent semantics: only an intentional page reference
+            # overrides the rail's open page — incidental "page N" mentions in
+            # prose ("On page 12 it mentions page 4") no longer hijack context.
+            from pwanimate.orchestrator.document_context import extract_page_intent
+            page_intent = extract_page_intent(query_str)
+            explicit_pages = page_intent.get("explicit_pages") or []
+            explicit_query_page = explicit_pages[0] if explicit_pages else None
             effective_page = explicit_query_page
             if effective_page is None and active_page is not None:
                 try:
@@ -351,6 +357,23 @@ def extract_attachment_text(
     if len(cleaned) > max_chars:
         cleaned = cleaned[:max_chars].rstrip() + "... [ATTACHMENT TRUNCATED]"
     return cleaned
+
+
+def _truncate_context_text(text: str, max_chars: int) -> str:
+    """
+    Bound context text at a natural boundary (paragraph → sentence → word)
+    instead of cutting mid-equation or mid-sentence where practical.
+    """
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    window = text[:max_chars]
+    for sep in ("\n\n", ". ", " "):
+        idx = window.rfind(sep)
+        if idx > max_chars // 3:
+            keep = idx + (2 if sep == ". " else 0)
+            return window[:keep].rstrip() + " …"
+    return window.rstrip() + " …"
 
 
 class PwanimateOrchestrator:
@@ -593,38 +616,38 @@ class PwanimateOrchestrator:
         return resolved_attachments, attachment_pages
 
     def _resolve_context_resources(
-        self, user: Any, context_resources: List[Dict[str, Any]], query: str = ""
+        self,
+        user: Any,
+        context_resources: List[Dict[str, Any]],
+        query: str = "",
+        document_context: Optional[DocumentTurnContext] = None,
     ) -> Tuple[List[int], List[Any], List[RetrievalResult], List[RetrievalResult]]:
         """
-        Authorize and resolve client context resources (documents, pages, and posts).
+        Authorize and resolve client context resources.
+
+        Document-type resources are owned by the shared DocumentTurnContext
+        created before intent routing (identity, authorization, page intent,
+        diagnostics). This method adds lazy page-evidence retrieval plus
+        post/profile resolution for non-document resources.
         Returns: (filter_document_ids, page_chunks, selected_post_results, selected_user_results)
         """
         if not context_resources or not isinstance(context_resources, list):
             return [], [], [], []
 
-        from documents.models import Document
-        from pwanimate.retrieval.services.document_retrieval import DocumentSemanticRetrievalService
+        from pwanimate.orchestrator.document_context import is_document_resource
 
-        doc_retrieval = DocumentSemanticRetrievalService()
-        authorized_chunk_qs = doc_retrieval.build_authorized_chunk_queryset(user=user)
-        query_str = query or ""
-        is_summary_query = bool(
-            re.search(
-                r"\b(?:summar(?:ize|y|ise)|overview|table of contents|chapters?|whole (?:book|document|pdf)|about this (?:book|document|pdf)|structure)\b",
-                query_str,
-                re.IGNORECASE,
-            )
-        )
-        explicit_page_match = re.search(r"\b(?:page|p\.)\s*(\d+)\b", query_str, re.IGNORECASE)
-        explicit_query_page = int(explicit_page_match.group(1)) if explicit_page_match else None
+        if document_context is None:
+            document_context = DocumentTurnContext.resolve(user, context_resources, query)
 
-        filter_doc_ids: List[int] = []
-        page_chunks: List[Any] = []
         selected_post_results: List[RetrievalResult] = []
         selected_user_results: List[RetrievalResult] = []
 
         for res in context_resources:
             if not isinstance(res, dict):
+                continue
+            if is_document_resource(res):
+                # Documents are resolved once by DocumentTurnContext so every
+                # route shares the same authorized identities and page targets.
                 continue
             res_type = str(res.get("type") or res.get("category") or "").lower()
             source_type = str(res.get("source_type") or res.get("sourceType") or "").lower()
@@ -632,97 +655,6 @@ class PwanimateOrchestrator:
             if source_type in {"web", "web_search", "attachment"} or res_type in {"web", "web_search", "attachment"}:
                 continue
             resource_id = res.get("id")
-            if res_type in ("document", "doc"):
-                # Context rail descriptors are produced by the browser in camelCase,
-                # while older API clients may still send snake_case fields.
-                doc_id = res.get("document_id") or res.get("documentId")
-                share_id = (
-                    res.get("share_id")
-                    or res.get("document_share_id")
-                    or res.get("documentShareId")
-                )
-                if not doc_id and resource_id:
-                    try:
-                        # Older clients used `id` for a numeric document primary key.
-                        doc_id = int(resource_id)
-                    except (ValueError, TypeError):
-                        # The current context rail uses the document's share UUID as `id`.
-                        if not share_id and res_type in ("document", "doc"):
-                            share_id = resource_id
-                page_raw = (
-                    explicit_query_page
-                    or res.get("page")
-                    or res.get("page_number")
-                    or res.get("pageNumber")
-                )
-
-                doc_obj = None
-                if doc_id:
-                    try:
-                        doc_obj = Document.objects.filter(id=int(doc_id)).first()
-                    except (ValueError, TypeError):
-                        pass
-                elif share_id:
-                    try:
-                        share_uuid = uuid.UUID(str(share_id).strip())
-                        doc_obj = Document.objects.filter(share_id=share_uuid).first()
-                    except (ValueError, TypeError):
-                        pass
-
-                if not doc_obj:
-                    continue
-
-                # Verify authorized chunk queryset permits this document
-                is_authorized = authorized_chunk_qs.filter(document_id=doc_obj.id).exists()
-                if not is_authorized:
-                    logger.warning(
-                        "Context resource document %s not authorized for user %s",
-                        doc_obj.id,
-                        getattr(user, "id", None),
-                    )
-                    continue
-
-                if doc_obj.id not in filter_doc_ids:
-                    filter_doc_ids.append(doc_obj.id)
-
-                # Retrieve whole-document structural overview + active page chunks
-                doc_overview_chunks: List[RetrievalResult] = []
-                if doc_obj.share_id and hasattr(doc_retrieval, "get_document_overview_chunks"):
-                    try:
-                        doc_overview_chunks = doc_retrieval.get_document_overview_chunks(
-                            user=user,
-                            document_share_id=doc_obj.share_id,
-                            max_chunks=(5 if is_summary_query else 2),
-                        )
-                    except Exception as exc:
-                        logger.debug("Could not load document overview chunks for %s: %s", doc_obj.id, exc)
-
-                active_page_chunks: List[RetrievalResult] = []
-                if page_raw is not None:
-                    try:
-                        page_num = int(page_raw)
-                        if page_num > 0 and doc_obj.share_id:
-                            chunks = doc_retrieval.get_page_chunks(
-                                user=user,
-                                document_share_id=doc_obj.share_id,
-                                page_number=page_num,
-                            )
-                            if chunks:
-                                first_snippet = chunks[0].snippet or ""
-                                marker = f"[CURRENTLY OPEN PAGE IN VIEWER — PAGE {page_num}]"
-                                if marker not in first_snippet:
-                                    chunks[0].snippet = f"{marker}\n{first_snippet}"
-                                active_page_chunks.extend(chunks)
-                    except (ValueError, TypeError):
-                        pass
-
-                if is_summary_query:
-                    page_chunks.extend(doc_overview_chunks)
-                    page_chunks.extend(active_page_chunks)
-                else:
-                    page_chunks.extend(active_page_chunks)
-                    if doc_overview_chunks:
-                        page_chunks.extend(doc_overview_chunks[:1])
 
             post_id = res.get("post_id") or res.get("postId")
             if post_id or res_type == "post" or source_type == "post":
@@ -811,7 +743,21 @@ class PwanimateOrchestrator:
                 except Exception as exc:
                     logger.info("Selected Pwanimate profile is unavailable: %s", type(exc).__name__)
 
-        return filter_doc_ids, page_chunks, selected_post_results, selected_user_results
+        # Lazy evidence fetch: page-aware chunks for all resolved documents,
+        # prioritized by the shared page intent (active page → explicit pages →
+        # bounded neighbors → overview for document-wide questions).
+        try:
+            page_chunks = document_context.collect_page_evidence(user, query)
+        except Exception:
+            logger.exception("Spark document page-evidence retrieval failed")
+            page_chunks = []
+
+        return (
+            document_context.filter_document_ids,
+            page_chunks,
+            selected_post_results,
+            selected_user_results,
+        )
 
     def is_conversational_intent(self, query: str) -> bool:
         """
@@ -866,13 +812,24 @@ class PwanimateOrchestrator:
         request: OrchestrationRequest,
         effective_attachments: Optional[List[Any]] = None,
         attachment_context: Optional[str] = None,
+        document_context: Optional[DocumentTurnContext] = None,
+        page_chunks: Optional[List[Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Inspect currently open documents/pages and attachments for missing or failed
         text extraction so Pwanimate warns the user honestly instead of guessing.
         """
         warnings: List[Dict[str, Any]] = []
-        if request.context_resources:
+        doc_context = document_context if document_context is not None else getattr(
+            request, "document_context", None
+        )
+        if doc_context is not None:
+            # Shared resolver diagnostics cover every document-type resource
+            # (resolved, inaccessible, processing, unindexed, page-empty...).
+            warnings.extend(doc_context.to_warnings())
+            if page_chunks is not None:
+                warnings.extend(doc_context.page_level_warnings(page_chunks))
+        elif request.context_resources:
             try:
                 from pwanimate.services.study_session import inspect_open_document_availability
                 warnings.extend(
@@ -999,11 +956,37 @@ class PwanimateOrchestrator:
         # Selected resources inform the answer; they do not suppress independent tools.
         has_attachments_or_context = bool(request.attachments or request.context_resources)
 
+        # Shared document-context resolution (Phase C): identity, authorization,
+        # page intent and per-resource diagnostics are computed ONCE before
+        # intent/tool routing so every execution path sees the same trusted
+        # context. Chunk text stays lazy — routes fetch evidence only when needed.
+        document_context: Optional[DocumentTurnContext] = None
+        if request.context_resources:
+            try:
+                document_context = DocumentTurnContext.resolve(
+                    request.user, request.context_resources, query
+                )
+            except Exception:
+                logger.exception("Spark document context resolution failed; continuing without it")
+                document_context = None
+        request.document_context = document_context
+
         # 1. Use exact deterministic routes for clear requests.
         tool_route = self.tool_router.route(
             query, user=request.user, user_context=request.user_context,
             local_time=request.local_time, timezone_name=request.timezone_name,
         )
+        # The bounded agent combines evidence before one streamed answer. Keep existing
+        # multimodal/study paths intact; ordinary text reaches model planning.
+        if (getattr(settings, 'SPARK_AGENT_ENABLED', True)
+            and not has_attachments_or_context and not request.study_mode
+            and not self.is_conversational_intent(query)
+            and (not tool_route or tool_route.tool_name != 'send_notification')):
+            from pwanimate.orchestrator.agent import StudyAgent
+            prepared = StudyAgent(self.gateway, self.tool_registry).run(request, self._request_metadata(request), on_progress)
+            if prepared:
+                response = self.finish_agent(request,prepared,t_start,on_progress,on_token)
+                return self._append_friend_post_updates(response, request.user, friend_post_updates)
         retrieval_sources = None
         # 2. Force web search for clear current-events requests and factual follow-ups.
         # This decision is deterministic so an LLM selector cannot silently skip it.
@@ -1068,6 +1051,37 @@ class PwanimateOrchestrator:
         )
         self._record_usage(request, response)
         return self._append_friend_post_updates(response, request.user, friend_post_updates)
+
+    def finish_agent(self, request, prepared, t_start, on_progress=None, on_token=None):
+        """Present a bounded run outcome, pausing before any unapproved social write."""
+        if prepared.get('run_id') or prepared.get('clarification'):
+            pending = prepared.get('pending_actions')
+            if pending is None and prepared.get('run_id'):
+                from pwanimate.models import SparkAgentRun
+                try:
+                    pending = SparkAgentRun.objects.filter(pk=prepared['run_id']).values_list('action_ids', flat=True).first() or []
+                except Exception:  # noqa: BLE001
+                    pending = []
+            has_actions = bool(pending)
+            response = OrchestrationResponse(
+                provider=prepared.get('provider',''),model=prepared.get('model',''),
+                answer=(prepared.get('clarification') if prepared.get('clarification')
+                        else 'Please review the actions below. I’ll continue after your decision.'),
+                metadata={'intent':'agent','agent_run_id':prepared.get('run_id'),
+                          'awaiting_input':True,
+                          'awaiting_approval':has_actions and bool(prepared.get('run_id')),
+                          'awaiting_clarification':bool(prepared.get('clarification'))})
+        else:
+            if on_progress:
+                on_progress('writing_answer')
+            response = self._run_tool(request, request.query,
+                ToolRoute(tool_name='study_agent',parameters={},confidence=1.0,matched_intent='multi_tool'),
+                t_start,on_progress=on_progress,on_token=on_token,prepared=prepared)
+        response.metadata['agent_trace'] = prepared['trace']
+        for field,value in prepared['tokens'].items():
+            setattr(response,field,(getattr(response,field) or 0)+value)
+        self._record_usage(request,response)
+        return response
 
     @staticmethod
     def _request_metadata(request) -> Dict[str, Any]:
@@ -1308,10 +1322,11 @@ class PwanimateOrchestrator:
         t_start: float,
         on_progress: Optional[Callable[[str], None]] = None,
         on_token: Optional[Callable[[str], None]] = None,
+        prepared=None,
     ) -> OrchestrationResponse:
         """Handle high-confidence deterministic domain tool execution."""
         t_tool = time.perf_counter()
-        tool_result = self.tool_registry.execute(
+        tool_result = prepared["result"] if prepared else self.tool_registry.execute(
             tool_route.tool_name,
             user=request.user,
             user_context=request.user_context,
@@ -1320,12 +1335,45 @@ class PwanimateOrchestrator:
         tool_time_ms = round((time.perf_counter() - t_tool) * 1000.0, 2)
 
         # Convert tool result to grounded ContextPackage
-        context_items = tool_result_to_context_items(tool_route.tool_name, tool_result)
+        context_items = prepared["items"] if prepared else tool_result_to_context_items(tool_route.tool_name, tool_result)
+
+        # Merge trusted document/page evidence resolved before routing so a
+        # deterministic tool turn never silently discards the selected document.
+        document_context = getattr(request, "document_context", None)
+        doc_items: List[ContextItem] = []
+        doc_page_chunks: List[Any] = []
+        if document_context is not None and document_context.has_documents:
+            try:
+                doc_page_chunks = document_context.collect_page_evidence(request.user, query)
+            except Exception:
+                logger.exception("Spark document page evidence failed on tool route")
+                doc_page_chunks = []
+            max_doc_items = int(getattr(settings, "PWANIMATE_TOOL_DOC_CONTEXT_MAX_ITEMS", 6) or 6)
+            max_doc_chars = int(getattr(settings, "PWANIMATE_EXPLICIT_SNIPPET_MAX_CHARS", 3000) or 3000)
+            for result in doc_page_chunks[:max_doc_items]:
+                doc_items.append(ContextItem(
+                    source=result.source,
+                    object_id=result.object_id,
+                    title=result.title,
+                    content=_truncate_context_text(result.snippet, max_doc_chars),
+                    citation=result.citation,
+                    url=result.url,
+                    relevance_score=result.score,
+                    metadata=result.metadata,
+                    explicitly_selected=True,
+                    authority_level=AuthorityLevel.EXPLICIT,
+                ))
+            if doc_items:
+                context_items = doc_items + list(context_items)
+
         context_pkg = build_tool_context_package(
             query,
             context_items,
             user_context=request.user_context,
         )
+        if document_context is not None:
+            context_pkg.metadata["document_context"] = document_context.to_metadata()["document_context"]
+        context_pkg.conversation_memory = list(request.conversation_memory)
         # Extract people data if people_discovery or user_profile tool ran
         people_results: List[Dict[str, Any]] = []
         if (
@@ -1386,7 +1434,9 @@ class PwanimateOrchestrator:
 
         messages = list(request.history) + [ChatMessage(role="user", content=query)]
 
-        source_warnings = self._collect_source_warnings(request)
+        source_warnings = self._collect_source_warnings(
+            request=request, document_context=document_context, page_chunks=doc_page_chunks,
+        )
         base_instruction = self._with_local_time(
             get_system_instruction("optional" if tool_route.tool_name == "web_search" else "required"),
             request,
@@ -1399,6 +1449,7 @@ class PwanimateOrchestrator:
             source_warnings=source_warnings,
         )
 
+        system_instruction += "\nTool outcomes are authoritative. Never claim an action succeeded if its result failed. A saved reminder is not a confirmed phone alert unless phone_scheduled is true. Ask for clarification for missing times."
         effective_max_tokens = self._resolve_effective_budget(request, "tool")
 
         llm_request = LLMRequest(
@@ -1423,6 +1474,8 @@ class PwanimateOrchestrator:
         elif tool_route.tool_name in {"content_search", "group_announcements"} and on_progress:
             on_progress("devouring_context" if tool_result.success and tool_result.data else "thinking")
 
+        if on_progress:
+            on_progress("writing_answer")
         t_gen = time.perf_counter()
         llm_response = None
         vision_text_fallback = False
@@ -1508,6 +1561,8 @@ class PwanimateOrchestrator:
             "study_mode": bool(request.study_mode),
             "pending_actions": pending_actions,
         }
+        if document_context is not None:
+            metadata["document_context"] = document_context.to_metadata()["document_context"]
         if source_warnings:
             metadata["warnings"] = source_warnings
 
@@ -1567,14 +1622,18 @@ class PwanimateOrchestrator:
             attachment_pages=attachment_pages,
         )
 
-        # 1. Resolve authorized context resources (active document / page filtering)
+        # 1. Resolve authorized context resources via the shared document
+        # context created before routing (identity + authorization already done;
+        # this adds lazy page evidence and post/profile resolution).
+        document_context = getattr(request, "document_context", None)
         try:
             filter_doc_ids, page_chunks, selected_post_results, selected_user_results = self._resolve_context_resources(
-                request.user, request.context_resources, query=query
+                request.user, request.context_resources, query=query,
+                document_context=document_context,
             )
         except TypeError:
             filter_doc_ids, page_chunks, selected_post_results, selected_user_results = self._resolve_context_resources(
-                request.user, request.context_resources
+                request.user, request.context_resources, query=query
             )
 
         # 2. Upstream Authorized Retrieval
@@ -1638,20 +1697,33 @@ class PwanimateOrchestrator:
                 and (metadata.get("document_id") or result.object_id) in selected_doc_id_set
             ):
                 explicit_retrieval_results.append(result)
+        # Bounded explicit context: configurable caps, chunk-level dedup,
+        # content-hash dedup, and boundary-aware truncation so pages are not
+        # sliced mid-equation. Page evidence arrives already priority-ordered
+        # from DocumentTurnContext.collect_page_evidence().
+        max_explicit_items = int(getattr(settings, "PWANIMATE_EXPLICIT_CONTEXT_MAX_ITEMS", 12) or 12)
+        max_snippet_chars = int(getattr(settings, "PWANIMATE_EXPLICIT_SNIPPET_MAX_CHARS", 3000) or 3000)
         explicit_items = []
-        seen_explicit_ids = set()
+        seen_explicit_keys = set()
+        seen_content_hashes = set()
         for result in explicit_retrieval_results:
-            explicit_key = (str(result.source), str(result.object_id))
-            if explicit_key in seen_explicit_ids:
+            result_meta = result.metadata if isinstance(result.metadata, dict) else {}
+            content_hash = str(result_meta.get("content_hash") or "")
+            if content_hash and content_hash in seen_content_hashes:
                 continue
-            seen_explicit_ids.add(explicit_key)
-            if len(explicit_items) >= 10:
+            explicit_key = (str(result.source), str(result.object_id))
+            if explicit_key in seen_explicit_keys:
+                continue
+            if len(explicit_items) >= max_explicit_items:
                 break
+            seen_explicit_keys.add(explicit_key)
+            if content_hash:
+                seen_content_hashes.add(content_hash)
             explicit_items.append(ContextItem(
                 source=result.source,
                 object_id=result.object_id,
                 title=result.title,
-                content=(result.snippet or "")[:3000],
+                content=_truncate_context_text(result.snippet, max_snippet_chars),
                 citation=result.citation,
                 url=result.url,
                 relevance_score=result.score,
@@ -1683,11 +1755,16 @@ class PwanimateOrchestrator:
         context_pkg.conversation_memory = list(request.conversation_memory)
         if attachment_context:
             context_pkg.attachment_context = attachment_context
+        if document_context is not None:
+            # Structured, privacy-safe resolution diagnostics for observability.
+            context_pkg.metadata["document_context"] = document_context.to_metadata()["document_context"]
 
         source_warnings = self._collect_source_warnings(
             request=request,
             effective_attachments=effective_attachments,
             attachment_context=attachment_context,
+            document_context=document_context,
+            page_chunks=page_chunks,
         )
         base_instruction = self._with_local_time(get_system_instruction(context_pkg.grounding_mode), request)
         context_pkg, system_instruction = self._apply_study_and_warning_context(
@@ -1731,6 +1808,8 @@ class PwanimateOrchestrator:
         if on_progress:
             on_progress("devouring_context" if attachment_context or context_pkg.total_items else "thinking")
 
+        if on_progress:
+            on_progress("writing_answer")
         t_gen = time.perf_counter()
         vision_text_fallback = False
         if is_multimodal_turn:
@@ -1837,6 +1916,8 @@ class PwanimateOrchestrator:
                 for result in retrieval_resp.results[:50]
             ],
         }
+        if document_context is not None:
+            metadata["document_context"] = document_context.to_metadata()["document_context"]
         if source_warnings:
             metadata["warnings"] = source_warnings
 
@@ -1900,8 +1981,10 @@ class PwanimateOrchestrator:
                 "created_at": str(created_val) if created_val else "",
                 "published_at": str(meta.get("published_at") or ""),
                 "page_number": meta.get("page_number"),
+                "page_end": meta.get("page_end"),
                 "document_id": meta.get("document_id"),
                 "document_share_id": meta.get("document_share_id") or "",
+                "document_version_id": meta.get("document_version_id"),
                 "file_type": meta.get("file_type") or file_ext or "",
                 "post_id": meta.get("post_id") or (item.object_id if src_val == "post" else ""),
                 "snippet": (

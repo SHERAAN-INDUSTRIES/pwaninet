@@ -122,6 +122,7 @@ class Message(models.Model):
         ('text', 'Text'),
         ('media_group', 'Media Group'),
         ('system', 'System'),
+        ('voice_call', 'Voice call'),
         ('audio', 'Audio'),
     ]
     

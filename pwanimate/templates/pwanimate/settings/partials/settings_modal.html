@@ -12,7 +12,7 @@
             <!-- Modal Header -->
             <div class="modal-header border-bottom px-4 py-3 d-flex align-items-center justify-content-between" style="border-color: var(--pwanimate-border) !important;">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-gear-fill text-primary fs-5"></i>
+                    <i data-lucide="settings" class="text-primary fs-5"></i>
                     <h5 class="modal-title fw-bold mb-0" id="pwanimateSettingsModalTitle">
                         {% trans "Settings" %}
                     </h5>
@@ -35,17 +35,47 @@
                                     id="modal-tab-personalization"
                                     data-tab="personalization"
                                     onclick="window.switchSparkSettingsTab('modal', 'personalization')">
-                                <i class="bi bi-sliders"></i>
+                                <i data-lucide="sliders-horizontal"></i>
                                 <span class="fw-medium">{% trans "Personalization" %}</span>
                             </button>
                         </li>
                         <li class="nav-item">
                             <button type="button"
+                                    class="nav-link w-100 text-start {% if active_tab == 'memory' %}active{% endif %} d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                                    id="modal-tab-memory"
+                                    data-tab="memory"
+                                    onclick="window.switchSparkSettingsTab('modal', 'memory')">
+                                <i data-lucide="brain"></i>
+                                <span class="fw-medium">{% trans "Memory" %}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button"
+                                    class="nav-link w-100 text-start {% if active_tab == 'plans' %}active{% endif %} d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                                    id="modal-tab-plans"
+                                    data-tab="plans"
+                                    onclick="window.switchSparkSettingsTab('modal', 'plans')">
+                                <i data-lucide="calendar-clock"></i>
+                                <span class="fw-medium">{% trans "Plans" %}</span>
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button type="button"
+                                    class="nav-link w-100 text-start d-flex align-items-center gap-2 px-3 py-2 rounded-3"
+                                    id="modal-tab-offline"
+                                    data-tab="offline"
+                                    onclick="window.openSparkOfflineSettings('modal')">
+                                <i data-lucide="book-down"></i>
+                                <span class="fw-medium">{% trans "Offline Documents" %}</span>
+                            </button>
+                        </li>
+            <li class="nav-item">
+                            <button type="button"
                                     class="nav-link w-100 text-start {% if active_tab == 'usage' %}active{% endif %} d-flex align-items-center gap-2 px-3 py-2 rounded-3"
                                     id="modal-tab-usage"
                                     data-tab="usage"
                                     onclick="window.switchSparkSettingsTab('modal', 'usage')">
-                                <i class="bi bi-speedometer2"></i>
+                                <i data-lucide="gauge"></i>
                                 <span class="fw-medium">{% trans "Usage" %}</span>
                             </button>
                         </li>
@@ -55,7 +85,7 @@
                                     id="modal-tab-about"
                                     data-tab="about"
                                     onclick="window.switchSparkSettingsTab('modal', 'about')">
-                                <i class="bi bi-info-circle"></i>
+                                <i data-lucide="info"></i>
                                 <span class="fw-medium">{% trans "About" %}</span>
                             </button>
                         </li>
@@ -67,7 +97,13 @@
                     <div id="pwanimate-modal-pane-personalization" class="pwanimate-settings-pane {% if active_tab == 'personalization' or not active_tab %}active{% else %}d-none{% endif %}">
                         {% include 'pwanimate/settings/partials/personalization_content.html' %}
                     </div>
-                    <div id="pwanimate-modal-pane-usage" class="pwanimate-settings-pane {% if active_tab == 'usage' %}active{% else %}d-none{% endif %}">
+                    <div id="pwanimate-modal-pane-memory" class="pwanimate-settings-pane {% if active_tab == 'memory' %}active{% else %}d-none{% endif %}">
+                        {% include 'pwanimate/settings/partials/study_content.html' with study_scope='modal' study_section='memory' %}
+                    </div>
+                    <div id="pwanimate-modal-pane-plans" class="pwanimate-settings-pane {% if active_tab == 'plans' %}active{% else %}d-none{% endif %}">
+                        {% include 'pwanimate/settings/partials/study_content.html' with study_scope='modal' study_section='plans' %}
+                    </div>
+            <div id="pwanimate-modal-pane-usage" class="pwanimate-settings-pane {% if active_tab == 'usage' %}active{% else %}d-none{% endif %}">
                         {% include 'pwanimate/settings/partials/usage_content.html' %}
                     </div>
                     <div id="pwanimate-modal-pane-about" class="pwanimate-settings-pane {% if active_tab == 'about' %}active{% else %}d-none{% endif %}">

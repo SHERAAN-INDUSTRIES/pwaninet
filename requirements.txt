@@ -141,3 +141,6 @@ boto3
 pgvector
 faster-whisper
 qrcode
+
+# Server-side voice token and room API adapter
+livekit-api>=1.2.2,<2

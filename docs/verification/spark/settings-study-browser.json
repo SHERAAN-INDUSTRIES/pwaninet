@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "320px light: existing settings shell, scrollable tabs, state preserved, no page overflow",
+    "390px dark: existing settings shell, scrollable tabs, state preserved, no page overflow",
+    "1280px light: existing settings shell, scrollable tabs, state preserved, no page overflow",
+    "Create reminder, toggle memory, and forget memory submit successfully through the settings pane",
+    "Actual desktop modal: pane initializes on open, switches correctly, and keeps scoped controls"
+  ],
+  "page_errors": [],
+  "api_data": "Synthetic empty account; real templates and scripts"
+}

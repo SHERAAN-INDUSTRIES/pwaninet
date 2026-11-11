@@ -13,7 +13,7 @@
 {% url 'documents:academic:dashboard' as dash_url %}
 <div class="vdw-section on" data-vdw-section="timetable"
      data-vdw-refresh-url="{{ dash_url }}?section=timetable{% if selected_year_num %}&year={{ selected_year_num }}{% endif %}{% if selected_sem_num %}&semester={{ selected_sem_num }}{% endif %}"
-     {% if active_timetable and active_timetable.status == 'PROCESSING' %}hx-get="{% url 'documents:academic:timetable_status' active_timetable.id %}" hx-trigger="load, every 4s" hx-swap="outerHTML"{% endif %}>
+     {% if active_timetable and active_timetable.status == 'PROCESSING' %}hx-get="{% url 'documents:academic:timetable_status' active_timetable.id %}" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
 
   <div class="vdw-page-head">
     <div>
@@ -36,11 +36,11 @@
             <span class="visually-hidden">Loading…</span>
           </div>
         </div>
-        <h3>Spark AI is extracting your timetable…</h3>
+        <h3>Spark AI is analyzing your timetable…</h3>
         <p>
           Your upload (revision {% if active_timetable.revision_number %}#{{ active_timetable.revision_number }}{% endif %}) is being
-          processed — sessions, venues and free study blocks will appear here automatically.
-          This panel refreshes itself every few seconds.
+          processed in the background — sessions, venues and free study blocks will appear here automatically.
+          You can keep browsing; we'll notify you once it's ready. This panel refreshes itself every few seconds.
         </p>
       </div>
     </div>
@@ -79,12 +79,22 @@
                 <option value="Friday">Friday</option><option value="Saturday">Saturday</option>
               </select>
             </div>
-            <div><label for="slotStartTime">Start</label><input type="time" id="slotStartTime" value="08:00" required></div>
-            <div><label for="slotEndTime">End</label><input type="time" id="slotEndTime" value="10:00" required></div>
-            <div><label for="slotUnitCode">Unit code</label><input type="text" id="slotUnitCode" placeholder="CSC 221" required></div>
-            <div><label for="slotUnitName">Unit name</label><input type="text" id="slotUnitName" placeholder="Data Structures"></div>
-            <div><label for="slotVenue">Venue</label><input type="text" id="slotVenue" placeholder="Lab B"></div>
-            <div style="display:flex;gap:6px;">
+            <div><label for="slotStartTime">Start</label><input type="time" id="slotStartTime" value="07:00" required></div>
+            <div><label for="slotEndTime">End</label><input type="time" id="slotEndTime" value="09:00" required></div>
+            <div><label for="slotUnitCode">Unit code</label><input type="text" id="slotUnitCode" placeholder="SMA B261" required></div>
+            <div><label for="slotUnitName">Unit name</label><input type="text" id="slotUnitName" placeholder="Probability and Statistics I"></div>
+            <div><label for="slotLecturer">Lecturer</label><input type="text" id="slotLecturer" placeholder="Mr. Joseph Mutua"></div>
+            <div><label for="slotVenue">Venue</label><input type="text" id="slotVenue" placeholder="LTN"></div>
+            <div>
+              <label for="slotSessionType">Type</label>
+              <select id="slotSessionType">
+                <option value="Lecture">Lecture</option>
+                <option value="Practical">Practical / Lab</option>
+                <option value="Tutorial">Tutorial</option>
+                <option value="Seminar">Seminar</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px;align-items:end;">
               <button type="submit" class="vdw-btn vdw-btn-primary" style="flex:1;"><i class="bi bi-check-lg"></i> Save</button>
               <button type="button" class="vdw-btn" onclick="toggleAddSlotDrawer()"><i class="bi bi-x-lg"></i></button>
             </div>
@@ -101,52 +111,96 @@
         </div>
       </div>
 
-      {# ── Desktop: absolute-positioned week grid ── #}
+      {# ── Horizontal Timetable: Days Vertical (Rows), Time Horizontal (Columns) ── #}
       <div class="vdw-grid-scroll">
-        <div class="vdw-week-grid">
-          <div class="vdw-grid-headrow">
-            <div class="vdw-gutter-head"></div>
-            {% for col in week_grid.columns %}
-              <div class="vdw-day-head{% if col.is_today %} today{% endif %}">
-                {{ col.short }}{% if col.is_today %}<span class="date-n">today</span>{% endif %}
-              </div>
-            {% endfor %}
-          </div>
-          <div class="vdw-grid-body" style="height: {{ week_grid.canvas_px }}px;">
-            <div class="vdw-gutter">
-              {% for g in week_grid.gutter_labels %}
-                <span class="vdw-time-label" style="top: {{ g.top }}px;">{{ g.time }}</span>
+        <div class="vdw-h-timetable" style="width: 100%; min-width: 860px;">
+
+          {# ── Time Header Row ── #}
+          <div class="vdw-h-headrow">
+            <div class="vdw-h-corner">DAY / TIME</div>
+            <div class="vdw-h-time-track">
+              {% for h in week_grid.time_headers %}
+                <div class="vdw-h-time-col" style="left: {{ h.left_pct }}%;">
+                  <span>{{ h.time }}</span>
+                </div>
               {% endfor %}
             </div>
-            {% for col in week_grid.columns %}
-              <div class="vdw-day-col{% if col.is_today %} today{% endif %}">
-                {% if col.count == 0 %}<span class="vdw-no-sessions">—</span>{% endif %}
-                {% for slot in col.slots %}
-                  <div class="vdw-slot{% if slot.compact %} compact{% endif %}"
-                       style="top: {{ slot.top_px }}px; height: {{ slot.height_px }}px; --ubg: {{ slot.tint.ubg }}; --uac: {{ slot.tint.uac }}; --ubg-dark: {{ slot.tint.ubg_dark }}; --uac-dark: {{ slot.tint.uac_dark }};"
-                       title="{{ slot.unit_code }} · {{ slot.start_time }}–{{ slot.end_time }}{% if slot.unit_name %} · {{ slot.unit_name }}{% endif %}{% if slot.venue %} · {{ slot.venue }}{% endif %}">
-                    <div class="vdw-slot-code">
-                      <span>{{ slot.unit_code }}</span>
-                      <span class="vdw-slot-type">{{ slot.type_label }}</span>
-                    </div>
-                    {% if slot.unit_name %}<div class="vdw-slot-name">{{ slot.unit_name }}</div>{% endif %}
-                    {% if slot.venue %}<div class="vdw-slot-venue"><i class="bi bi-geo-alt"></i> {{ slot.venue }}</div>{% endif %}
-                    <button type="button" class="vdw-slot-delete" title="Delete slot"
-                            onclick="deleteTimetableSlot('{{ active_timetable.id }}', '{{ slot.id }}')">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </div>
-                {% endfor %}
+          </div>
+
+          {# ── Vertically stacked Day Rows ── #}
+          <div class="vdw-h-body">
+            {% for row in week_grid.day_rows %}
+              <div class="vdw-h-dayrow{% if row.is_today %} today{% endif %}">
+                {# Left sticky day label #}
+                <div class="vdw-h-daylabel{% if row.is_today %} today{% endif %}">
+                  <div class="vdw-h-dayname">{{ row.name }}</div>
+                  <div class="vdw-h-dayshort">{{ row.short }}</div>
+                  {% if row.is_today %}<span class="vdw-h-today-pill">Today</span>{% endif %}
+                  <span class="vdw-h-session-badge">{{ row.count }} session{{ row.count|pluralize }}</span>
+                </div>
+
+                {# Right horizontal timeline track #}
+                <div class="vdw-h-slots-track">
+                  {# Hour stripe gridlines #}
+                  {% for h in week_grid.time_headers %}
+                    <div class="vdw-h-hour-line" style="left: {{ h.left_pct }}%;"></div>
+                  {% endfor %}
+
+                  {% if row.count == 0 %}
+                    <div class="vdw-h-empty-track">No classes scheduled</div>
+                  {% else %}
+                    {% for slot in row.slots %}
+                      <div class="vdw-h-slot{% if slot.compact %} compact{% endif %}"
+                           style="left: calc({{ slot.left_pct }}% + 4px); width: calc({{ slot.width_pct }}% - 8px); --ubg: {{ slot.tint.ubg }}; --uac: {{ slot.tint.uac }}; --ubg-dark: {{ slot.tint.ubg_dark }}; --uac-dark: {{ slot.tint.uac_dark }};"
+                           title="{{ slot.unit_code }} · {{ slot.start_time }}–{{ slot.end_time }}{% if slot.unit_name %} · {{ slot.unit_name }}{% endif %}{% if slot.lecturer %} · {{ slot.lecturer }}{% endif %}{% if slot.venue %} · {{ slot.venue }}{% endif %}">
+
+                        {# Header row: Unit code, Session type, Time #}
+                        <div class="vdw-h-slot-head">
+                          <span class="vdw-h-slot-code">{{ slot.unit_code }}</span>
+                          <span class="vdw-h-slot-type">{{ slot.type_label }}</span>
+                          <span class="vdw-h-slot-time">{{ slot.start_time }}–{{ slot.end_time }}</span>
+                        </div>
+
+                        {# Unit title if available #}
+                        {% if slot.unit_name %}
+                          <div class="vdw-h-slot-name">{{ slot.unit_name }}</div>
+                        {% endif %}
+
+                        {# Meta row: Lecturer & Venue #}
+                        <div class="vdw-h-slot-meta">
+                          {% if slot.lecturer %}
+                            <span class="vdw-h-slot-lecturer" title="Lecturer: {{ slot.lecturer }}">
+                              <i class="bi bi-person-fill"></i> {{ slot.lecturer }}
+                            </span>
+                          {% endif %}
+                          {% if slot.venue %}
+                            <span class="vdw-h-slot-venue" title="Venue: {{ slot.venue }}">
+                              <i class="bi bi-geo-alt-fill"></i> {{ slot.venue }}
+                            </span>
+                          {% endif %}
+                        </div>
+
+                        {# Delete slot action #}
+                        <button type="button" class="vdw-slot-delete" title="Delete slot"
+                                onclick="deleteTimetableSlot('{{ active_timetable.id }}', '{{ slot.id }}')">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </div>
+                    {% endfor %}
+                  {% endif %}
+                </div>
               </div>
             {% endfor %}
-            {% if week_grid.now_px != None %}
-              <div class="vdw-now-line" style="top: {{ week_grid.now_px }}px;"><span class="vdw-now-dot"></span></div>
+
+            {# Now line indicator #}
+            {% if week_grid.now_left_px != None %}
+              <div class="vdw-h-now-line" style="left: calc(130px + {{ week_grid.now_left_px }}px);">
+                <span class="vdw-h-now-dot"></span>
+              </div>
             {% endif %}
           </div>
         </div>
       </div>
-
-      {# Mobile: the grid is fitted to viewport width via CSS; tapping opens the fullscreen overlay (academic_workspace.js) #}
 
       <div class="vdw-card-foot">
         <div class="vdw-legend">
@@ -245,14 +299,16 @@
     var endTime = document.getElementById('slotEndTime').value;
     var unitCode = document.getElementById('slotUnitCode').value;
     var unitName = document.getElementById('slotUnitName').value;
+    var lecturer = document.getElementById('slotLecturer') ? document.getElementById('slotLecturer').value : '';
     var venue = document.getElementById('slotVenue').value;
+    var sessionType = document.getElementById('slotSessionType') ? document.getElementById('slotSessionType').value : 'Lecture';
 
     var match = document.cookie.match(/csrftoken=([^;]+)/);
     fetch('/documents/academic/timetable/' + timetableId + '/slot/', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': match ? match[1] : '', 'X-Requested-With': 'XMLHttpRequest'},
       body: JSON.stringify({action: 'add', day: day, start_time: startTime, end_time: endTime,
-                            unit_code: unitCode, unit_name: unitName, venue: venue, session_type: 'Lecture'})
+                            unit_code: unitCode, unit_name: unitName, lecturer: lecturer, venue: venue, session_type: sessionType})
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {

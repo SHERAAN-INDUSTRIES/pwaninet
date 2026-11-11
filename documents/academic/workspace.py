@@ -24,10 +24,10 @@ import hashlib
 from datetime import date, datetime, time
 
 # ── Geometry constants ────────────────────────────────────────────────────────
-PX_PER_HOUR = 56                     # 28px per half-hour gridline (fills desktop space)
-DEFAULT_START_MIN = 7 * 60           # 07:00
-DEFAULT_END_MIN = 18 * 60            # 18:00
-MIN_GRID_HEIGHT_CH = PX_PER_HOUR * 11
+PX_PER_HOUR = 135                    # Horizontal width allocated per hour in timeline track
+DEFAULT_START_MIN = 7 * 60           # 07:00 fallback
+DEFAULT_END_MIN = 19 * 60            # 19:00 fallback
+MIN_GRID_HEIGHT_CH = 56 * 11
 
 DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DAY_SHORT = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
@@ -141,10 +141,10 @@ def _shape_slots(raw_slots):
 # ── The grid ─────────────────────────────────────────────────────────────────
 def build_week_grid(schedule_data, is_current_context=True, today=None, now=None):
     """
-    Build the full render context for the week grid.
+    Build the full render context for the week grid with horizontal time and vertical days.
 
-    Returns a dict: axis_px metadata + columns + positioned slots +
-    per-day mobile ordering + free-block totals + today/now-line info.
+    Returns a dict: dynamic adaptive axis bounds + horizontal time headers +
+    vertically stacked day rows + positioned slot geometry + free-block totals + now indicator.
     Safe on empty/None schedule_data.
     """
     data = schedule_data if isinstance(schedule_data, dict) else {}
@@ -154,29 +154,48 @@ def build_week_grid(schedule_data, is_current_context=True, today=None, now=None
     now = now or datetime.now().time()
     today_index = today.weekday() + 1                     # Mon=1 … Sun=7
 
-    # Axis bounds: default window, expanded when data demands it.
-    axis_start = min([DEFAULT_START_MIN] + [s["start_min"] for s in slots])
-    axis_end = max([DEFAULT_END_MIN] + [s["end_min"] for s in slots])
-    axis_start = max(0, (axis_start // 60) * 60)          # snap to the hour
-    axis_end = min(24 * 60, -((-axis_end) // 60) * 60)
-    canvas_px = int((axis_end - axis_start) / 60 * PX_PER_HOUR)
+    # Adaptive smart axis bounds: dynamically snap to the earliest & latest hours in the schedule
+    if slots:
+        min_start = min(s["start_min"] for s in slots)
+        max_end = max(s["end_min"] for s in slots)
+        axis_start = max(0, (min_start // 60) * 60)          # snap down to the hour
+        axis_end = min(24 * 60, -((-max_end) // 60) * 60)     # snap up to the hour
+        if axis_end - axis_start < 240:                        # minimum 4-hour window
+            axis_end = min(24 * 60, axis_start + 240)
+    else:
+        axis_start = DEFAULT_START_MIN
+        axis_end = DEFAULT_END_MIN
+
+    total_span_min = max(axis_end - axis_start, 60)
+    track_width_px = int((total_span_min / 60) * PX_PER_HOUR)
+    canvas_px = int((total_span_min / 60) * 56)
 
     def pos(slot):
-        top = (slot["start_min"] - axis_start) / 60 * PX_PER_HOUR
-        height = (slot["end_min"] - slot["start_min"]) / 60 * PX_PER_HOUR
+        duration_min = slot["end_min"] - slot["start_min"]
+        left_px = (slot["start_min"] - axis_start) / 60 * PX_PER_HOUR
+        width_px = duration_min / 60 * PX_PER_HOUR
+        
+        # Legacy vertical coords preserved
+        top_px = (slot["start_min"] - axis_start) / 60 * 56
+        height_px = duration_min / 60 * 56
+
         slot = dict(slot)
-        slot["top_px"] = round(top, 1)
-        slot["height_px"] = round(max(height - 2.0, 22.0), 1)
-        slot["compact"] = height < 27
+        slot["left_px"] = round(left_px, 1)
+        slot["width_px"] = round(max(width_px - 6.0, 75.0), 1)
+        slot["left_pct"] = round(((slot["start_min"] - axis_start) / total_span_min) * 100, 2)
+        slot["width_pct"] = round((duration_min / total_span_min) * 100, 2)
+        slot["top_px"] = round(top_px, 1)
+        slot["height_px"] = round(max(height_px - 2.0, 22.0), 1)
+        slot["compact"] = width_px < 110
         return slot
 
-    # Columns: Mon–Sat always, Sunday only when present.
+    # Vertically stacked days: Mon–Sat always, Sunday only when present.
     has_sunday = any(s["day_index"] == 7 for s in slots)
     max_index = 7 if has_sunday else 6
-    columns = []
+    day_rows = []
     for index in range(1, max_index + 1):
         day_slots = [pos(s) for s in slots if s["day_index"] == index]
-        columns.append({
+        day_rows.append({
             "index": index,
             "short": DAY_SHORT[index - 1],
             "name": DAY_NAMES[index - 1],
@@ -185,13 +204,23 @@ def build_week_grid(schedule_data, is_current_context=True, today=None, now=None
             "count": len(day_slots),
         })
 
-    # Now line: only when the student is viewing their own live cohort AND
-    # today is one of the rendered columns (Sunday column appears only on data).
+    # Horizontal time headers along the top track
+    time_headers = []
+    for m in range(axis_start, axis_end + 1, 60):
+        time_headers.append({
+            "time": _fmt_minutes(m),
+            "left_px": round((m - axis_start) / 60 * PX_PER_HOUR, 1),
+            "left_pct": round(((m - axis_start) / total_span_min) * 100, 2),
+        })
+
+    # Now indicator
+    now_left_px = None
     now_px = None
     if is_current_context and today_index <= max_index:
         now_min = now.hour * 60 + now.minute
         if axis_start <= now_min <= axis_end:
-            now_px = round((now_min - axis_start) / 60 * PX_PER_HOUR, 1)
+            now_left_px = round((now_min - axis_start) / 60 * PX_PER_HOUR, 1)
+            now_px = round((now_min - axis_start) / 60 * 56, 1)
 
     free_total = 0.0
     for block in free_raw:
@@ -206,7 +235,7 @@ def build_week_grid(schedule_data, is_current_context=True, today=None, now=None
 
     contact_total = sum((s["end_min"] - s["start_min"]) / 60 for s in slots)
 
-    # Legend: one entry per distinct unit, week-textual order of first appearance.
+    # Legend: one entry per distinct unit
     legend, seen_codes = [], set()
     for slot in slots:
         code = slot["unit_code"]
@@ -222,13 +251,18 @@ def build_week_grid(schedule_data, is_current_context=True, today=None, now=None
     return {
         "axis_start_min": axis_start,
         "axis_end_min": axis_end,
+        "total_span_min": total_span_min,
         "canvas_px": canvas_px,
+        "track_width_px": track_width_px,
         "px_per_hour": PX_PER_HOUR,
+        "time_headers": time_headers,
         "gutter_labels": [
-            {"time": _fmt_minutes(axis_start + i * 60), "top": i * PX_PER_HOUR}
+            {"time": _fmt_minutes(axis_start + i * 60), "top": i * 56}
             for i in range((axis_end - axis_start) // 60 + 1)
         ],
-        "columns": columns,
+        "day_rows": day_rows,
+        "columns": day_rows,      # backward compatibility for callers and tests expecting columns
+        "now_left_px": now_left_px,
         "now_px": now_px,
         "slot_count": len(slots),
         "legend": legend,

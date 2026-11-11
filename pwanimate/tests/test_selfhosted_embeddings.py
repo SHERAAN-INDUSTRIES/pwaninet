@@ -243,3 +243,26 @@ class SelfHostedFactoryTests(TestCase):
     def test_factory_honors_settings(self):
         provider = get_embedding_provider()
         self.assertIsInstance(provider, SelfHostedEmbeddingProvider)
+
+class SelfHostedIntegrityTests(TestCase):
+    @patch('requests.post')
+    def test_rejects_duplicate_indexes(self, post):
+        response = ok_response([make_vector(), make_vector()])
+        response.json.return_value['data'][1]['index'] = 0
+        post.return_value = response
+        with self.assertRaises(EmbeddingMalformedResponseError):
+            SelfHostedEmbeddingProvider(url=TEST_URL).embed_texts(['first', 'second'])
+
+    @patch('requests.post')
+    def test_rejects_wrong_model(self, post):
+        post.return_value = ok_response([make_vector()], model='wrong-vector-space')
+        with self.assertRaises(EmbeddingMalformedResponseError):
+            SelfHostedEmbeddingProvider(url=TEST_URL).embed_query('question')
+
+    @patch('requests.post')
+    def test_rejects_nonfinite_and_zero_vectors(self, post):
+        for vector in [make_vector(fill=float('nan')), make_vector(fill=float('inf')), make_vector(fill=0), make_vector(fill='bad')]:
+            with self.subTest(value=vector[0]):
+                post.return_value = ok_response([vector])
+                with self.assertRaises(EmbeddingMalformedResponseError):
+                    SelfHostedEmbeddingProvider(url=TEST_URL).embed_query('question')

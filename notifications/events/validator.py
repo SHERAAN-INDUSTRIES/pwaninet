@@ -70,6 +70,7 @@ class EventValidator:
         'documents.document.published': ['published'],
         'documents.document.bookmarked': ['bookmarked'],
         'documents.document.rated': ['rated'],
+        'documents.timetable.ready': ['completed'],
         
         # Courses events
         'courses.course.created': ['created'],

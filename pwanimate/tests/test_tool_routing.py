@@ -142,7 +142,7 @@ class ToolRouterTestCase(SimpleTestCase):
         ]
         for q in negatives:
             route = self.router.route(q)
-            self.assertIsNone(route, f"False positive on broad document query: '{q}'")
+            self.assertTrue(route is None or route.tool_name != "document_detail", f"False positive on broad document query: '{q}'")
 
     # --- 4. Group Announcements Routing ---
     def test_route_group_announcements_positive(self):

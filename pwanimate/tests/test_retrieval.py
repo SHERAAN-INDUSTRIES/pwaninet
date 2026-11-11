@@ -495,6 +495,7 @@ class RetrievalTestCase(TestCase):
         )
         req = RetrievalRequest(
             query="Processes and threads",
+            filters={'document_id': self.doc_public.pk},
             user=self.student_cs,
             sources=[SourceType.DOCUMENT],
             mode=RetrievalMode.SEMANTIC,

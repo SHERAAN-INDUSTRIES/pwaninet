@@ -44,6 +44,33 @@ def _load_engines() -> List[Dict[str, Any]]:
         settings, "PWANIMATE_CLOUDFLARE_VISION_BACKUP_MODEL", "@cf/meta/llama-4-scout-17b-16e-instruct"
     )
 
+    # Shared deep ladder appended after each chat engine's tuned head.
+    # Every rung is a verified free route (OpenRouter :free catalog, Groq chat
+    # models, Gemini flash tier) — interleaved across providers so one
+    # provider's rate limit never drains the engine. Ends in mock:unavailable
+    # (friendly error instead of a raw 502); status rollups ignore that rung.
+    _SHARED_CHAT_TAIL = [
+        {"provider": "gemini", "model": "gemini-3.7-flash"},
+        {"provider": "groq", "model": "qwen/qwen3.8-27b"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
+        {"provider": "gemini", "model": "gemini-3.6-flash"},
+        {"provider": "groq", "model": "openai/gpt-oss-20b"},
+        {"provider": "openrouter", "model": "google/gemma-4-31b-it:free"},
+        {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+        {"provider": "openrouter", "model": "xingchen-agi/xing4.0-29b-a4b:free"},
+        {"provider": "gemini", "model": "gemini-flash-lite-latest"},
+        {"provider": "openrouter", "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"},
+        {"provider": "gemini", "model": "gemini-flash-latest"},
+        {"provider": "openrouter", "model": "liquid/lfm-3-1.7b:free"},
+        {"provider": "openrouter", "model": "google/gemma-4-26b-a4b-it:free"},
+        {"provider": "openrouter", "model": "liquid/lfm-2.5-2.6b:free"},
+        {"provider": "gemini", "model": "gemini-pro-latest"},
+        {"provider": "openrouter", "model": "thinkingmachines/inkling-2-small:free"},
+        {"provider": "openrouter", "model": "dots-studio/dots-3-note-preview:free"},
+        {"provider": "openrouter", "model": "recursive/flint-v1.0:free"},
+        {"provider": "mock", "model": "unavailable"},
+    ]
+
     engines: List[Dict[str, Any]] = [
         {
             "slug": "speed",
@@ -58,17 +85,8 @@ def _load_engines() -> List[Dict[str, Any]]:
                 {"provider": "openrouter", "model": openrouter_model},
                 # Resilience ladder: known-good IDs from the global Auto chain,
                 # interleaved across providers so one provider outage never
-                # drains the engine. Ends in mock:unavailable (friendly error
-                # instead of a raw 502); the status rollup ignores that rung.
-                {"provider": "gemini", "model": "gemini-3.6-flash"},
-                {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
-                {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-                {"provider": "groq", "model": "openai/gpt-oss-20b"},
-                {"provider": "openrouter", "model": "liquid/lfm-2.5-2.6b:free"},
-                {"provider": "gemini", "model": "gemini-flash-lite-latest"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free"},
-                {"provider": "mock", "model": "unavailable"},
+                # drains the engine.
+                *_SHARED_CHAT_TAIL,
             ],
         },
         {
@@ -83,15 +101,9 @@ def _load_engines() -> List[Dict[str, Any]]:
                 {"provider": "gemini", "model": gemini_model},
                 {"provider": "openrouter", "model": openrouter_model},
                 # Code-quality ladder: capable coders first (Qwen, gpt-oss-20b);
-                # tiny models only as true last resorts — liquid-2.6B is
-                # deliberately absent from Coda.
-                {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-                {"provider": "gemini", "model": "gemini-3.6-flash"},
-                {"provider": "groq", "model": "openai/gpt-oss-20b"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
-                {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free"},
-                {"provider": "mock", "model": "unavailable"},
+                # tiny models only as true last resorts — liquid-* rungs are
+                # filtered out of the shared tail for Coda.
+                *[c for c in _SHARED_CHAT_TAIL if 'liquid/' not in c.get('model', '')],
             ],
         },
         {
@@ -106,15 +118,7 @@ def _load_engines() -> List[Dict[str, Any]]:
                 {"provider": "openrouter", "model": openrouter_model},
                 {"provider": "groq", "model": groq_model},
                 # Long-context quality first; lite/tiny models only late.
-                {"provider": "gemini", "model": "gemini-3.6-flash"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
-                {"provider": "gemini", "model": "gemini-flash-latest"},
-                {"provider": "groq", "model": "qwen/qwen3.8-27b"},
-                {"provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free"},
-                {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-                {"provider": "groq", "model": "openai/gpt-oss-20b"},
-                {"provider": "openrouter", "model": "liquid/lfm-2.5-2.6b:free"},
-                {"provider": "mock", "model": "unavailable"},
+                *_SHARED_CHAT_TAIL,
             ],
         },
         {

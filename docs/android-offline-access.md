@@ -1,5 +1,7 @@
 # Vasto Android offline access — implementation and verification
 
+The current snapshot-preserving native storage update is documented in [native-offline-snapshots.md](native-offline-snapshots.md).
+
 Work performed in the Django monolith `/home/zayne/projects/pwaninet`, including its Pwanimate module. Vasto Workspaces and the separate frontend/backend projects were not changed. Existing unrelated working-tree edits were preserved.
 
 ## Diagnosis and release trace

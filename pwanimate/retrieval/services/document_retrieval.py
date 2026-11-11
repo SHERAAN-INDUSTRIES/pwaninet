@@ -43,7 +43,8 @@ class DocumentSemanticRetrievalService:
             self._provider = get_embedding_provider()
         return self._provider
 
-    def build_authorized_chunk_queryset(self, user: Optional[Any] = None, filters: Optional[dict] = None):
+    def build_authorized_chunk_queryset(self, user: Optional[Any] = None, filters: Optional[dict] = None,
+                                        require_active: bool = True):
         """
         Build pre-retrieval chunk queryset enforcing strict authorization and availability
         invariants WITHOUT requiring vector embeddings to be completed.
@@ -51,12 +52,26 @@ class DocumentSemanticRetrievalService:
         Used directly by deterministic SQL lookups (e.g., `get_page_chunks` and
         `get_document_overview_chunks`) and extended by `build_candidate_queryset`
         for vector similarity search.
+
+        `require_active=False` is reserved for deterministic text lookups (exact
+        page retrieval): extracted chunk text is usable evidence while its
+        embedding is pending, processing or failed. Authorization and document
+        availability rules are unchanged. Chunks deactivated AFTER embedding
+        completion (superseded versions, manual deactivation — is_active=False
+        with embedding_status='completed') remain excluded.
         """
-        qs = DocumentChunk.objects.filter(
-            is_active=True,
+        chunk_qs = DocumentChunk.objects.filter(
             document__status='ready',
             document__is_available=True,
         )
+        if require_active:
+            chunk_qs = chunk_qs.filter(is_active=True)
+        else:
+            chunk_qs = chunk_qs.filter(
+                Q(is_active=True)
+                | Q(embedding_status__in=('pending', 'processing', 'failed'))
+            )
+        qs = chunk_qs
 
         # Authorization filter
         if user and getattr(user, 'is_authenticated', False):
@@ -119,11 +134,14 @@ class DocumentSemanticRetrievalService:
                 )
 
             if filters.get('academic_unit'):
-                unit = filters['academic_unit']
-                qs = qs.filter(
-                    Q(document__academic_units__academic_unit__code=unit) |
-                    Q(document__academic_units__academic_unit__id=unit)
-                )
+                unit = str(filters['academic_unit']).strip()
+                unit_obj = self._resolve_academic_unit(unit)
+                if unit_obj is not None:
+                    qs = qs.filter(document__academic_units__academic_unit_id=unit_obj.id)
+                else:
+                    # Unresolvable code: match nothing rather than leak
+                    # unscoped results under a unit-scoped query.
+                    qs = qs.none()
 
             if filters.get('academic_units'):
                 units = filters['academic_units']
@@ -143,6 +161,21 @@ class DocumentSemanticRetrievalService:
 
         return qs
 
+    @staticmethod
+    def _resolve_academic_unit(raw):
+        """Resolve an AcademicUnit from a code (canonical or compact) or numeric id."""
+        from documents.models import AcademicUnit
+        raw = str(raw or '').strip()
+        if not raw:
+            return None
+        if raw.isdigit():
+            return AcademicUnit.objects.filter(pk=int(raw)).first()
+        canonical = AcademicUnit.format_canonical_code(raw)
+        return (
+            AcademicUnit.objects.filter(code__iexact=canonical).first()
+            or AcademicUnit.objects.filter(code__iexact=raw).first()
+        )
+
     def build_candidate_queryset(self, user: Optional[Any] = None, filters: Optional[dict] = None):
         """
         Build pre-retrieval candidate queryset enforcing strict authorization invariants
@@ -150,6 +183,7 @@ class DocumentSemanticRetrievalService:
         """
         model_name = self.provider.get_model_name()
         return self.build_authorized_chunk_queryset(user=user, filters=filters).filter(
+            document_version__is_latest=True,
             embedding_status='completed',
             embedding_model=model_name,
             embedding__isnull=False,
@@ -186,6 +220,36 @@ class DocumentSemanticRetrievalService:
             logger.debug("Could not resolve student academic sets for semantic boost: %s", exc)
 
         return enrolled_unit_ids, programme_level_unit_ids, programme_unit_ids
+
+    def retrieve_lexical_chunks(self, request: RetrievalRequest) -> List[RetrievalResult]:
+        """Search authorized chunk text when query embeddings are unavailable.
+
+        Document metadata search alone cannot answer questions whose terms occur
+        only inside a PDF. This fallback uses PostgreSQL full-text ranking and
+        never compares vectors from different models.
+        """
+        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+        terms = list(dict.fromkeys(re.findall(r"[^\W_]{3,}", (request.query or '').lower())))[:24]
+        if not terms:
+            return []
+        search = SearchQuery(terms[0], config='english')
+        for term in terms[1:]:
+            search |= SearchQuery(term, config='english')
+        vector = (SearchVector('content', config='english', weight='A') +
+                  SearchVector('section_heading', config='english', weight='B') +
+                  SearchVector('document__title', config='english', weight='B'))
+        chunks = (self.build_authorized_chunk_queryset(user=request.user, filters=request.filters)
+                  .filter(document_version__is_latest=True)
+                  .annotate(lexical_rank=SearchRank(vector, search))
+                  .filter(lexical_rank__gt=0).select_related('document', 'document_version')
+                  .prefetch_related('document_version__files')
+                  .order_by('-lexical_rank', 'id')[:max(1, int(request.limit or 10))])
+        results = []
+        for chunk in chunks:
+            result = self._format_chunk_result(chunk, min(float(chunk.lexical_rank), 1.0))
+            result.metadata['retrieval_mode'] = 'lexical_chunk_fallback'
+            results.append(result)
+        return results
 
     def retrieve(self, request: RetrievalRequest) -> List[RetrievalResult]:
         """
@@ -228,7 +292,7 @@ class DocumentSemanticRetrievalService:
             .annotate(distance=CosineDistance('embedding', query_vector))
             .filter(distance__isnull=False)
             .select_related('document', 'document_version')
-            .prefetch_related('document__academic_units__academic_unit')
+            .prefetch_related('document__academic_units__academic_unit', 'document_version__files')
             .order_by('distance')
         )
 
@@ -265,6 +329,21 @@ class DocumentSemanticRetrievalService:
                 if chunk.id not in seen_ids:
                     seen_ids.add(chunk.id)
                     chunks.append(chunk)
+
+        # Saved/owned documents are what the student deliberately keeps for
+        # revision — they deserve a ranking boost on top of academic match.
+        saved_document_ids = set()
+        own_document_ids = set()
+        if request.user and getattr(request.user, 'is_authenticated', False):
+            try:
+                from documents.collections.models import CollectionItem
+                saved_document_ids = set(
+                    CollectionItem.objects
+                    .filter(collection__owner=request.user)
+                    .values_list('document_id', flat=True)
+                )
+            except Exception:
+                saved_document_ids = set()
 
         results = []
         for chunk in chunks:
@@ -305,12 +384,20 @@ class DocumentSemanticRetrievalService:
             res.metadata['matches_student_unit'] = (academic_match_tier == 'enrolled_unit')
             res.metadata['matches_student_programme'] = academic_match_tier in ('enrolled_unit', 'programme_level', 'programme')
 
+            saved_boost = 0.0
+            if chunk.document_id in saved_document_ids:
+                saved_boost = 0.12
+                res.metadata['saved_for_revision'] = True
+            elif getattr(chunk.document, 'uploaded_by_id', None) == getattr(request.user, 'id', None):
+                saved_boost = 0.06
+                res.metadata['own_upload'] = True
+
             mention_boost = self._explicit_mention_boost(
                 chunk, query_tokens, token_frequency, candidate_document_count
             )
             if mention_boost:
                 res.metadata['explicit_mention'] = True
-            res.score = round(min(1.0, similarity + academic_boost + mention_boost), 4)
+            res.score = round(min(1.0, similarity + academic_boost + saved_boost + mention_boost), 4)
             results.append(res)
 
         # Always re-rank by score: the mention boost (and the academic boost)
@@ -327,14 +414,19 @@ class DocumentSemanticRetrievalService:
         document_share_id: Any,
         page_number: int,
         document_version_id: Optional[int] = None,
+        include_unembedded: bool = True,
     ) -> List[RetrievalResult]:
         """
         Deterministic, authorized retrieval of chunks spanning a specific page.
 
-        Enforces strict authorization invariants via `build_authorized_chunk_queryset(user)`
-        WITHOUT requiring vector embeddings to be completed (since page lookup is an exact
-        SQL filter on `page_number`).
+        Enforces strict authorization invariants via `build_authorized_chunk_queryset(user)`.
         Handles multi-page spanning chunks where page_number <= P <= page_end.
+
+        `include_unembedded` (default True) allows exact-page text retrieval to
+        use extracted chunk content whose embeddings are still pending or
+        failed — page lookup is a SQL filter and needs no vector. Semantic
+        search continues to require `is_active=True` via `build_candidate_queryset`.
+        Chunks without completed embeddings are flagged `text_only` in metadata.
         """
         # 1. Validate user authentication
         if not user or not getattr(user, 'is_authenticated', False):
@@ -373,8 +465,13 @@ class DocumentSemanticRetrievalService:
             except (ValueError, TypeError):
                 return []
 
-        # 5. Anchor to authorized chunk queryset (independent of embedding completion)
-        candidate_qs = self.build_authorized_chunk_queryset(user=user)
+        # 5. Anchor to authorized chunk queryset.
+        # include_unembedded=True relaxes ONLY the is_active (embedding-ready)
+        # flag for deterministic page text lookup; authorization, document
+        # status, availability, and version rules are unchanged.
+        candidate_qs = self.build_authorized_chunk_queryset(
+            user=user, require_active=not include_unembedded
+        )
 
         # 6. Scope strictly to the requested document share_id
         qs = candidate_qs.filter(document__share_id=share_uuid)
@@ -406,6 +503,9 @@ class DocumentSemanticRetrievalService:
             res.metadata['retrieval_mode'] = 'explicit_page'
             res.metadata['match_type'] = 'exact_page'
             res.metadata['active_viewer_page'] = page_num
+            if getattr(chunk, 'embedding_status', 'completed') != 'completed':
+                res.metadata['text_only'] = True
+                res.metadata['embedding_status'] = getattr(chunk, 'embedding_status', 'pending')
             results.append(res)
 
         return results
@@ -596,7 +696,11 @@ class DocumentSemanticRetrievalService:
         thumbnail_url = getattr(doc, 'thumbnail_url', None) or ""
         first_file = None
         if version and hasattr(version, 'files'):
-            first_file = version.files.first()
+            files = list(version.files.all())
+            source_file_id = (chunk.metadata or {}).get('document_file_id')
+            first_file = next((file for file in files if file.pk == source_file_id), None)
+            if first_file is None and files:
+                first_file = files[0]
         elif hasattr(doc, 'latest_version') and doc.latest_version:
             first_file = doc.latest_version.files.first()
 
@@ -622,6 +726,8 @@ class DocumentSemanticRetrievalService:
 
         metadata = {
             "document_id": doc.id,
+            "document_file_id": first_file.pk if first_file else None,
+            "source_filename": first_file.original_filename if first_file else '',
             "document_share_id": str(doc.share_id),
             "document_version_id": version.id if version else None,
             "version_number": version.version_number if version else None,
@@ -633,6 +739,7 @@ class DocumentSemanticRetrievalService:
             "slide_number": chunk.slide_number,
             "section_heading": chunk.section_heading,
             "embedding_model": chunk.embedding_model,
+            "content_hash": getattr(chunk, "content_hash", "") or "",
             "thumbnail_url": thumbnail_url,
             "media_url": media_url,
             "file_type": file_type,

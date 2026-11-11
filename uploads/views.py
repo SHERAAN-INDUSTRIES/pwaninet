@@ -520,6 +520,8 @@ class UploadCompleteView(APIView):
             semester = getattr(user, "semester", None)
 
         institution = getattr(user, "institution", None)
+        if not institution and programme:
+            institution = programme.get_institution()
         if not institution:
             institution = Institution.objects.filter(is_active=True).first()
 

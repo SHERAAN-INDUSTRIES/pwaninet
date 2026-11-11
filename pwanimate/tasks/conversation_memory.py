@@ -24,6 +24,11 @@ def embed_message(self, message_id: int) -> Dict[str, Any]:
     except PwanimateMessage.DoesNotExist:
         return {"status": "not_found", "message_id": message_id}
 
+    from pwanimate.services.study_memory import StudyMemoryService
+    pref = StudyMemoryService.preference(message.conversation.user)
+    if not pref.enabled or (pref.reset_at and message.created_at <= pref.reset_at):
+        return {'status': 'memory_disabled'}
+
     record, _ = PwanimateMessageEmbedding.objects.get_or_create(
         message=message,
         defaults={"user_id": message.conversation.user_id},
@@ -37,6 +42,10 @@ def embed_message(self, message_id: int) -> Dict[str, Any]:
                 f"Embedding dimension mismatch: expected {provider.get_dimensions()}, got {len(vector)}"
             )
         with transaction.atomic():
+            from pwanimate.models import SparkMemoryPreference
+            pref = SparkMemoryPreference.objects.select_for_update().get(pk=pref.pk)
+            if not pref.enabled or (pref.reset_at and message.created_at <= pref.reset_at):
+                return {'status': 'memory_disabled'}
             record.embedding = vector
             record.embedding_model = model_name
             record.status = "completed"

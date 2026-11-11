@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'documents',
     'releases',
     'messaging',
+    'calling',
     'search',
     'recommendations',
     'pwanimate',
@@ -119,6 +120,7 @@ TEMPLATES = [
                 'groups.context_processors.groups_nav_context',
                 'messaging.context_processors.messaging_nav_context',
                 'workspace.context_processors.workspace_notification',
+                'calling.context_processors.calling_configuration',
             ],
         },
     }
@@ -196,6 +198,7 @@ AUTH_USER_MODEL = 'users.User'
 
 # vasto Workspace (external system) — configure per environment.
 VASTO_WORKSPACE_BASE_URL = os.environ.get('VASTO_WORKSPACE_BASE_URL', '')
+VASTO_WORKSPACE_APP_URL = os.environ.get('VASTO_WORKSPACE_APP_URL', 'http://127.0.0.1:3000')
 
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
@@ -514,6 +517,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'pwanimate.tasks.reconciliation.reconcile_document_ingestion',
         'schedule': float(os.environ.get('PWANIMATE_RECONCILE_INTERVAL_SECONDS', 600.0)),  # every 10 minutes
         'options': {'queue': 'docs_queue'},
+    },
+    'pwanimate-recover-agent-runs': {
+        'task': 'pwanimate.tasks.recover_agent_runs',
+        'schedule': 60.0,  # every minute: leases are 300s, waits expire at 15min
+        'options': {'queue': 'default'},
     },
     'uploads-reconcile-stale-uploads': {
         'task': 'uploads.tasks.reconcile_stale_uploads',
@@ -864,7 +872,41 @@ PWANIMATE_VISION_FALLBACK_CHAIN = [
     {"provider": "cloudflare", "model": os.environ.get('PWANIMATE_CLOUDFLARE_VISION_MODEL', '@cf/meta/llama-3.2-11b-vision-instruct')},
     {"provider": "groq", "model": os.environ.get('PWANIMATE_GROQ_VISION_MODEL', 'qwen/qwen3.8-27b')},
 ]
+# Upload extraction is separate from the conversational vision/answer model.
+PWANIMATE_ATTACHMENT_VISION_PROVIDER = os.environ.get('PWANIMATE_ATTACHMENT_VISION_PROVIDER', 'ollama')
+PWANIMATE_ATTACHMENT_VISION_MODEL = os.environ.get(
+    'PWANIMATE_ATTACHMENT_VISION_MODEL',
+    os.environ.get('PWANIMATE_OLLAMA_OCR_MODEL', 'deepseek-ocr:pwanimate-q4_K_M')
+    if PWANIMATE_ATTACHMENT_VISION_PROVIDER == 'ollama' else PWANIMATE_VISION_MODEL,
+)
+PWANIMATE_ATTACHMENT_VISION_FALLBACK_CHAIN = (
+    [{'provider': 'ollama', 'model': PWANIMATE_ATTACHMENT_VISION_MODEL}]
+    if PWANIMATE_ATTACHMENT_VISION_PROVIDER == 'ollama' else PWANIMATE_VISION_FALLBACK_CHAIN
+)
+PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS = int(os.environ.get(
+    'PWANIMATE_ATTACHMENT_VISION_MAX_TOKENS',
+    '4096' if PWANIMATE_ATTACHMENT_VISION_PROVIDER == 'ollama' else '1600',
+))
+PWANIMATE_OLLAMA_BASE_URL = os.environ.get('PWANIMATE_OLLAMA_BASE_URL', 'http://127.0.0.1:11434')
+PWANIMATE_OLLAMA_OCR_MODEL = os.environ.get('PWANIMATE_OLLAMA_OCR_MODEL', 'deepseek-ocr:pwanimate-q4_K_M')
+PWANIMATE_OLLAMA_OCR_TIMEOUT = float(os.environ.get('PWANIMATE_OLLAMA_OCR_TIMEOUT', '180'))
+PWANIMATE_OLLAMA_OCR_MAX_IMAGE_BYTES = int(os.environ.get('PWANIMATE_OLLAMA_OCR_MAX_IMAGE_BYTES', str(20 * 1024 * 1024)))
 PWANIMATE_ATTACHMENT_VISION_MAX_PAGES = int(os.environ.get('PWANIMATE_ATTACHMENT_VISION_MAX_PAGES', '20'))
+
+# Timetable extraction runs through the AI Gateway as a vision task with an
+# ordered fallback chain: fast cloud OCR models first, the slow local Ollama
+# model last. TIMETABLE_OCR_PROVIDER can pin a single provider ('gemini',
+# 'groq', 'cloudflare', 'ollama'); 'auto' (default) uses the full chain.
+TIMETABLE_OCR_PROVIDER = os.environ.get('TIMETABLE_OCR_PROVIDER', 'auto')
+TIMETABLE_OCR_MODEL = os.environ.get('TIMETABLE_OCR_MODEL', PWANIMATE_OLLAMA_OCR_MODEL)
+TIMETABLE_OCR_TIMEOUT = int(os.environ.get('TIMETABLE_OCR_TIMEOUT', '180'))
+TIMETABLE_OCR_FALLBACK_CHAIN = [
+    {"provider": "gemini", "model": "gemini-3.8-flash"},
+    {"provider": "cloudflare", "model": os.environ.get('PWANIMATE_CLOUDFLARE_VISION_MODEL', '@cf/meta/llama-3.2-11b-vision-instruct')},
+    {"provider": "cloudflare", "model": os.environ.get('PWANIMATE_CLOUDFLARE_VISION_BACKUP_MODEL', '@cf/meta/llama-4-scout-17b-16e-instruct')},
+    {"provider": "groq", "model": os.environ.get('PWANIMATE_GROQ_VISION_MODEL', 'qwen/qwen3.8-27b')},
+    {"provider": "ollama", "model": TIMETABLE_OCR_MODEL},
+]
 # Account-wide daily cap on image analyses. The Workers AI free allocation
 # (10,000 neurons/day) is shared by every user, so the per-user tier cap is
 # not enough to protect it: 56 Ember students at 5 images/day would exhaust
@@ -906,20 +948,30 @@ PWANIMATE_RATE_LIMIT_COOLDOWN = float(os.environ.get('PWANIMATE_RATE_LIMIT_COOLD
 
 # Model-level fallback chain: interleaved across providers so that when one provider
 # is throttled or quota-depleted, the gateway immediately fails over to an available provider.
+# Rungs verified against the live free catalogs (OpenRouter :free models, Groq chat
+# models, Gemini flash tier) — every entry is a real, zero-cost route.
 PWANIMATE_LLM_FALLBACK_CHAIN = [
     {"provider": "gemini", "model": "gemini-3.8-flash"},
     {"provider": "groq", "model": "openai/gpt-oss-120b"},
-    {"provider": "gemini", "model": "gemini-3.6-flash"},
     {"provider": "openrouter", "model": "nvidia/nemotron-3-ultra-550b-a55b:free"},
-    {"provider": "groq", "model": "openai/gpt-oss-20b"},
-    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
-    {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
+    {"provider": "gemini", "model": "gemini-3.7-flash"},
     {"provider": "groq", "model": "qwen/qwen3.8-27b"},
+    {"provider": "openrouter", "model": "nvidia/nemotron-3.5-lightning:free"},
+    {"provider": "gemini", "model": "gemini-3.6-flash"},
+    {"provider": "groq", "model": "openai/gpt-oss-20b"},
+    {"provider": "openrouter", "model": "google/gemma-4-31b-it:free"},
+    {"provider": "gemini", "model": "gemini-3.5-flash-lite"},
+    {"provider": "openrouter", "model": "xingchen-agi/xing4.0-29b-a4b:free"},
     {"provider": "gemini", "model": "gemini-flash-lite-latest"},
-    {"provider": "openrouter", "model": "nvidia/nemotron-3-super-120b-a12b:free"},
+    {"provider": "openrouter", "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"},
     {"provider": "gemini", "model": "gemini-flash-latest"},
-    {"provider": "gemini", "model": "gemini-pro-latest"},
+    {"provider": "openrouter", "model": "liquid/lfm-3-1.7b:free"},
+    {"provider": "openrouter", "model": "google/gemma-4-26b-a4b-it:free"},
     {"provider": "openrouter", "model": "liquid/lfm-2.5-2.6b:free"},
+    {"provider": "gemini", "model": "gemini-pro-latest"},
+    {"provider": "openrouter", "model": "thinkingmachines/inkling-2-small:free"},
+    {"provider": "openrouter", "model": "dots-studio/dots-3-note-preview:free"},
+    {"provider": "openrouter", "model": "recursive/flint-v1.0:free"},
     # Final fallback: mock provider returns a friendly error message
     # instead of raising a 502 when all real providers are unreachable
     {"provider": "mock", "model": "unavailable"},
@@ -939,3 +991,11 @@ PWANIMATE_MAX_EXTRACT_CHARS = int(os.environ.get('PWANIMATE_MAX_EXTRACT_CHARS', 
 VASTO_SERVICE_TOKEN = os.environ.get('VASTO_SERVICE_TOKEN', '')
 VASTO_INTERNAL_API_ENABLED = os.environ.get('VASTO_INTERNAL_API_ENABLED', 'false').lower() == 'true'
 INTERNAL_API_ALLOWED_IPS = os.environ.get('INTERNAL_API_ALLOWED_IPS', '127.0.0.1').split(',')
+
+# Voice backend foundation. Enable only in a controlled development environment
+# until media cleanup and native incoming-call adapters are verified.
+CALLING_ENABLED = os.environ.get('CALLING_ENABLED', 'false').lower() == 'true'
+CALLING_RING_SECONDS = 45
+LIVEKIT_URL = os.environ.get('LIVEKIT_URL', '')
+LIVEKIT_API_KEY = os.environ.get('LIVEKIT_API_KEY', '')
+LIVEKIT_API_SECRET = os.environ.get('LIVEKIT_API_SECRET', '')

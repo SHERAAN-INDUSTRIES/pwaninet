@@ -119,15 +119,36 @@ class DocumentViewer {
             return;
         }
 
+        try { performance.mark('pw:viewer-init-start'); } catch (_) {}
+
+        // Re-initialization must not stack a second renderer: clear any
+        // previously mounted toolbar, floating bar, and viewer container,
+        // and destroy the stale inner viewer so an in-flight load() aborts.
+        if (this.viewer || this.toolbar || this.floatingBar || (this.container && this.container.children.length)) {
+            const staleViewer = this.viewer;
+            this.container.innerHTML = '';
+            this.viewer = null;
+            this.toolbar = null;
+            this.floatingBar = null;
+            if (staleViewer && typeof staleViewer.destroy === 'function') {
+                try { staleViewer.destroy(); } catch (_) {}
+            }
+        }
+
         this.showLoading();
         this.isLoading = true;
         this._emitStateChange();
 
         try {
-            this.viewer = ViewerFactory.createViewer(this.fileType, this.container, this.fileUrl, this.options);
-            await this.viewer.load();
+            const createdViewer = ViewerFactory.createViewer(this.fileType, this.container, this.fileUrl, this.options);
+            this.viewer = createdViewer;
+            await createdViewer.load();
 
-            this.totalPages = this.viewer.getTotalPages();
+            // The viewer may have been destroyed or replaced while load() was
+            // in flight (tab switch, re-preview, offline blob failure + retry).
+            if (this.viewer !== createdViewer) return;
+
+            this.totalPages = createdViewer.getTotalPages();
             this.isPaginated = this.totalPages !== null && this.totalPages !== undefined;
 
             if (!this.isPaginated) {
@@ -146,7 +167,11 @@ class DocumentViewer {
             if (this.container) {
                 this.container.style.position = 'relative';
             }
-            this.createToolbar();
+            // minimalChrome: skip the permanent toolbar band; page/zoom live in
+            // the floating bar and secondary actions move to the host UI menu.
+            if (!this.options.minimalChrome) {
+                this.createToolbar();
+            }
             this.createFloatingBar();
             this.hideLoading();
             this.isLoading = false;
@@ -171,6 +196,10 @@ class DocumentViewer {
                 }
             }
             this._emitStateChange();
+            try {
+                performance.mark('pw:viewer-init-done');
+                performance.measure('pw:viewer-init', 'pw:viewer-init-start', 'pw:viewer-init-done');
+            } catch (_) {}
 
         } catch (error) {
             this.isLoading = false;
@@ -577,6 +606,62 @@ class DocumentViewer {
 
         this.container.appendChild(this.floatingBar);
         this.updateNavigationButtons();
+        this.setupFloatingBarAutoHide();
+    }
+
+    /**
+     * Auto-hide the floating control bar after a short idle period.
+     * The bar reappears on pointer movement, touch, scroll, keyboard input,
+     * or focus inside the viewer. Under prefers-reduced-motion the controls
+     * stay persistent — hiding is a motion convenience, not a requirement.
+     */
+    setupFloatingBarAutoHide() {
+        if (!this.floatingBar || !this.container) return;
+        if (this._floatingBarHideCleanup) {
+            try { this._floatingBarHideCleanup(); } catch (_) {}
+        }
+        let reducedMotion = false;
+        try {
+            reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch (_) {}
+        if (reducedMotion) return;
+
+        const HIDE_DELAY_MS = 2800;
+        const bar = this.floatingBar;
+        let hideTimer = null;
+
+        const reveal = () => {
+            bar.classList.remove('viewer-floating-bar-hidden');
+            scheduleHide();
+        };
+        const scheduleHide = () => {
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => {
+                // Never hide while the user is interacting with the bar itself.
+                if (typeof bar.contains === 'function' && bar.contains(document.activeElement)) {
+                    scheduleHide();
+                    return;
+                }
+                bar.classList.add('viewer-floating-bar-hidden');
+            }, HIDE_DELAY_MS);
+        };
+
+        const onActivity = () => reveal();
+        const events = ['pointermove', 'pointerdown', 'touchstart', 'wheel', 'focusin'];
+        events.forEach(evt => this.container.addEventListener(evt, onActivity, { passive: true }));
+        // keydown (capture) reveals controls before Tab focus can land inside.
+        const onKeyDown = (e) => { if (e.key !== 'Escape') reveal(); };
+        this.container.addEventListener('keydown', onKeyDown, true);
+
+        this._floatingBarHideCleanup = () => {
+            events.forEach(evt => this.container.removeEventListener(evt, onActivity));
+            this.container.removeEventListener('keydown', onKeyDown, true);
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = null;
+            bar.classList.remove('viewer-floating-bar-hidden');
+        };
+
+        scheduleHide();
     }
 
     createPillIconButton(icon, title, onClick, isCompact = false) {
@@ -1040,6 +1125,10 @@ class DocumentViewer {
     }
 
     destroy() {
+        if (this._floatingBarHideCleanup) {
+            try { this._floatingBarHideCleanup(); } catch (_) {}
+            this._floatingBarHideCleanup = null;
+        }
         if (this.isFullscreen) {
             this.exitFullscreen(false);
         }
@@ -1145,8 +1234,32 @@ class PDFViewer {
             pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/vendor/pdfjs/pdf.worker.min.js';
         }
 
-        const loadingTask = pdfjsLib.getDocument(this.fileUrl);
+        try { performance.mark('pw:pdf-getdoc-start'); } catch (_) {}
+        // Offline library hands us the stored Blob directly — no fetch and
+        // no object-URL lifetime to manage. blob: URLs (other callers) cannot
+        // always be fetched by the pdf.js worker — read bytes on the main
+        // thread and hand pdf.js the data.
+        let documentSource = this.fileUrl;
+        const localBlob = this.options && this.options.fileBlob;
+        if (localBlob) {
+            documentSource = { data: await localBlob.arrayBuffer() };
+        } else if (typeof this.fileUrl === 'string' && this.fileUrl.startsWith('blob:')) {
+            const blobResponse = await fetch(this.fileUrl);
+            if (!blobResponse.ok) {
+                throw new Error('Could not read the locally stored file.');
+            }
+            documentSource = { data: await blobResponse.arrayBuffer() };
+        }
+        if (this._destroyed) return;
+        const loadingTask = pdfjsLib.getDocument(documentSource);
         this.pdfDoc = await loadingTask.promise;
+        try {
+            performance.mark('pw:pdf-doc-loaded');
+            performance.measure('pw:pdf-getdoc', 'pw:pdf-getdoc-start', 'pw:pdf-doc-loaded');
+        } catch (_) {}
+
+        // Aborted while the document was still loading (viewer replaced).
+        if (this._destroyed) return;
 
         if (this.currentPage > this.pdfDoc.numPages) {
             this.currentPage = this.pdfDoc.numPages;
@@ -1302,6 +1415,10 @@ class PDFViewer {
         try {
             this.currentRenderTask = page.render(renderContext);
             await this.currentRenderTask.promise;
+            try {
+                performance.mark('pw:first-page');
+                performance.measure('pw:first-page-total', 'pw:viewer-init-start', 'pw:first-page');
+            } catch (_) {}
         } catch (err) {
             if (err && err.name === 'RenderingCancelledException') {
                 return; // Expected upon rapid navigation or resize
@@ -1362,6 +1479,7 @@ class PDFViewer {
     }
 
     destroy() {
+        this._destroyed = true;
         if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
         if (this.currentRenderTask) {
             try { this.currentRenderTask.cancel(); } catch (e) {}
@@ -1389,11 +1507,17 @@ class DOCXViewer {
             await this.loadMammoth();
         }
 
-        const response = await fetch(this.fileUrl);
-        if (!response.ok) {
-            throw new Error(`Failed to download DOCX document (HTTP ${response.status})`);
+        const localBlob = this.options && this.options.fileBlob;
+        let arrayBuffer;
+        if (localBlob) {
+            arrayBuffer = await localBlob.arrayBuffer();
+        } else {
+            const response = await fetch(this.fileUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to download DOCX document (HTTP ${response.status})`);
+            }
+            arrayBuffer = await response.arrayBuffer();
         }
-        const arrayBuffer = await response.arrayBuffer();
         const result = await mammoth.convertToHtml({ arrayBuffer });
         this.createContent(result.value);
     }
@@ -1531,11 +1655,17 @@ class TextViewer {
     }
 
     async load() {
-        const response = await fetch(this.fileUrl);
-        if (!response.ok) {
-            throw new Error(`Failed to load text file (HTTP ${response.status})`);
+        const localBlob = this.options && this.options.fileBlob;
+        let text;
+        if (localBlob) {
+            text = await localBlob.text();
+        } else {
+            const response = await fetch(this.fileUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to load text file (HTTP ${response.status})`);
+            }
+            text = await response.text();
         }
-        const text = await response.text();
 
         let content = text;
         if (this.isMarkdown) {

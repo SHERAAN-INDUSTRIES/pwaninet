@@ -1,0 +1,42 @@
+<!doctype html>
+<html class="pwanimate-active"><body class="pwanimate-active">
+<link rel="stylesheet" href="/static/css/pwanimate/pwanimate.css">
+<div class="pwanimate-message-actions assistant-actions">
+  <button class="btn pwanimate-action-btn"><i data-lucide="copy"></i></button>
+  <button class="btn pwanimate-action-btn"><i data-lucide="thumbs-up"></i></button>
+  <button class="btn pwanimate-action-btn"><i data-lucide="volume-2" aria-hidden="true"></i></button>
+</div>
+<div id="dyn"></div>
+<div id="chip"></div>
+<div id="swap"><i data-lucide="download" class="pwanimate-context-book-offline" data-offline-save-doc="abc123" title="Save" style="width:1.1rem;height:1.1rem;"></i></div>
+<script src="/static/vendor/lucide/lucide.min.js"></script>
+<script src="/static/js/pwanimate/spark-icons.js"></script>
+<script>
+window.testResults = {};
+window.testResults.hasCreateIcons = typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function';
+setTimeout(() => {
+  const svgs = document.querySelectorAll('.pwanimate-message-actions svg.lucide');
+  window.testResults.actionSvgs = svgs.length;
+  window.testResults.emptySvgs = Array.from(svgs).filter(s => !s.querySelector('path,circle,rect,line,polyline,polygon,ellipse')).length;
+  window.testResults.strokeWidth = getComputedStyle(svgs[0]).strokeWidth;
+  window.testResults.svgSize = svgs[0].getBoundingClientRect().width;
+  document.getElementById('dyn').innerHTML = '<i data-lucide="send"></i>';
+  const spec = sparkIconSpec('bi-file-earmark-pdf-fill text-danger');
+  window.testResults.spec = spec;
+  document.getElementById('chip').innerHTML = `<i data-lucide="${spec.name}" class="me-1 ${spec.extra}"></i>`;
+  let icon = document.querySelector('#swap [data-offline-save-doc]');
+  icon = sparkSetIcon(icon, 'hourglass') || icon;
+  icon = sparkSetIcon(icon, 'check') || icon;
+  setTimeout(() => {
+    window.testResults.dynSvg = document.querySelectorAll('#dyn svg.lucide').length;
+    window.testResults.chipSvg = document.querySelectorAll('#chip svg.lucide').length;
+    const finalIcon = document.querySelector('#swap [data-offline-save-doc]');
+    window.testResults.swapIcon = finalIcon ? finalIcon.getAttribute('data-lucide') : null;
+    window.testResults.swapTag = finalIcon ? finalIcon.tagName : null;
+    window.testResults.swapTitle = finalIcon ? finalIcon.getAttribute('title') : null;
+    window.testResults.swapStyle = finalIcon ? finalIcon.getAttribute('style') : null;
+    window.testResults.done = true;
+  }, 100);
+}, 100);
+</script>
+</body></html>

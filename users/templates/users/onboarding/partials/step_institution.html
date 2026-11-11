@@ -1,5 +1,5 @@
 {# Optional institution setup step (Phase 3). All fields optional; skipping leaves academic profile unset. #}
-<div id="institution-setup-block" class="card border-0 shadow-sm rounded-4 p-3 p-md-4 mb-3">
+<div id="institution-setup-block" class="p-3 p-md-4 mb-3">
   <h5 class="fw-bold mb-1">Your institution <span class="badge bg-secondary fw-normal">Optional</span></h5>
   <p class="text-muted small mb-3">Tell us where you study so we can show the right programmes. You can skip this and continue.</p>
 
@@ -67,7 +67,7 @@
       {% for err in setup_form.academic_level.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
 
-    <div class="border rounded-3 p-3 mb-3 bg-light">
+    <div class="p-3 mb-3">
       <div class="fw-semibold small mb-1">Academic units <span class="badge bg-info text-dark fw-normal">Coming soon</span></div>
       <p class="text-muted small mb-0">Unit selection for your programme will be available here once the catalogue is published. Nothing to choose yet.</p>
     </div>

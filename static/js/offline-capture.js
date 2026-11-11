@@ -5,11 +5,12 @@
     if (!owner) return;
     navigator.serviceWorker.addEventListener('message', event => {
         if (event.data?.type === 'PRIVATE_OFFLINE_INVALIDATED' && event.data.owner !== owner) {
+            invalidated = true;
             document.body.replaceChildren(document.createTextNode('Account changed. Open Vasto again to continue.'));
         }
     });
     const mediaDB = `vasto_offline_media_${owner}`;
-    let pending, capturing = false;
+    let pending, capturing = false, invalidated = false, captureAgain = false;
     const imageCopies = new Map();
     const openMedia = () => new Promise((resolve, reject) => {
         const req = indexedDB.open(mediaDB, 1);
@@ -49,26 +50,35 @@
         } });
     }
     function schedule() {
+        if(capturing){captureAgain=true;return;}
         clearTimeout(pending);
         pending = setTimeout(capture, /^\/(?:messaging|notifications)\//.test(location.pathname) ? 200 : 900);
     }
     async function capture() {
-        if (document.querySelector('.is-generating,.pwanimate-streaming-row') || capturing || !navigator.onLine || !navigator.serviceWorker.controller) return;
+        if (document.querySelector('.is-generating,.pwanimate-streaming-row') || invalidated || capturing || !navigator.onLine || !navigator.serviceWorker.controller) return;
         capturing = true;
         const route = location.href;
         try {
             const clone = document.documentElement.cloneNode(true);
-            const back = clone.querySelector('#chatBackBtn');
-            if (back) { const link = document.createElement('a'); link.href = '/messaging/'; link.className = back.className; link.textContent = 'Back'; back.replaceWith(link); }
             clone.querySelectorAll('[data-offline-indicator]').forEach(el => el.remove());
-            clone.querySelectorAll('script,form,input,textarea,select,[contenteditable],iframe,object,embed,base,meta[http-equiv],meta[name*="csrf"],link:not([rel="stylesheet"])').forEach(el => el.remove());
+            // Keep the actual layout: forms, inputs, buttons, attributes and wrappers stay put.
+            // Only executable/server credentials are excluded from a saved document.
+            clone.querySelectorAll('script,base,meta[http-equiv],meta[name*="csrf"]').forEach(el => el.remove());
+            clone.querySelectorAll('input,textarea,[contenteditable]').forEach(field => {
+                if(!field.matches('input[type="search"],input[name="q"],input[name="query"]')) {
+                    field.removeAttribute('value'); if(field.tagName==='TEXTAREA'||field.hasAttribute('contenteditable'))field.textContent='';
+                }
+            });
+            clone.querySelectorAll('form').forEach(form=>{form.removeAttribute('action');form.removeAttribute('method');});
+            clone.querySelectorAll('iframe,object,embed').forEach(frame=>{frame.removeAttribute('src');frame.removeAttribute('data');});
             // Merge previously loaded feed cards only after rechecking current access.
             // A successful first-page refresh must not discard pages loaded by scrolling.
             const routeKey = new URL(route);
             routeKey.hash = '';
             ['offline_saved', 'view_cache', 'cached'].forEach(key => routeKey.searchParams.delete(key));
             routeKey.searchParams.sort();
-            const previous = await (await caches.open(`vasto-private-pages-v1-${owner}`)).match(routeKey.href);
+            const previous = await caches.match(routeKey.href,{cacheName:`vasto-private-pages-v1-${owner}`});
+            if(invalidated)return;
             if (previous && clone.querySelector('.post-card[data-post-id]')) {
                 const old = new DOMParser().parseFromString(await previous.clone().text(), 'text/html');
                 const existing = new Set([...clone.querySelectorAll('.post-card[data-post-id]')].map(card => card.dataset.postId));
@@ -135,7 +145,8 @@
                 card.dataset.offlinePostId = id;
                 if (seen.has(id)) card.remove(); else seen.add(id);
             });
-            clone.querySelectorAll('#load-more-trigger,[hx-trigger*="revealed"],.offline-save-button').forEach(el => el.remove());
+            clone.querySelectorAll('.offline-save-button').forEach(el => el.remove());
+            if(invalidated)return;
             const downloads = await records();
             clone.querySelectorAll('video').forEach(video => {
                 const saved = downloads.find(item => item.id === (video.dataset.postId || video.dataset.offlineDownloadId));
@@ -145,63 +156,68 @@
                 video.preload = 'none';
                 if (saved?.blob?.size) video.dataset.offlineDownloadId = saved.id;
             });
-            // Keep only successfully embedded image bytes. No missing image is advertised as saved.
-            let imageBytes = 0;
-            for (const image of clone.querySelectorAll('img,video[poster]')) {
-                const attr = image.tagName === 'VIDEO' ? 'poster' : 'src';
-                let data = '';
-                if (imageBytes < 1200000) {
-                    try { data = await dataImage(image.getAttribute(attr)); } catch (_) {}
-                }
-                imageBytes += data.length;
-                image.removeAttribute('srcset');
-                if (data) image.setAttribute(attr, data); else image.removeAttribute(attr);
+            if(window.vastoSnapshotResources) await window.vastoSnapshotResources.localize(clone);
+            else {
+                // Compatibility with older app/script versions: preserve unavailable sources.
+                for(const image of clone.querySelectorAll('img'))try{
+                    const data=await dataImage(image.getAttribute('src'));if(data)image.src=data;
+                }catch(_){}
             }
             clone.querySelectorAll('*').forEach(el => {
-                for (const attr of [...el.attributes]) {
-                    if (/^on|^hx-|^data-|csrf|token|nonce/i.test(attr.name) && !['data-offline-download-id', 'data-offline-post-id', 'data-offline-message-id', 'data-offline-message-version', 'data-offline-notification-id'].includes(attr.name)) el.removeAttribute(attr.name);
-                    if (['href', 'src', 'poster'].includes(attr.name)) {
+                for(const attr of [...el.attributes]) {
+                    if(/^on/i.test(attr.name)) {
+                        const theme=/setTheme\(['"](light|dark|system)['"]/.exec(attr.value);
+                        const navigation=/(?:location.href\s*=|location.assign\()\s*['"](\/[^'"]*)['"]/.exec(attr.value);
+                        if(theme)el.dataset.offlineTheme=theme[1];
+                        if(navigation)el.dataset.offlineHref=navigation[1];
+                        el.removeAttribute(attr.name);
+                    } else if(/csrf|token|nonce/i.test(attr.name) || (attr.name.startsWith('data-') && /[?&](?:token|signature|expires|x-amz-[^=]+)=/i.test(attr.value)))el.removeAttribute(attr.name);
+                    // HTMX stays inert; Bootstrap/UI data attributes remain available offline.
+                    if(['href','src','poster','data-src'].includes(attr.name) || /^https?:\/\//i.test(attr.value)) {
                         try {
-                            const url = new URL(attr.value, location.href);
-                            if (!['https:', 'data:', location.protocol].includes(url.protocol) ||
-                                (url.protocol !== 'data:' && (url.origin !== location.origin || /(?:token|signature|expires|x-amz-)/i.test(url.search)))) el.removeAttribute(attr.name);
-                        } catch (_) { el.removeAttribute(attr.name); }
+                            const url=new URL(attr.value,location.href);
+                            if(!['https:','http:','data:','blob:'].includes(url.protocol) || /(?:token|signature|expires|x-amz-)/i.test(url.search))el.removeAttribute(attr.name);
+                        }catch(_){el.removeAttribute(attr.name);}
                     }
                 }
             });
+            const scroll={window:{x:window.scrollX,y:window.scrollY},elements:{}};
+            document.querySelectorAll('[id]').forEach(el=>{if(el.scrollTop||el.scrollLeft)scroll.elements[el.id]={x:el.scrollLeft,y:el.scrollTop};});
+            const position=document.createElement('meta');position.name='vasto-scroll';position.content=JSON.stringify(scroll);clone.querySelector('head').append(position);
             const timestamp = document.createElement('meta');
             timestamp.name = 'vasto-saved-at'; timestamp.content = String(Date.now());
             clone.querySelector('head').append(timestamp);
+            const bootstrap=document.createElement('script');bootstrap.src='/static/js/bootstrap.bundle.min.js';bootstrap.defer=true;clone.querySelector('head').append(bootstrap);
             const runtime = document.createElement('script');
             runtime.src = '/static/js/offline-view.js'; runtime.defer = true;
             clone.querySelector('head').append(runtime);
+            if(location.href===route && window.vastoNativeOffline)window.vastoNativeOffline.snapshot({url:route,groupProtected:Boolean(document.querySelector('#leaveGroupBtn,#leaveGroupBtnRail')),html:'<!doctype html>'+clone.outerHTML}).catch(error=>console.warn('[Offline] Native snapshot was not saved',error));
             if (location.href === route) navigator.serviceWorker.controller.postMessage({
                 type: 'SAVE_RENDERED_PAGE', payload: { owner, url: route, postIds: [...clone.querySelectorAll('[data-offline-post-id]')].map(card => card.dataset.offlinePostId), html: '<!doctype html>' + clone.outerHTML }
             });
+            window.vastoSnapshotResources?.startMedia();
         } catch (error) { console.warn('[Offline] Could not save this view', error); }
-        finally { capturing = false; }
+        finally { capturing = false; if(captureAgain){captureAgain=false;schedule();} }
     }
     const indicator = document.createElement('aside');
-    indicator.style.cssText = 'position:fixed;bottom:80px;right:12px;z-index:10000;background:#17233b;color:white;border-radius:8px;padding:8px;font-size:12px';
+    indicator.style.cssText='position:fixed;bottom:calc(8px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:10000;color:#64748b;font:11px system-ui;white-space:nowrap;pointer-events:none';
     indicator.dataset.offlineIndicator = 'true';
-    let lastSaved = 0;
-    const updateIndicator = () => { indicator.textContent = 'Offline · available content stays visible' + (lastSaved ? ' · Saved ' + new Date(lastSaved).toLocaleTimeString() : ''); };
-    navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data?.type === 'PRIVATE_PAGE_SAVED') { lastSaved = event.data.savedAt; updateIndicator(); }
-    });
+    const updateIndicator = () => { indicator.textContent = 'You are offline viewing cached pages'; };
     updateIndicator();
     indicator.hidden = navigator.onLine;
     document.body.append(indicator);
     window.addEventListener('offline', () => { indicator.hidden = false; });
     window.addEventListener('online', () => { indicator.hidden = true; reconcile(); schedule(); });
     navigator.serviceWorker.addEventListener('controllerchange', schedule);
+    document.addEventListener('vasto:offline-resource-ready',schedule);
     document.addEventListener('htmx:afterSettle', schedule);
     window.addEventListener('vasto:download-deleted', schedule);
     window.addEventListener('pagehide', () => { clearTimeout(pending); });
+    document.addEventListener('scroll',schedule,{capture:true,passive:true});
     document.addEventListener('submit', event => {
         if (!navigator.onLine) {
             event.preventDefault(); event.stopImmediatePropagation();
-            alert('Connect to send this request. Your draft stays on screen.');
+
         }
     }, true);
     document.addEventListener('click', event => {
@@ -213,9 +229,9 @@
                 event.preventDefault(); event.stopImmediatePropagation();
                 location.assign(url.href);
             }
-        } else if (event.target.closest('button,[hx-post],[hx-delete],[hx-put],[hx-patch]')) {
+        } else if (event.target.closest('[hx-post],[hx-delete],[hx-put],[hx-patch],button[type=submit]')) {
             event.preventDefault(); event.stopImmediatePropagation();
-            alert('Connect to use this control. Your available content stays on screen.');
+
         }
     }, true);
     const observer = new MutationObserver(schedule);

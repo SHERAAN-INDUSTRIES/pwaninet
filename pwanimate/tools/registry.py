@@ -117,5 +117,11 @@ def get_default_tool_registry() -> ToolRegistry:
         # Write actions. These only propose; the student confirms.
         registry.register(SendMessageTool())
         registry.register(FollowUserTool())
+        from pwanimate.tools.domain.planner import (PersonalScheduleTool, CreateStudyPlanTool,
+            CreateReminderTool, UnreadChatsTool, AddStudyBlockTool, UpdateStudyBlockTool,
+            RemoveStudyBlockTool, CompleteStudyBlockTool)
+        for tool in [PersonalScheduleTool(), CreateStudyPlanTool(), CreateReminderTool(), UnreadChatsTool(),
+                     AddStudyBlockTool(), UpdateStudyBlockTool(), RemoveStudyBlockTool(), CompleteStudyBlockTool()]:
+            registry.register(tool)
         _default_registry = registry
     return _default_registry

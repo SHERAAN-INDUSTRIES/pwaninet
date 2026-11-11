@@ -120,7 +120,7 @@ class ToolRouter:
             return ToolRoute("content_search", {"query": m_search.group(2).strip(), "content_type": "post" if kind.startswith("post") else "document", "limit": 5}, matched_intent="content_search")
 
         m_notify = re.match(r"^(?:notify\s+me\s+(?:that\s+)?|send\s+me\s+a\s+notification\s+(?:saying|that)\s+)(.+)$", clean_query, re.I)
-        if m_notify:
+        if m_notify and not re.search(r"\b(tomorrow|later|next|at|in\s+\d+)\b",m_notify.group(1),re.I):
             return ToolRoute("send_notification", {"summary": m_notify.group(1).strip()}, matched_intent="send_notification")
 
         # 1. Notifications check

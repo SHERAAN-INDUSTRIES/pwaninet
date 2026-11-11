@@ -27,6 +27,8 @@ import com.capacitorjs.plugins.pushnotifications.PushNotificationsPlugin;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -70,6 +72,25 @@ public class PwaninetFirebaseMessagingService extends FirebaseMessagingService {
         } catch (Exception e) {
             Log.d(TAG, "HTTP response cache could not be installed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Base URL the app is configured to load. Debug builds point Capacitor's
+     * server.url at a dev origin (e.g. the Cloudflare tunnel), so notification
+     * deep links must resolve against that origin instead of production.
+     */
+    private String appBaseUrl() {
+        try (InputStream in = getAssets().open("capacitor.config.json")) {
+            byte[] buf = new byte[in.available()];
+            int read = in.read(buf);
+            JSONObject cfg = new JSONObject(new String(buf, 0, Math.max(read, 0), "UTF-8"));
+            JSONObject server = cfg.optJSONObject("server");
+            String url = server == null ? null : server.optString("url", null);
+            if (url != null && !url.trim().isEmpty()) {
+                return url.trim().replaceAll("/+$", "");
+            }
+        } catch (Exception ignored) {}
+        return "https://pwaninet.app";
     }
 
     @Override
@@ -184,7 +205,7 @@ public class PwaninetFirebaseMessagingService extends FirebaseMessagingService {
 
             String fullUrl = destinationUrl;
             if (!fullUrl.startsWith("http://") && !fullUrl.startsWith("https://")) {
-                fullUrl = "https://pwaninet.app" + (fullUrl.startsWith("/") ? fullUrl : "/" + fullUrl);
+                fullUrl = appBaseUrl() + (fullUrl.startsWith("/") ? fullUrl : "/" + fullUrl);
             }
             clickIntent.setData(Uri.parse(fullUrl));
 

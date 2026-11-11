@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-08",
+  "approach": "Original Django DOM snapshots, native SQLite and phone files; replacement bundled pages removed",
+  "layout_browser": {
+    "passed": [
+      "Original header/search/profile/theme/navigation geometry unchanged",
+      "Image bytes available offline",
+      "Only the requested date-free offline label",
+      "Original theme menu works offline",
+      "Original navigation hides and returns with scrolling",
+      "Offline page reload restores the saved scroll position",
+      "Original chat composer DOM, padding, shape and button positions unchanged",
+      "Home and chat snapshots preserve UI element hierarchy, IDs and sibling order",
+      "Hidden data-src voice message cached and original play button works offline"
+    ],
+    "page_errors": []
+  },
+  "snapshot_browser": {
+    "passed": [
+      "eligible rendered page saved under account 1",
+      "rendered pagination persisted after DOM update",
+      "MP4 bytes and metadata committed before ready state",
+      "CSRF values, original scripts and duplicate post IDs excluded",
+      "offline navigation restores all loaded posts in order",
+      "saved MP4 plays and seeks offline; byte range/416 checks pass",
+      "visited Pwanimate conversation opens offline",
+      "saved route history/back navigation works",
+      "unvisited route resumes saved content without a blocking page",
+      "message transactions commit in order and group/direct IDs stay isolated",
+      "conversation opens offline with current and older loaded messages",
+      "saved group gateway opens the canonical conversation offline",
+      "saved conversation automatically resumes online and receives new messages",
+      "notification history and loaded pagination open offline",
+      "saved notifications automatically refresh when online",
+      "late pre-switch response cannot restore the previous account",
+      "account switch purges account 1 snapshots and message databases",
+      "logout prevents reopening prior managed pages",
+      "successful feed refresh retains authorized earlier pages",
+      "server 503 refresh preserves last good content",
+      "interrupted download never creates ready media metadata",
+      "release config starts from bundled assets"
+    ],
+    "page_errors": []
+  },
+  "android_device": {
+    "model": "TECNO BD4j",
+    "android_version": "11",
+    "test_app": "com.vasto.app.offlinecheck",
+    "internet_permission": false,
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "cases": [
+      "useAppContext",
+      "savedOriginalPageOpensWithoutInternetPermission",
+      "purgeRemovesAccountAndDownloads",
+      "messagesAreEncryptedAndSurviveReopen",
+      "hiddenMessagesCannotBeRestoredByHistoryRefresh",
+      "interruptedTransactionDoesNotCommitMessage"
+    ]
+  },
+  "offline_contract_tests": {
+    "passed": 15
+  },
+  "debug_build_helper_tests": {
+    "passed": 2
+  },
+  "android_debug_build": "passed",
+  "django_system_check": "passed",
+  "production_deployed": false,
+  "not_verified": [
+    "Production CDN/session rollout",
+    "All streaming/encrypted video formats",
+    "Storage-pressure behavior on multiple devices"
+  ],
+  "localhost_followup": {
+    "offline_contract_tests": 15,
+    "debug_build_helper_tests": 2,
+    "layout_browser_checks": 8,
+    "android_device_recheck": "Not run: no online device available; android_device results above precede localhost follow-up",
+    "requires_android_rebuild": true,
+    "phone_installed": false,
+    "snapshot_browser_checks": 22,
+    "android_debug_build": "passed"
+  },
+  "navigation_dom_followup": {
+    "checks": [
+      "Top and bottom mobile navigation remain stable during Home-to-conversation-list transition",
+      "One page request without fallback document navigation",
+      "Conversation list UI structure and geometry match direct navigation",
+      "Native device classes preserved while empty incoming page classes are applied"
+    ],
+    "device_verified": false
+  }
+}

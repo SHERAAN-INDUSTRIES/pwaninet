@@ -87,10 +87,14 @@ class PrivateHistoryAccessTests(unittest.TestCase):
         models = SimpleNamespace(Conversation=conversation, Message=Mock())
         serializers = SimpleNamespace(MessageSerializer=Mock())
         request = SimpleNamespace(method='POST', user=user, body=b'{"conversation":4,"ids":[1,2]}')
-        with patch.dict(sys.modules, {'messaging.models': models, 'messaging.serializers': serializers}):
+        accessible = Mock()
+        accessible.return_value.filter.return_value.exists.return_value = False
+        chat_service = SimpleNamespace(accessible_conversations=accessible)
+        with patch.dict(sys.modules, {'messaging.models': models, 'messaging.serializers': serializers, 'groups.services.chat_service': chat_service}):
             response = offline_message_access(request)
         self.assertEqual(response.status_code, 403)
-        conversation.objects.filter.assert_called_once_with(pk=4, members__user=user)
+        accessible.assert_called_once_with(user)
+        accessible.return_value.filter.assert_called_once_with(pk=4)
         serializers.MessageSerializer.assert_not_called()
 
 if __name__ == '__main__':

@@ -36,6 +36,8 @@ class SiteContentService:
         """Get content by topic. Tries exact match first, then partial."""
         cls._ensure_loaded()
         topic = topic.lower().strip()
+        topic = {'spark':'pwanimate','vasto':'about','fasto':'about','pwaninet':'about',
+                 'founder':'about','creator':'about','features':'pwanimate'}.get(topic,topic)
         if not topic:
             return None
         if topic in _cache:

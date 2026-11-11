@@ -24,6 +24,16 @@ export class MessageService {
         this.pendingAckTimers = new Map();
         this.restFallbacksInFlight = new Set();
         this._isLoadingOlder = false;
+        const refreshCallHistory = event => {
+            const call = event.detail;
+            if (!call || (event.type === 'pwani:call-update' && !['ended', 'cancelled', 'declined', 'missed'].includes(call.status))) return;
+            const state = store.getState();
+            if (Number(state.conversationId || state.activeConversationId) === Number(call.conversation_id)) {
+                this.syncMissedMessages();
+            }
+        };
+        window.addEventListener('pwani:call-update', refreshCallHistory);
+        window.addEventListener('pwani:call-history-ready', refreshCallHistory);
     }
 
     /**
@@ -266,6 +276,7 @@ export class MessageService {
         if (type === 'media_group') return 'media_group';
         if (type === 'emoji') return 'emoji';
         if (type === 'system') return 'system';
+        if (type === 'voice_call') return 'voice_call';
         if (type === 'link') return 'link';
         return 'text';
     }
@@ -276,7 +287,8 @@ export class MessageService {
         console.log(`[MESSAGE_SERVICE] Raw data - link_url:`, raw.link_url, 'link_type:', raw.link_type, 'attachment_url:', raw.attachment_url);
         
         // Build metadata with attachment information if present
-        const metadata = raw.metadata || {};
+        const metadata = { ...(raw.metadata || {}) };
+        if (raw.voice_call) metadata.voice_call = raw.voice_call;
         if (raw.attachment_url) {
             metadata.url = raw.attachment_url;
             metadata.type = raw.attachment_type || 'file';

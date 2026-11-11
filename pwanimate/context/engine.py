@@ -132,7 +132,7 @@ class ContextEngine:
             'timetable', 'schedule', 'class', 'lecture', 'revision',
             'free time', 'free slot', 'study slot', 'today', 'tomorrow',
             'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
-            'plan', 'exam', 'session', 'when do i have'
+            'sunday', 'plan', 'exam', 'session', 'when do i have'
         ]
         if (
             intent in [IntentCategory.Vasto_KNOWLEDGE, IntentCategory.MIXED, IntentCategory.GENERAL_KNOWLEDGE]
@@ -311,14 +311,16 @@ class ContextEngine:
             explicit_resources = list(request.explicit_resources)
         
         # Process retrieved results
-        raw_results = request.get_raw_results()
+        raw_results = request.get_raw_results() if query else []
+        budget_state = {}
         retrieved_items = []
         
         if raw_results:
             retrieved_items = self._process_retrieved_results(
                 raw_results,
                 request,
-                grounding_mode
+                grounding_mode,
+                budget_state=budget_state,
             )
         
         # Prioritize explicit resources over retrieved context
@@ -336,7 +338,7 @@ class ContextEngine:
         total_items = len(ordered_items)
         estimated_tokens = sum(item.estimated_tokens for item in ordered_items)
         total_characters = sum(len(item.content) for item in ordered_items)
-        truncated = any(item.truncated for item in ordered_items)
+        truncated = budget_state.get('truncated', False) or any(item.truncated for item in ordered_items)
         
         # Collect source counts
         source_counts = {}
@@ -389,7 +391,8 @@ class ContextEngine:
         self,
         raw_results: List[RetrievalResult],
         request: ContextRequest,
-        grounding_mode: GroundingMode
+        grounding_mode: GroundingMode,
+        budget_state: Optional[dict] = None,
     ) -> List[ContextItem]:
         """
         Process retrieved results into ContextItems with budgeting and deduplication.
@@ -525,6 +528,8 @@ class ContextEngine:
             if len(selected_items) >= request.max_results:
                 break
 
+        if budget_state is not None:
+            budget_state['truncated'] = package_truncated
         return selected_items
 
     def build_from_response(

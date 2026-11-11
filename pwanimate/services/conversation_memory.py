@@ -37,6 +37,10 @@ class ConversationMemoryService:
     ) -> List[Dict[str, Any]]:
         if not user or not getattr(user, "is_authenticated", False):
             return []
+        from pwanimate.services.study_memory import StudyMemoryService
+        pref = StudyMemoryService.preference(user)
+        if not pref.enabled:
+            return []
         query = str(query or "").strip()[: cls.MAX_QUERY_LENGTH]
         if not query:
             return []
@@ -44,9 +48,12 @@ class ConversationMemoryService:
         limit = max(1, min(int(limit or cls.DEFAULT_LIMIT), 12))
         qs = PwanimateMessageEmbedding.objects.filter(
             user=user,
+            message__conversation__user=user,
             status="completed",
             embedding__isnull=False,
         ).select_related("message", "message__conversation")
+        if pref.reset_at:
+            qs = qs.filter(message__created_at__gt=pref.reset_at)
         if exclude_conversation_id:
             qs = qs.exclude(message__conversation_id=exclude_conversation_id)
 
@@ -56,7 +63,7 @@ class ConversationMemoryService:
             vector = provider.embed_query(query)
             semantic_qs = qs.filter(embedding_model=model_name).annotate(
                 distance=CosineDistance("embedding", vector)
-            ).filter(distance__isnull=False).order_by("distance")[:limit]
+            ).filter(distance__isnull=False, distance__lt=0.45).order_by("distance")[:limit]
             results = [
                 cls._serialize(
                     record.message,
@@ -102,6 +109,12 @@ class ConversationMemoryService:
         ).filter(filters).select_related("conversation").order_by("-created_at")
         if exclude_conversation_id:
             messages_qs = messages_qs.exclude(conversation_id=exclude_conversation_id)
+        from pwanimate.services.study_memory import StudyMemoryService
+        pref = StudyMemoryService.preference(user)
+        if not pref.enabled:
+            return []
+        if pref.reset_at:
+            messages_qs = messages_qs.filter(created_at__gt=pref.reset_at)
         messages = messages_qs[: cls.MAX_FALLBACK_CANDIDATES]
 
         scored = []

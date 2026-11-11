@@ -14,8 +14,10 @@ Connects:
 """
 
 import logging
+from functools import wraps
 from typing import Dict, Any, Optional
 from celery import shared_task
+from celery.exceptions import Retry
 from django.db import transaction
 
 from documents.models import Document, DocumentVersion, DocumentFile
@@ -32,12 +34,48 @@ from ..ingestion.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _queue_embeddings(task, version_id):
+    def dispatch():
+        from .embeddings import embed_document_version
+        try:
+            embed_document_version.delay(version_id=version_id)
+        except Exception as exc:
+            # A retry finds the committed chunks and resumes embedding dispatch.
+            raise task.retry(exc=exc)
+    transaction.on_commit(dispatch)
+
+
+def _track_ingestion_outcome(function):
+    @wraps(function)
+    def tracked(self, version_id, *args, **kwargs):
+        from pwanimate.services.reconciliation import DocumentReconciliationService, INGEST_TASK_LOCK_PREFIX
+        service = DocumentReconciliationService()
+        try:
+            result = function(self, version_id, *args, **kwargs)
+            try:
+                status = result.get('status') if isinstance(result, dict) else None
+                if status in {'unsupported_format', 'unreadable_file', 'extraction_failed', 'chunking_failed', 'empty_chunks'}:
+                    service.record_attempt_failure(version_id)
+                elif status in {'success', 'already_ingested'}:
+                    service.clear_attempt_failure(version_id)
+            except Exception:
+                logger.exception('Could not record ingestion health for version %s', version_id)
+            return result
+        finally:
+            try:
+                service.release_dispatch_lock(INGEST_TASK_LOCK_PREFIX, version_id)
+            except Exception:
+                logger.exception('Could not release ingestion dispatch lock for version %s', version_id)
+    return tracked
+
+
 @shared_task(
     bind=True,
     max_retries=3,
     default_retry_delay=60,
     name='pwanimate.tasks.ingestion.ingest_document_version'
 )
+@_track_ingestion_outcome
 def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[str, Any]:
     """
     Ingests a specific DocumentVersion into structured, inactive DocumentChunks.
@@ -69,6 +107,7 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
         logger.info(
             f"[PWANIMATE-INGESTION] DocumentVersion {version_id} already has {existing_count} chunks. Skipping re-ingestion."
         )
+        _queue_embeddings(self, version_id)
         return {
             'status': 'already_ingested',
             'document_id': doc.id,
@@ -76,7 +115,8 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
             'chunk_count': existing_count,
         }
 
-    primary_file = version.files.first()
+    source_files = list(version.files.order_by("id"))
+    primary_file = source_files[0] if source_files else None
 
     if not primary_file:
         logger.warning(f"[PWANIMATE-INGESTION] DocumentVersion {version_id} has no attached files, skipping.")
@@ -90,7 +130,9 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
     # Phase 2B: Structural Extraction
     try:
         logger.info(f"[PWANIMATE-INGESTION] Extracting structural content from file {primary_file.id} ({primary_file.original_filename})")
-        extracted_doc = extract_document(primary_file)
+        extracted_files = []
+        for primary_file in source_files:
+            extracted_files.append((primary_file, extract_document(primary_file)))
     except UnsupportedFormatError as e:
         logger.info(f"[PWANIMATE-INGESTION] Unsupported format for file {primary_file.id}: {e}")
         return {
@@ -124,8 +166,15 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
 
     # Phase 2D: Structure-Aware Chunking
     try:
-        logger.info(f"[PWANIMATE-INGESTION] Chunking extracted elements ({len(extracted_doc.elements)} elements)")
-        chunks_data = chunk_document(extracted_doc)
+        chunks_data = []
+        element_count = sum(len(extracted.elements) for _, extracted in extracted_files)
+        logger.info("[PWANIMATE-INGESTION] Chunking %d elements across %d files", element_count, len(extracted_files))
+        for source_file, extracted_doc in extracted_files:
+            for chunk in chunk_document(extracted_doc):
+                chunk.chunk_index = len(chunks_data)
+                chunk.metadata = {**(chunk.metadata or {}), 'document_file_id': source_file.pk,
+                                  'source_filename': source_file.original_filename}
+                chunks_data.append(chunk)
     except Exception as e:
         logger.error(f"[PWANIMATE-INGESTION] Chunking failed for version {version_id}: {e}", exc_info=True)
         return {
@@ -161,7 +210,11 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
             # Lock version row to serialize concurrent ingestion requests
             locked_version = DocumentVersion.objects.select_for_update().get(id=version_id)
 
-            if force or locked_version.chunks.exists():
+            if not force and locked_version.chunks.exists():
+                _queue_embeddings(self, version_id)
+                return {'status': 'already_ingested', 'document_id': doc.id,
+                        'version_id': version_id, 'chunk_count': locked_version.chunks.count()}
+            if force:
                 logger.info(f"[PWANIMATE-INGESTION] Purging existing chunks for version {version_id} prior to re-creation")
                 DocumentChunk.objects.filter(document_version=locked_version).delete()
 
@@ -176,23 +229,27 @@ def ingest_document_version(self, version_id: int, force: bool = False) -> Dict[
             f"document {doc.id} (version {version_id}). Status: pending embedding."
         )
 
-        # Trigger Phase 2F embedding generation asynchronously
+        # Auto-tag untagged documents so unit-scoped retrieval and academic
+        # ranking can see them. Advisory only — never fail ingestion on it.
         try:
-            from .embeddings import embed_document_version
-            embed_document_version.delay(version_id=version_id)
-        except Exception as embed_err:
-            logger.warning(
-                f"[PWANIMATE-INGESTION] Failed to dispatch embedding task for version {version_id}: {embed_err}"
-            )
+            from documents.academic.services import DocumentAcademicLinkService
+            DocumentAcademicLinkService.auto_link_document(doc)
+        except Exception:
+            logger.warning("[PWANIMATE-INGESTION] Auto academic-unit tagging failed for document %s", doc.id, exc_info=True)
+
+        _queue_embeddings(self, version_id)
 
         return {
             'status': 'success',
             'document_id': doc.id,
             'version_id': version_id,
             'file_id': primary_file.id,
-            'element_count': len(extracted_doc.elements),
+            'element_count': element_count,
+            'file_ids': [file.pk for file in source_files],
             'chunk_count': len(created_chunks),
         }
+    except Retry:
+        raise
     except Exception as e:
         logger.error(f"[PWANIMATE-INGESTION] Database persistence error for version {version_id}: {e}", exc_info=True)
         raise self.retry(exc=e)

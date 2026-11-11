@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "390px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+    "390px dark: actual template and client; memory loaded; reminder form; no horizontal overflow",
+    "1280px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+    "320px light: actual template and client; memory loaded; reminder form; no horizontal overflow",
+    "Reminder form submits correct title, aware timestamp, timezone, and resets after success"
+  ],
+  "page_errors": [],
+  "data": "API fixtures; no real notification was sent"
+}

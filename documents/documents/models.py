@@ -478,9 +478,13 @@ class DocumentFile(models.Model):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.storage_private:
-            from documents.private_storage import get_private_resource_storage
-            self.file.storage = get_private_resource_storage()
+
+        # Avoid fetching deferred fields during model initialization.
+        # Django's deletion collector may construct partial instances.
+        if "storage_private" in self.__dict__ and "file" in self.__dict__:
+            if self.__dict__["storage_private"]:
+                from documents.private_storage import get_private_resource_storage
+                self.file.storage = get_private_resource_storage()
     
     def __str__(self):
         return self.original_filename

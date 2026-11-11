@@ -95,12 +95,10 @@ def embed_document_version(
     # By default, process chunks that are 'pending' or 'failed', or whose model does not match active_model
     chunk_qs = version.chunks.exclude(content='').order_by('chunk_index')
     if not force:
-        chunk_qs = chunk_qs.filter(
-            models_to_embed := (
-                ~DocumentChunk.objects.filter(embedding_status='completed', embedding_model=active_model)
-                .values('id')
-            ).query
-        ) if False else chunk_qs.exclude(embedding_status='completed', embedding_model=active_model)
+        chunk_qs = chunk_qs.exclude(
+            embedding_status='completed', embedding_model=active_model,
+            embedding__isnull=False, is_active=True,
+        )
 
     chunks_to_embed = list(chunk_qs)
 
@@ -119,10 +117,19 @@ def embed_document_version(
         f"using model '{active_model}' (batch size: {batch_size}, dim: {expected_dim})"
     )
 
+    # Prepend academic provenance (unit codes/names, level) to the embedded
+    # text so generically-titled chunks ("Week 3 notes") still match queries
+    # like "linear algebra". Stored chunk.content is left untouched.
+    try:
+        from documents.academic.services import document_academic_context
+        academic_prefix = document_academic_context(version.document)
+    except Exception:
+        academic_prefix = ''
     total_embedded = 0
 
     for batch in _chunk_batch_generator(chunks_to_embed, batch_size):
-        texts = [c.content for c in batch]
+        texts = [f"{academic_prefix} {c.content}" if academic_prefix else c.content
+                 for c in batch]
 
         try:
             vectors = provider.embed_texts(texts, task_type="RETRIEVAL_DOCUMENT")
@@ -196,6 +203,10 @@ def embed_document_version(
                         chunk.metadata = {}
                     dim_found = len(vec) if vec else 0
                     chunk.metadata['last_embedding_error'] = f"Vector dimension mismatch: expected {expected_dim}, got {dim_found}"
+
+            if academic_prefix:
+                for c in batch:
+                    c.metadata = {**(c.metadata or {}), 'academic_context': academic_prefix}
 
             DocumentChunk.objects.bulk_update(
                 batch,

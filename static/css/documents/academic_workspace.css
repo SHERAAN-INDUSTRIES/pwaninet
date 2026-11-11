@@ -151,7 +151,11 @@ body.vdw-active #navigation-progress { display: none !important; }
 
 /* ══════════ Floating topbar (lg-topbar style) ══════════ */
 .vdw-topbar {
-  position: fixed; top: 12px; left: 12px; right: 12px; z-index: 1040;
+  position: fixed;
+  top: calc(12px + var(--vasto-safe-area-top, env(safe-area-inset-top, 0px)));
+  left: calc(12px + var(--vasto-safe-area-left, env(safe-area-inset-left, 0px)));
+  right: calc(12px + var(--vasto-safe-area-right, env(safe-area-inset-right, 0px)));
+  z-index: 1040;
   min-height: var(--vdw-topbar-h); border-radius: 24px;
   background: var(--vdw-topbar-bg);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -293,11 +297,11 @@ body:not(.vdw-left-collapsed) .vdw-rail-strip { display: none; }
 /* ══════════ Center ══════════ */
 .vdw-center {
   flex: 1 1 auto; min-width: 0; min-height: 0;
-  overflow-y: auto; overflow-x: hidden;
+  overflow-y: auto; overflow-x: auto;
   padding: 6px 22px 48px; position: relative;
   scrollbar-width: thin;
 }
-.vdw-center-inner { max-width: 1180px; margin: 0 auto; }
+.vdw-center-inner { max-width: 100%; width: 100%; margin: 0; }
 .vdw-section { display: none; animation: vdw-fade .18s ease; }
 .vdw-section.on { display: block; }
 @keyframes vdw-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -364,7 +368,365 @@ body:not(.vdw-left-collapsed) .vdw-rail-strip { display: none; }
 /* ══════════ Week grid ══════════ */
 .vdw-tt-meta { font-size: 0.74rem; color: var(--text-secondary, #64748b); display: flex; gap: 12px; flex-wrap: wrap; }
 .vdw-tt-meta b { color: var(--text-dark, #0f172a); }
-.vdw-grid-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.vdw-grid-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+
+/* ── Horizontal Timetable: Days Vertical (Rows), Time Horizontal (Columns) ── */
+.vdw-h-timetable {
+  min-width: max-content; /* allow the timetable to expand horizontally */
+  width: 100%;
+}
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--card-bg, #ffffff);
+  border-radius: var(--vdw-radius, 12px);
+}
+
+.vdw-h-headrow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid var(--border, #e2e8f0);
+  background: var(--background, #f8fafc);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.vdw-h-corner {
+  width: 130px;
+  min-width: 130px;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  font-size: 0.70rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #64748b);
+  display: flex;
+  align-items: center;
+  border-right: 2px solid var(--border, #e2e8f0);
+  background: var(--background, #f8fafc);
+  position: sticky;
+  left: 0;
+  z-index: 12;
+}
+
+.vdw-h-time-track {
+  position: relative;
+  height: 38px;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.vdw-h-time-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+
+.vdw-h-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.vdw-h-dayrow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  min-height: 110px;
+  transition: background-color 0.15s;
+}
+
+.vdw-h-dayrow:last-child {
+  border-bottom: none;
+}
+
+.vdw-h-dayrow:hover {
+  background-color: rgba(37, 99, 235, 0.015);
+}
+
+.vdw-h-dayrow.today {
+  background-color: rgba(37, 99, 235, 0.025);
+}
+
+.vdw-h-daylabel {
+  width: 130px;
+  min-width: 130px;
+  flex-shrink: 0;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-right: 2px solid var(--border, #e2e8f0);
+  background: var(--card-bg, #ffffff);
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  box-shadow: 2px 0 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.vdw-h-dayrow.today .vdw-h-daylabel {
+  border-left: 3px solid var(--primary, #2563eb);
+}
+
+.vdw-h-dayname {
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: var(--text-dark, #0f172a);
+  line-height: 1.2;
+}
+
+.vdw-h-dayshort {
+  display: none;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: var(--text-dark, #0f172a);
+}
+
+.vdw-h-today-pill {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 4px;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.vdw-h-session-badge {
+  font-size: 0.65rem;
+  color: var(--text-secondary, #64748b);
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+.vdw-h-slots-track {
+  position: relative;
+  min-height: 110px;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.vdw-h-hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: repeating-linear-gradient(to bottom, var(--border, #e2e8f0) 0 4px, transparent 4px 8px);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.vdw-h-empty-track {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary, #64748b);
+  font-size: 0.75rem;
+  font-style: italic;
+  opacity: 0.55;
+  padding: 20px;
+}
+
+/* ── Modern sequence block cards (Horizontal Orientation) ── */
+.vdw-h-slot {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  z-index: 4;
+  border-radius: 10px;
+  background-color: var(--ubg);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  line-height: 1.3;
+}
+
+.vdw-h-slot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.09);
+  z-index: 6;
+}
+
+.vdw-h-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.vdw-h-slot-code {
+  font-weight: 900;
+  font-size: 0.84rem;
+  color: var(--uac, var(--text-dark, #0f172a));
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.vdw-h-slot-type {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(0, 0, 0, 0.07);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-secondary, #475569);
+  flex-shrink: 0;
+}
+
+.vdw-h-slot-time {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.vdw-h-slot-name {
+  font-weight: 700;
+  font-size: 0.76rem;
+  color: var(--text-dark, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0;
+}
+
+.vdw-h-slot-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.70rem;
+  color: var(--text-secondary, #64748b);
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.vdw-h-slot-lecturer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--text-dark, #1e293b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.vdw-h-slot-venue {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 800;
+  color: var(--primary, #2563eb);
+  background: rgba(37, 99, 235, 0.09);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.vdw-h-slot .vdw-slot-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary, #64748b);
+  font-size: 0.72rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+  padding: 3px 5px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.vdw-h-slot:hover .vdw-slot-delete {
+  opacity: 0.85;
+}
+
+.vdw-h-slot .vdw-slot-delete:hover {
+  color: #dc3545;
+  background: rgba(255, 255, 255, 1);
+}
+
+/* Horizontal now-line */
+.vdw-h-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  z-index: 7;
+  pointer-events: none;
+}
+
+.vdw-h-now-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #ffffff;
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .vdw-h-headrow,
+[data-theme="dark"] .vdw-h-corner {
+  background: var(--background, #18191a);
+}
+
+[data-theme="dark"] .vdw-h-daylabel {
+  background: var(--card-bg, #242526);
+}
+
+[data-theme="dark"] .vdw-h-slot {
+  background-color: var(--ubg-dark);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .vdw-h-slot-name {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .vdw-h-slot-lecturer {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .vdw-h-slot-type {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .vdw-h-now-dot {
+  border-color: #242526;
+}
+
+/* ── Legacy vertical week grid rules (for compatibility) ── */
 .vdw-week-grid { min-width: 700px; }
 .vdw-grid-headrow { display: grid; grid-template-columns: 52px repeat(6, 1fr); border-bottom: 1px solid var(--border, #e2e8f0); }
 .vdw-gutter-head { padding: 8px 6px; }
@@ -548,7 +910,7 @@ body.vdw-ctx-collapsed .vdw-ctx { display: none; }
 .vdw-free-dur { margin-left: auto; font-size: 0.63rem; font-weight: 600; color: var(--text-secondary, #64748b); }
 
 /* reopen pill (only when ctx rail is closed) */
-.vdw-ctx-reopen { position: fixed; top: calc(var(--vdw-topbar-h) + 20px); right: 16px; z-index: 120; display: none; }
+.vdw-ctx-reopen { position: fixed; top: calc(var(--vdw-topbar-h) + 20px + var(--vasto-safe-area-top, env(safe-area-inset-top, 0px))); right: 16px; z-index: 120; display: none; }
 body.vdw-ctx-collapsed .vdw-ctx-reopen { display: block; }
 
 /* avatar chip in topbar — real student profile photo (or app icon fallback) */
@@ -630,15 +992,35 @@ body.vdw-ctx-open .vdw-bottom-nav { opacity: 0; pointer-events: none; }
   .vdw-stat:nth-child(2) { border-right: none; }
   .vdw-stat:nth-child(1), .vdw-stat:nth-child(2) { border-bottom: 1px solid var(--border, #e2e8f0); }
 
-  /* The landscape week grid lives in the card now: fit width perfectly,
-     allow internal vertical overflow — tapping it opens the fullscreen
-     overlay (academic_workspace.js). */
-  .vdw-grid-scroll {
+  /* The timetable fills the space between the top pill and the bottom nav:
+     the section becomes a flex column and the grid scrolls both axes inside
+     it (the .vdw-h-timetable keeps its 860px+ min-width for horizontal pan). */
+  .vdw-center:has(.vdw-section.on[data-vdw-section="timetable"]) {
+    display: flex; flex-direction: column;
+  }
+  .vdw-center:has(.vdw-section.on[data-vdw-section="timetable"]) > .vdw-center-inner {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  .vdw-section.on[data-vdw-section="timetable"] {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  .vdw-section.on[data-vdw-section="timetable"] > .vdw-page-head { flex: 0 0 auto; }
+  .vdw-section.on[data-vdw-section="timetable"] #tt-card {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  .vdw-section.on[data-vdw-section="timetable"] .vdw-card-head,
+  .vdw-section.on[data-vdw-section="timetable"] .vdw-card-foot { flex: 0 0 auto; }
+  .vdw-section.on[data-vdw-section="timetable"] .vdw-grid-scroll {
+    flex: 1 1 auto; min-height: 0;
     display: block;
-    overflow-x: hidden; overflow-y: auto;
-    max-height: min(66vh, 560px);
-    -webkit-overflow-scrolling: touch; touch-action: pan-y;
-    cursor: pointer;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    scrollbar-width: none;
+    cursor: default;
+  }
+  .vdw-section.on[data-vdw-section="timetable"] .vdw-grid-scroll::-webkit-scrollbar {
+    display: none;
   }
   .vdw-week-grid { min-width: 0; }
   .vdw-grid-headrow, .vdw-grid-body { grid-template-columns: 30px repeat(6, minmax(0, 1fr)); }
@@ -683,4 +1065,4 @@ body.vdw-ctx-open .vdw-bottom-nav { opacity: 0; pointer-events: none; }
   .vdw-sheet-backdrop { display: none !important; }
   #vdwTtOverlay, .vdw-tt-overlay-hint { display: none !important; }
 }
-@media (max-width: 560px) { .vdw-topbar { left: 8px; right: 8px; padding: 0 10px; } }
+@media (max-width: 560px) { .vdw-topbar { left: calc(8px + var(--vasto-safe-area-left, env(safe-area-inset-left, 0px))); right: calc(8px + var(--vasto-safe-area-right, env(safe-area-inset-right, 0px))); padding: 0 10px; } }

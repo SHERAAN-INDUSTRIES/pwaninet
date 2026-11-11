@@ -1,7 +1,7 @@
 """
 Celery background task: AI-powered timetable image processing.
 
-Separates the slow Gemini Vision call from the upload request so the
+Separates the slow vision extraction call from the upload request so the
 student gets an instant response while AI extracts the schedule.
 
 Queue: docs_queue (shared with document processing pipeline)
@@ -26,7 +26,7 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
     """
     Background task that:
       1. Reads the saved timetable image from storage.
-      2. Calls Gemini Vision to extract the weekly schedule JSON.
+      2. Calls the configured vision provider to extract the weekly schedule JSON.
       3. Computes free study slots.
       4. Marks the timetable ACTIVE and saves schedule_data.
 
@@ -35,7 +35,7 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
     a meaningful error state instead of hanging at "Processing".
     """
     from documents.academic.models import ProgrammeTimetable, TimetableStatus
-    from documents.academic.timetable_service import TimetableExtractionService, compute_free_slots
+    from documents.academic.timetable_service import TimetableExtractionService, compute_free_slots, validate_schedule_data
 
     # ── 1. Fetch record ───────────────────────────────────────────────────────
     try:
@@ -83,15 +83,19 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
         _mark_failed(timetable)
         raise self.retry(exc=exc)
 
-    # ── 4. Call Gemini Vision ─────────────────────────────────────────────────
+    # ── 4. Call configured vision provider ────────────────────────────────────
     try:
         programme_name = timetable.programme.name if timetable.programme else ''
         level_name = timetable.academic_level.name if timetable.academic_level else ''
         institution_name = timetable.institution.name if timetable.institution else ''
+        chain = TimetableExtractionService._resolve_ocr_chain()
+        chain_label = ' -> '.join(
+            f"{c.get('provider')}:{c.get('model')}" for c in chain
+        ) or 'none'
 
         logger.info(
-            '[TIMETABLE-TASK] Starting Gemini Vision extraction for timetable(id=%s) — %s %s.',
-            timetable_id, programme_name, level_name,
+            '[TIMETABLE-TASK] Starting vision extraction (chain=%s) for timetable(id=%s) — %s %s.',
+            chain_label, timetable_id, programme_name, level_name,
         )
 
         schedule_data = TimetableExtractionService.extract_from_image(
@@ -105,8 +109,10 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
         if not schedule_data or not isinstance(schedule_data, dict):
             raise ValueError('extract_from_image returned empty or non-dict result.')
 
+        schedule_data = validate_schedule_data(schedule_data)
+
         # Ensure free_slots are present (extract_from_image already computes them,
-        # but be defensive in case the Gemini fallback path was taken).
+        # but be defensive in case a fallback path was taken).
         if 'free_slots' not in schedule_data:
             schedule_data['free_slots'] = compute_free_slots(
                 schedule_data.get('weekly_schedule', [])
@@ -121,17 +127,8 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
         raise self.retry(exc=exc)
 
     # ── 5. Persist extracted schedule and activate ────────────────────────────
-    timetable.schedule_data = schedule_data
-    timetable.status = TimetableStatus.ACTIVE
-    timetable.is_active = True
-    timetable.raw_extracted_text = schedule_data.get('raw_text', '')
-    timetable.save(update_fields=[
-        'schedule_data',
-        'status',
-        'is_active',
-        'raw_extracted_text',
-        'updated_at',
-    ])
+    from documents.academic.timetable_service import ProgrammeTimetableManager
+    ProgrammeTimetableManager.activate_timetable(timetable, schedule_data)
 
     slot_count = len(schedule_data.get('weekly_schedule', []))
     free_count = len(schedule_data.get('free_slots', []))
@@ -139,6 +136,25 @@ def process_timetable_image_task(self, timetable_id: int) -> dict:
         '[TIMETABLE-TASK] ✓ Timetable(id=%s) activated — %d lecture slots, %d free slots.',
         timetable_id, slot_count, free_count,
     )
+
+    # Notify the uploader — processing is fully background, so this push/in-app
+    # notification is how they learn the timetable is ready.
+    try:
+        from notifications.events import publish_event, EventTypes, EventSources, EventActions
+        publish_event(
+            event_type=EventTypes.DOCUMENTS_TIMETABLE_READY.value,
+            source=EventSources.DOCUMENTS.value,
+            action=EventActions.COMPLETED.value,
+            actor=timetable.uploaded_by,
+            target_type='ProgrammeTimetable',
+            target_id=str(timetable_id),
+            metadata={
+                'timetable_title': timetable.title,
+                'slot_count': slot_count,
+            },
+        )
+    except Exception as notif_exc:
+        logger.warning('[TIMETABLE-TASK] Failed to publish ready notification: %s', notif_exc)
 
     return {
         'success': True,

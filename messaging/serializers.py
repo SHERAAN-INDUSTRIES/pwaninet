@@ -100,6 +100,7 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer for messages."""
     sender = ChatUserSerializer(read_only=True)
+    voice_call = serializers.SerializerMethodField()
     reactions = MessageReactionSerializer(many=True, read_only=True)
     reply_to_details = serializers.SerializerMethodField()
     attachment_url = serializers.SerializerMethodField()
@@ -119,9 +120,19 @@ class MessageSerializer(serializers.ModelSerializer):
             'reply_to_details', 'attachment_url', 'read_status', 'status', 'created_at', 'edited_at', 'is_deleted',
             'link_url', 'link_title', 'link_description', 'link_image', 'link_type',
             'global_caption', 'message_type', 'attachments', 'link_preview',
-            'is_voice_note', 'file_size', 'file_name', 'is_forwarded'
+            'is_voice_note', 'file_size', 'file_name', 'is_forwarded', 'voice_call'
         ]
         read_only_fields = ['id', 'created_at', 'edited_at', 'is_encrypted', 'status']
+
+    def get_voice_call(self, obj):
+        if obj.message_type != 'voice_call':
+            return None
+        call = getattr(obj, 'voice_call_record', None)
+        if call is None:
+            return None
+        return {'id': str(call.pk), 'status': call.status,
+                'started_at': call.created_at.isoformat(),
+                'ended_at': call.ended_at.isoformat() if call.ended_at else None}
 
     def get_is_forwarded(self, obj):
         """Determine if this message was forwarded."""
@@ -389,6 +400,8 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         conversation = attrs['conversation']
         if not can_access_conversation(conversation, self.context['request'].user):
             raise serializers.ValidationError('Conversation unavailable.')
+        if attrs.get('message_type') == 'voice_call':
+            raise serializers.ValidationError('Call history is created by the calling service.')
         reply = attrs.get('reply_to')
         if reply and reply.conversation_id != conversation.pk:
             raise serializers.ValidationError('Reply must belong to this conversation.')
@@ -410,6 +423,11 @@ class MessageAttachmentCreateSerializer(serializers.ModelSerializer):
 
 
 class MessageUpdateSerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        if self.instance.message_type == 'voice_call':
+            raise serializers.ValidationError('Call history cannot be edited.')
+        return attrs
+
     """Serializer for updating messages."""
     class Meta:
         model = Message

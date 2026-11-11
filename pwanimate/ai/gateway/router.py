@@ -17,7 +17,7 @@ from pwanimate.ai.gateway.types import LLMRequest
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare", "mock"}
+SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare", "ollama", "mock"}
 
 
 class LLMRouter:
@@ -60,6 +60,9 @@ class LLMRouter:
         elif normalized_name == "cloudflare":
             from pwanimate.ai.providers.cloudflare import CloudflareLLMProvider
             provider = CloudflareLLMProvider()
+        elif normalized_name == "ollama":
+            from pwanimate.ai.providers.ollama import OllamaOCRProvider
+            provider = OllamaOCRProvider()
         elif normalized_name == "mock":
             from pwanimate.ai.providers.mock import MockLLMProvider
             provider = MockLLMProvider()

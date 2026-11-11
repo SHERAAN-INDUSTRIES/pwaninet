@@ -369,7 +369,7 @@
                     </div>
 
                     <div class="oauth-buttons">
-                        <a href="{{ workspace_authorization_url|default:'#' }}" class="btn btn-primary btn-authorize" {% if not workspace_authorization_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
+                        <a href="{{ workspace_app_url|default:'#' }}" class="btn btn-primary btn-authorize" target="_blank" rel="noopener" {% if not workspace_app_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
                             Open Workspaces
                         </a>
                         <form method="post" action="{% url 'workspace:revoke' %}" style="flex: 1;">
@@ -473,7 +473,7 @@
                 </div>
 
                 <div class="oauth-buttons">
-                    <a href="{{ workspace_authorization_url|default:'#' }}" class="btn btn-primary btn-authorize" {% if not workspace_authorization_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
+                    <a href="{{ workspace_app_url|default:'#' }}" class="btn btn-primary btn-authorize" target="_blank" rel="noopener" {% if not workspace_app_url %}style="pointer-events: none; opacity: 0.5;"{% endif %}>
                         Open Workspaces
                     </a>
                     <form method="post" action="{% url 'workspace:revoke' %}" style="flex: 1;">

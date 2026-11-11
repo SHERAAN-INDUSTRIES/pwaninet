@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "320px light: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "320px dark: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "390px light: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "390px dark: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "767px light: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "767px dark: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "1024px light: Spark tab and header bell, both navigation positions, no horizontal overflow",
+    "1024px dark: Spark tab and header bell, both navigation positions, no horizontal overflow"
+  ]
+}

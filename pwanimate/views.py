@@ -157,6 +157,7 @@ def _get_settings_context(
         "usage_bars": usage_bars,
         "usage_spark": usage_spark,
         "tier_catalogue": tier_catalogue,
+        "embed_offcanvas": request.headers.get("HX-Target") == "pwanimate-offcanvas-panel",
     }
 
 
@@ -556,3 +557,46 @@ class PwanimateSettingsAboutView(View):
                 return render(request, "pwanimate/settings/partials/about_content.html", context)
             return render(request, "pwanimate/settings/partials/settings_mobile_page.html", context)
         return render(request, "pwanimate/settings/index.html", context)
+
+
+class PwanimateSettingsStudyView(View):
+    section = None
+
+    @method_decorator(login_required)
+    def get(self, request):
+        if self.section is None:
+            return redirect('pwanimate:settings_memory')
+        context = _get_settings_context(request, active_tab=self.section)
+        context['study_scope'] = 'modal' if request.headers.get('HX-Target') == 'pwanimate-settings-modal-body' else 'mobile'
+        context['study_section'] = self.section
+        if request.headers.get('HX-Request'):
+            if request.headers.get('HX-Target') in ('pwanimate-settings-modal-body', 'pwanimate-settings-mobile-content'):
+                return render(request, 'pwanimate/settings/partials/study_content.html', context)
+            return render(request, 'pwanimate/settings/partials/settings_mobile_page.html', context)
+        return render(request, 'pwanimate/settings/index.html', context)
+
+
+class PwanimateSettingsMemoryView(PwanimateSettingsStudyView):
+    section = 'memory'
+
+
+class PwanimateSettingsPlansView(PwanimateSettingsStudyView):
+    section = 'plans'
+
+
+class PwanimateSessionsView(View):
+    """
+    Dedicated study-sessions surface.
+
+    On desktop the same content lives inside #pwanimateSessionsModal on the
+    chat page; on mobile (and for direct/HTMX loads) this renders the
+    settings-style mobile page.
+    """
+
+    @method_decorator(login_required)
+    def get(self, request: HttpRequest) -> HttpResponse:
+        if request.headers.get("HX-Request"):
+            return render(request, "pwanimate/sessions/mobile_page.html", {
+                "embed_offcanvas": request.headers.get("HX-Target") == "pwanimate-offcanvas-panel",
+            })
+        return render(request, "pwanimate/sessions/index.html", {})

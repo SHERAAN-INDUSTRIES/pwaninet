@@ -7,7 +7,7 @@
 {% block body_class %}pwanimate-active{% endblock %}
 
 {% block extra_css %}
-    <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261011-5">
+    <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261109-pause">
 {% endblock %}
 
 {% block header %}
@@ -37,5 +37,5 @@
 
 {% block extra_js %}
     {{ block.super }}
-    <script src="{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261026-1"></script>
+    <script src="{% static 'js/pwanimate/pwanimate-chat.js' %}?v={{ pwanimate_version|default:'2.0.0' }}-20261109-pause"></script>
 {% endblock %}

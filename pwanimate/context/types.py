@@ -536,7 +536,7 @@ class ContextPackage:
                 sections.append(f"{header}\n\n{content_section}\n\n{footer}")
 
         # Legacy items (for backward compatibility)
-        if self.items:
+        if self.items and not (self.explicit_resources or self.retrieved_context):
             blocks = [item.format_data_block() for item in self.items]
             content_section = "\n\n".join(blocks)
             header = f'<retrieved_context total_items="{self.total_items}" estimated_tokens="{self.estimated_tokens}">'

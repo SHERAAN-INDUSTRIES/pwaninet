@@ -21,6 +21,8 @@
     <meta name="twitter:card" content="summary_large_image">
     {% endblock %}
 
+    <link rel="stylesheet" href="{% static 'css/calling/calling.css' %}">
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.webmanifest">
     <script>
@@ -318,7 +320,8 @@
         @media (min-width: 992px) {
             .app-shell-layout {
                 display: grid !important;
-                grid-template-columns: minmax(220px, 1fr) minmax(0, 800px) minmax(220px, 1fr) !important;
+                grid-template-columns: minmax(200px, 240px) minmax(0, 800px) minmax(240px, 340px) !important;
+                justify-content: space-between !important;
                 align-items: start !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -401,7 +404,7 @@
         }
         @media (min-width: 1200px) {
             .app-shell-layout {
-                grid-template-columns: minmax(240px, 1fr) minmax(0, 800px) minmax(240px, 1fr) !important;
+                grid-template-columns: minmax(200px, 240px) minmax(0, 800px) minmax(240px, 340px) !important;
                 padding-top: 20px !important;
             }
             .desktop-left-rail {
@@ -483,6 +486,16 @@
             font-size: 1.1rem !important;
             line-height: 1 !important;
             flex-shrink: 0 !important;
+            /* GPT‑style rounded icon */
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 1.4rem;
+            height: 1.4rem;
+            border-radius: 999px;
+            background: var(--primary, #2563eb);
+            color: #fff !important;
+            padding: 0;
         }
         .postcard-actions .engagement-button span,
         .engagement-button span {
@@ -588,17 +601,17 @@
             position: relative !important;
             top: auto !important;
             z-index: 10 !important;
-            background: var(--header-blur-bg, rgba(255, 255, 255, 0.88)) !important;
-            backdrop-filter: blur(14px) !important;
-            -webkit-backdrop-filter: blur(14px) !important;
-            border-bottom: 1px solid var(--border-soft, #e2e8f0) !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border-bottom: none !important;
             padding: 8px 16px !important;
             width: 100% !important;
             box-sizing: border-box !important;
         }
         [data-theme="dark"] .search-header {
-            background: var(--header-blur-bg, rgba(24, 25, 31, 0.88)) !important;
-            border-bottom-color: var(--border-soft, #3a3b3c) !important;
+            background: transparent !important;
+            border-bottom: none !important;
         }
         .search-inner {
             max-width: 640px;
@@ -628,7 +641,7 @@
             object-fit: cover !important;
             display: block !important;
             border: 2px solid #ffffff !important;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16) !important;
         }
         [data-theme="dark"] .avatar-img {
             border-color: #242526 !important;
@@ -1667,6 +1680,18 @@
             }
         }
 
+        .mobile-notifications-entry {
+            position: relative; align-items: center; justify-content: center;
+            width: 44px; height: 44px; color: var(--text-dark);
+            text-decoration: none; border-radius: 50%; font-size: 1.2rem;
+        }
+        .mobile-notifications-entry .notification-badge {
+            position: absolute; top: 2px; right: 0; min-width: 17px;
+            font-size: .6rem; align-items: center; justify-content: center;
+        }
+        .mobile-notifications-entry:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .mobile-bottom-nav .spark-nav-icon { width: 24px; height: 24px; object-fit: contain; }
+
         .nav-brand-tactical {
             font-family: var(--font-family, 'Nunito', sans-serif);
             font-weight: 700;
@@ -2559,7 +2584,7 @@
     </div>
 
     <!-- Desktop Three-Surface Shell / Mobile Single-Surface Shell -->
-    <div class="app-shell-layout{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'login_direct' or request.resolver_match.url_name == 'register' %}{% if not request.user.is_authenticated %} auth-guest-entry-shell{% endif %}{% endif %}{% if request.resolver_match.url_name == 'conversation_detail' or request.resolver_match.url_name == 'conversation_list' or request.resolver_match.app_name == 'messaging' %} in-conversation-shell{% endif %}" id="app-shell-layout">
+    <div class="app-shell-layout{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'login_direct' or request.resolver_match.url_name == 'register' %}{% if not request.user.is_authenticated %} auth-guest-entry-shell{% endif %}{% endif %}{% block app_shell_class %}{% endblock %}" id="app-shell-layout">
 
         <!-- 1. LEFT RAIL: Persistent Global Navigation (Desktop only: >= 992px) -->
         <aside id="left-nav-rail" class="desktop-left-rail d-none d-lg-block" aria-label="{% trans 'Global Navigation' %}">
@@ -3608,33 +3633,12 @@
                     <i class="bi bi-plus-circle-fill"></i>
                     <span>{% trans "Post" %}</span>
                 </a>
-                <a href="{% url 'notifications:notifications' %}"
-                   class="nav-chip {% if request.resolver_match.url_name == 'notifications' %}active{% endif %}"
-                   data-haptic="light"
-                   id="notification-badge-container"
-                   hx-get="{% url 'notifications:notifications' %}"
-                   hx-target="#page-content-target"
-                   hx-swap="innerHTML"
-                   hx-push-url="true"
-                   hx-history="true"
-                   hx-sync="#page-content-target:replace"
-                   hx-trigger="click delay:10ms"
-                   aria-label="{% trans 'Notifications' %}">
-                    <span class="position-relative d-inline-block">
-                        <i class="bi bi-bell-fill"></i>
-                        {% if unread_notifications_count > 0 %}
-                            <span class="position-absolute badge rounded-pill bg-danger notification-badge">
-                                {{ unread_notifications_count }}
-                                <span class="visually-hidden">unread messages</span>
-                            </span>
-                        {% else %}
-                            <span class="position-absolute badge rounded-pill bg-danger notification-badge" style="display: none;">
-                                0
-                                <span class="visually-hidden">unread messages</span>
-                            </span>
-                        {% endif %}
-                    </span>
-                    <span>{% trans "Notifications" %}</span>
+                <a href="{% url 'pwanimate:index' %}"
+                   class="nav-chip {% if request.resolver_match.app_name == 'pwanimate' %}active{% endif %}"
+                   data-haptic="light" data-bypass-htmx="true" hx-boost="false"
+                   aria-label="{% trans 'Spark AI assistant' %}">
+                    <img src="{% static 'images/pwanimate/pwanimate-transparent.png' %}" class="spark-nav-icon" alt="" aria-hidden="true">
+                    <span>{% trans "Spark" %}</span>
                 </a>
                 <a href="{% url 'users:profile' request.user.username %}"
                    class="nav-chip {% if request.resolver_match.url_name == 'profile' %}active{% endif %}"
@@ -3658,8 +3662,6 @@
         </div>
         {% endif %}
     {% endblock %}
-
-    {% include 'partials/desktop_bottom_nav.html' %}
 
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/status-modal.js' %}"></script>
@@ -4156,6 +4158,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
             globalNotificationsSocket.onopen = function(e) {
                 console.log('[GLOBAL] Notifications WebSocket connected successfully');
+                window.dispatchEvent(new Event('pwani:socket-ready'));
                 globalReconnectAttempts = 0;
 
                 // Stop polling since WebSocket is connected
@@ -4184,6 +4187,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     const data = JSON.parse(e.data);
                     console.log('[GLOBAL] Received notification:', data);
 
+                    if (data.type === 'call_update') {
+                        window.dispatchEvent(new CustomEvent('pwani:call-update', {detail: data.call}));
+                        return;
+                    }
                     if (data.type === 'conversation_update') {
                         // 1. Update global navigation .messages-badge across all pages (Home, Groups, Courses, Profile, etc.)
                         if (typeof data.total_unread_count === 'number') {
@@ -5024,7 +5031,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
             const isCurrentWhatsappLayout = !!document.getElementById('whatsappLayout') ||
                                             window.location.pathname.startsWith('/messaging/conversation/');
 
-            if (isPageTarget && (isTargetWhatsappLayout !== isCurrentWhatsappLayout)) {
+            if (isPageTarget && (isTargetWhatsappLayout !== isCurrentWhatsappLayout) && !window.PwaniCalls?.hasSession()) {
                 // Crossing the boundary between App Shell (#page-content-target) and full-screen WhatsappLayout:
                 evt.preventDefault();
                 if (evt.detail && evt.detail.xhr && typeof evt.detail.xhr.abort === 'function') {
@@ -5110,7 +5117,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 document.documentElement.style.removeProperty('overflow-x');
 
                 const responseText = evt.detail.xhr && evt.detail.xhr.responseText ? evt.detail.xhr.responseText.trim() : '';
-                const isIncomingSpark = responseText.includes('pwanimate-workspace');
+                // Inspect elements, never script/CSS text: every base response
+                // contains these layout names in its navigation code.
+                const responseDocument = new DOMParser().parseFromString(responseText, 'text/html');
+                const isIncomingSpark = !!responseDocument.querySelector('.pwanimate-workspace');
                 if (isIncomingSpark) {
                     document.documentElement.classList.add('pwanimate-active');
                     document.body.classList.add('pwanimate-active');
@@ -5137,7 +5147,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     }
 
                     // Check if response crosses the vasto ↔ Pwanimate boundary
-                    const incomingIsPwanimate = responseText.includes('pwanimate-workspace') || (responseUrl && responseUrl.includes('/pwanimate'));
+                    const incomingIsPwanimate = isIncomingSpark || (responseUrl && new URL(responseUrl, window.location.origin).pathname.startsWith('/pwanimate'));
                     const currentIsPwanimate = window.location.pathname.startsWith('/pwanimate');
                     if (incomingIsPwanimate !== currentIsPwanimate) {
                         // Crossing the boundary: MUST perform native full-page navigation, not seamless partial swap!
@@ -5149,9 +5159,9 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     }
 
                     // Check if response crosses the App Shell ↔ full-screen WhatsappLayout boundary
-                    const incomingIsWhatsappLayout = responseText.includes('id="whatsappLayout"');
+                    const incomingIsWhatsappLayout = !!responseDocument.getElementById('whatsappLayout');
                     const currentIsWhatsappLayout = !!document.getElementById('whatsappLayout');
-                    if (incomingIsWhatsappLayout !== currentIsWhatsappLayout) {
+                    if (incomingIsWhatsappLayout !== currentIsWhatsappLayout && !window.PwaniCalls?.hasSession()) {
                         evt.detail.shouldSwap = false;
                         const dest = responseUrl || (evt.detail.requestConfig && evt.detail.requestConfig.path) || (incomingIsWhatsappLayout ? '/messaging/' : '/');
                         console.log('[Boundary Navigation] Crossing App Shell ↔ WhatsappLayout, forcing full-page navigation to:', dest);
@@ -5160,8 +5170,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     }
 
                     try {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(responseText, 'text/html');
+                        const doc = responseDocument;
                         const incomingTarget = doc.getElementById('page-content-target');
                         if (incomingTarget) {
                             evt.detail.serverResponse = incomingTarget.innerHTML;
@@ -5172,11 +5181,13 @@ window.addEventListener('beforeinstallprompt', (e) => {
                             }
 
                             // Sync html and body classes (e.g. in-conversation-active)
-                            if (doc.documentElement && doc.documentElement.className) {
-                                document.documentElement.className = doc.documentElement.className;
-                            }
-                            if (doc.body && doc.body.className) {
-                                document.body.className = doc.body.className;
+                            for (const [current, incoming] of [[document.documentElement, doc.documentElement], [document.body, doc.body]]) {
+                                // Page classes may be empty; keep only device state
+                                // established by the native bridge on this document.
+                                const runtime = ['is-native-app', 'is-standalone-pwa', 'keyboard-open']
+                                    .filter(name => current.classList.contains(name));
+                                current.className = incoming.className;
+                                current.classList.add(...runtime);
                             }
                             if (doc.querySelector('.whatsapp-layout') || incomingTarget.querySelector('.whatsapp-layout')) {
                                 document.documentElement.classList.add('in-conversation-active');
@@ -6966,7 +6977,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
         }, true);
     })();
     </script>
+{% if request.user.is_authenticated %}{% include 'calling/shell.html' %}{% endif %}
+<script src="{% static 'js/native-offline.js' %}?v=20261108-snapshot" defer></script>
+<script src="{% static 'js/offline-resources.js' %}?v=20261108-snapshot" defer></script>
 <script src="{% static 'js/offline-capture.js' %}" defer></script>
+{% if request.user.is_authenticated %}<script src="{% static 'js/spark-reminders.js' %}" defer></script><script src="{% static 'js/spark-study-desk.js' %}?v=20261109-settings" defer></script><script src="{% static 'js/spark-study-sessions.js' %}?v=20261109-sessions" defer></script><script src="{% static 'js/pwanimate/activity-trail.js' %}?v=20261109-pause" defer></script>{% endif %}
 </body>
 
 </html>

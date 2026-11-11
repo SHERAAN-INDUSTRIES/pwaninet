@@ -5,7 +5,8 @@
   "server": {
     "cleartext": false,
     "allowNavigation": [
-      "pwaninet.app"
+      "pwaninet.app",
+      "dev.pwaninet.app"
     ]
   },
   "plugins": {

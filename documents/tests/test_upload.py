@@ -137,7 +137,7 @@ class DocumentUploadTests(TestCase):
         new_doc = Document.objects.filter(title='Existing Document (1)', uploaded_by=self.user).first()
         self.assertIsNotNone(new_doc)
 
-    def test_upload_missing_category_rejected(self):
+    def test_upload_missing_category_uses_other_category(self):
         uploaded_file = SimpleUploadedFile(
             "test.pdf",
             b"%PDF-1.4 test",
@@ -148,9 +148,9 @@ class DocumentUploadTests(TestCase):
         }
 
         response = self.client.post(reverse('documents:upload'), data)
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(response.json()['success'])
-        self.assertIn("Category is required", response.json()['error'])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(Document.objects.filter(uploaded_by=self.user).latest('created_at').category.code, 'other')
 
     def test_htmx_get_upload_page_contains_fixed_script(self):
         response = self.client.get(reverse('documents:upload'), HTTP_HX_REQUEST='true')
@@ -240,3 +240,11 @@ class DocumentUploadTests(TestCase):
         self.assertNotIn('doc-processing-overlay', content)
         self.assertNotIn('hx-trigger="every 4s"', content)
 
+
+    def test_direct_upload_storage_keys_do_not_overwrite_same_filename(self):
+        from documents.services.direct_upload_service import storage_path_for
+        first = storage_path_for('notes.pdf')
+        second = storage_path_for('notes.pdf')
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.endswith('/notes.pdf'))
+        self.assertNotIn('..', storage_path_for('../../notes.pdf'))

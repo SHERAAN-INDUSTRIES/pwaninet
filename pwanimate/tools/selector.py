@@ -173,7 +173,9 @@ Use send_message when the student asks Pwanimate to message a specific person, a
                 + user_context
             ),
             temperature=0.0,
-            max_tokens=220,
+            # Reasoning fallbacks (e.g. nemotron/gemini thinking modes) burn
+            # tokens before emitting JSON — 220 truncated them into non-JSON.
+            max_tokens=600,
         )
 
         try:

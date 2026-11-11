@@ -136,6 +136,10 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'notification': event['notification']
         }))
 
+    async def call_update(self, event):
+        """Private signaling hint; HTTP call state remains authoritative."""
+        await self.send(text_data=json.dumps({'type': 'call_update', 'call': event['call']}))
+
     async def conversation_update(self, event):
         """Send conversation update to client for real-time list, badge, and banner updates."""
         try:

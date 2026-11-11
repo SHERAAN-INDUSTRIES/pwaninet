@@ -1,0 +1,26 @@
+[
+  {
+    "denied": false,
+    "cancel": false,
+    "fails": false,
+    "passed": true
+  },
+  {
+    "denied": true,
+    "cancel": false,
+    "fails": false,
+    "passed": true
+  },
+  {
+    "denied": false,
+    "cancel": true,
+    "fails": false,
+    "passed": true
+  },
+  {
+    "denied": false,
+    "cancel": false,
+    "fails": true,
+    "passed": true
+  }
+]

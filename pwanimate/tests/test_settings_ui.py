@@ -469,7 +469,7 @@ class PwanimateSettingsNavigationAndHeaderTests(TestCase):
         content = resp.content.decode("utf-8")
 
         # Must have Settings with gear icon
-        self.assertIn("bi-gear", content)
+        self.assertIn('data-lucide="settings"', content)
         self.assertIn("Settings", content)
 
         # Must NOT have separate Vasto Settings

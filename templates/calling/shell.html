@@ -1,0 +1,66 @@
+{% load static %}
+<div id="pwani-call-root" data-user-id="{{ request.user.pk }}" data-available="{{ voice_calling_available|yesno:'true,false' }}" data-api="{% url 'calling:collection' %}" data-sdk="{% static 'vendor/livekit/livekit-client.esm.mjs' %}">
+  <div class="visually-hidden" id="call-announcement" role="status" aria-live="polite" aria-atomic="true"></div>
+  <dialog id="call-screen" class="call-screen" aria-labelledby="call-person" aria-describedby="call-status">
+    <div class="call-layout">
+      <div class="call-desktop-tools">
+        <button type="button" class="call-drag-handle" aria-label="Move call panel" title="Drag to move; arrow keys to move" tabindex="0"><i class="bi bi-grip-horizontal" aria-hidden="true"></i></button>
+        <button type="button" class="call-icon-btn" data-call-action="expand" aria-label="Expand call panel" aria-pressed="false"><i class="bi bi-arrows-angle-expand" aria-hidden="true"></i></button>
+      </div>
+      <header class="call-topbar">
+        <button type="button" class="call-icon-btn" data-call-action="minimize" aria-label="Back to chat" title="Back to chat"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+        <div class="call-heading"><span>Voice call</span><span id="call-timer" class="call-timer" aria-label="Call duration" hidden>00:00</span></div>
+      </header>
+      <main class="call-identity">
+        <div class="call-avatar" data-call-avatar><i class="bi bi-person-fill" aria-hidden="true"></i></div>
+        <h1 id="call-person"></h1>
+        <p id="call-status" class="call-status"></p>
+        <p id="call-detail" class="call-detail"></p>
+      </main>
+      <footer class="call-controls-area">
+        <div id="call-control-pill" class="call-control-pill">
+        <div id="call-live-controls" class="call-controls" hidden>
+          <button type="button" class="call-control" data-call-action="mute" aria-pressed="false"><span class="call-control-icon"><i class="bi bi-mic" aria-hidden="true"></i></span><span data-mute-label>Mute</span></button>
+          <button type="button" class="call-control call-speaker" data-call-action="speaker" aria-label="Turn on loudspeaker" aria-pressed="false"><span class="call-control-icon"><i class="bi bi-volume-up" aria-hidden="true"></i></span><span>Speaker</span></button>
+          <label id="call-output-control" class="call-control call-output" hidden><span class="call-control-icon"><i class="bi bi-speaker" aria-hidden="true"></i></span><span id="call-output-name">Audio output</span><select id="call-output" aria-label="Audio output"></select></label>
+        </div>
+        <button id="call-end" class="call-end" data-call-action="end"><i class="bi bi-telephone-x-fill" aria-hidden="true"></i><span>End call</span></button>
+        </div>
+        <button id="call-playback" class="btn btn-outline-primary call-text-btn" data-call-action="playback" hidden>Tap to hear audio</button>
+        <div id="call-incoming-actions" class="call-incoming-actions" hidden>
+          <button type="button" class="call-control call-decline" data-call-action="decline"><span class="call-control-icon"><i class="bi bi-telephone-x-fill" aria-hidden="true"></i></span><span>Decline</span></button>
+          <button type="button" class="call-control call-answer" data-call-action="answer"><span class="call-control-icon"><i class="bi bi-telephone-fill" aria-hidden="true"></i></span><span>Answer</span></button>
+        </div>
+        <div id="call-outcome-actions" class="call-outcome-actions" hidden>
+          <button class="btn btn-primary call-text-btn" type="button" data-call-action="retry">Call again</button>
+          <button class="btn btn-outline-secondary call-text-btn" type="button" data-call-action="chat">Return to chat</button>
+        </div>
+        <div id="call-permission-actions" class="call-outcome-actions" hidden>
+          <button class="btn btn-primary call-text-btn" type="button" data-call-action="permission">Allow microphone</button>
+          <button class="btn btn-outline-secondary call-text-btn" type="button" data-call-action="permission-back">Return to chat</button>
+        </div>
+        <p class="call-footnote" id="call-footnote">One-to-one voice call</p>
+      </footer>
+    </div>
+  </dialog>
+  <section id="call-banner" class="call-banner" aria-label="Incoming voice call" hidden>
+    <button class="call-banner-person" type="button" data-call-action="restore" aria-label="Open incoming call">
+      <span class="call-small-avatar" data-call-avatar><i class="bi bi-person-fill" aria-hidden="true"></i></span>
+      <span><strong data-call-name></strong><span>Incoming voice call</span></span>
+    </button>
+    <div class="call-banner-actions">
+      <button class="call-banner-decline" type="button" data-call-action="decline"><i class="bi bi-telephone-x-fill" aria-hidden="true"></i> Decline</button>
+      <button class="call-banner-answer" type="button" data-call-action="answer"><i class="bi bi-telephone-fill" aria-hidden="true"></i> Answer</button>
+    </div>
+  </section>
+  <section id="call-pill" class="call-pill" aria-label="Ongoing voice call" hidden>
+    <button class="call-pill-main" type="button" data-call-action="restore" aria-label="Restore full-screen call">
+      <span class="call-pill-indicator"><i class="bi bi-telephone-fill" aria-hidden="true"></i></span>
+      <span><strong data-call-name></strong><span id="call-pill-status">Connecting…</span></span>
+    </button>
+    <button class="call-pill-speaker call-speaker" type="button" data-call-action="speaker" aria-label="Turn on loudspeaker" aria-pressed="false"><i class="bi bi-volume-up" aria-hidden="true"></i></button>
+    <button class="call-pill-end" type="button" data-call-action="end" aria-label="End call"><i class="bi bi-telephone-x-fill" aria-hidden="true"></i><span>End call</span></button>
+  </section>
+  <div id="call-audio" hidden></div>
+</div>
+<script type="module" src="{% static 'js/calling/controller.mjs' %}"></script>

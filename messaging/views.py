@@ -340,6 +340,7 @@ class MessageViewSet(viewsets.ModelViewSet):
             'reply_to',
             'reply_to__sender',
             'link_preview',
+            'voice_call_record',
         ).prefetch_related(
             'attachments',
             'reactions__user',
@@ -895,7 +896,7 @@ def conversation_detail(request, conversation_id):
 
     # Fast path for HTMX chat switching (desktop middle pane or mobile instant chat):
     # Skip querying all conversations, friend suggestions, and unmessaged friends!
-    if is_htmx:
+    if is_htmx and request.headers.get('HX-Target') == 'chatMainAreaWrapper':
         context = {
             'conversation': conversation,
             'messages': recent_messages_list,

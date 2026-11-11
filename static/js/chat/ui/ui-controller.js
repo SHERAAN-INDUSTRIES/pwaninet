@@ -218,9 +218,13 @@ export class UIController {
             voiceBtn.addEventListener('click', (e) => {
                 const isSendMode = voiceBtn.classList.contains('send-mode');
                 if (isSendMode) {
+                    // Sending clears the input and switches this same button back
+                    // to a microphone. Consume this tap before voice handlers see it.
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
                     this._handleSendClick(messageInput);
                 }
-            });
+            }, { capture: true });
         }
 
         // Reply & Edit cancel button handlers

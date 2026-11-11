@@ -2,9 +2,11 @@
 
 <style>
   .group-card {
-    background-color: var(--card-bg, #ffffff) !important;
-    border-color: var(--border, #e2e8f0) !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+    transition: background-color 0.15s ease;
     min-width: 0;
     overflow: hidden;
     box-sizing: border-box;
@@ -14,7 +16,15 @@
     transition: color 0.2s ease;
   }
   .group-card .min-w-0 { min-width: 0; }
-  .official-cohort-card { min-width: 0; overflow: hidden; box-sizing: border-box; }
+  .official-cohort-card {
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+  }
   .group-card .card-bio-text { overflow-wrap: anywhere; }
   @media (max-width: 380px) {
     .group-card .group-heading { flex-wrap: wrap; }
@@ -22,15 +32,13 @@
     .group-card .group-join-wrap { margin-left: auto; }
   }
   [data-theme="dark"] .group-card {
-    background-color: var(--card-bg, #242526) !important;
-    border-color: var(--border, #3a3b3c) !important;
+    background: transparent !important;
   }
   [data-theme="dark"] .group-card .group-name {
     color: #ffffff !important;
   }
   [data-theme="dark"] .official-cohort-card {
-    background-color: rgba(16, 185, 129, 0.12) !important;
-    border-color: rgba(16, 185, 129, 0.35) !important;
+    background: transparent !important;
   }
   [data-theme="dark"] .official-cohort-card .cohort-name {
     color: #ffffff !important;
@@ -60,7 +68,7 @@
       <div class="row g-2 g-md-3">
         {% for group in official_groups %}
           <div class="col-12 col-md-6">
-            <div class="card h-100 border border-success border-opacity-25 rounded-4 p-3 shadow-xs bg-success bg-opacity-10 w-100 official-cohort-card">
+            <div class="h-100 p-3 official-cohort-card w-100">
               <div class="d-flex align-items-start gap-3 min-w-0">
                 <div class="rounded-circle bg-white text-success d-flex align-items-center justify-content-center shadow-xs flex-shrink-0 official-cohort-icon"
                      style="width: 52px; height: 52px; font-size: 1.4rem;">
@@ -100,7 +108,7 @@
       <div class="row g-2 g-md-3">
         {% for group in recommended_groups %}
           <div class="col-12 col-md-6">
-            <div class="card h-100 border rounded-4 p-3 shadow-xs hover-lift group-card w-100">
+            <div class="h-100 p-3 hover-lift group-card w-100">
               <div class="d-flex align-items-start gap-3 min-w-0">
                 {% if group.group_pic and group.group_pic.url %}
                   <img src="{{ group.group_pic.url }}"
@@ -157,7 +165,7 @@
         {% endfor %}
       </div>
     {% else %}
-      <div class="text-center py-4 border rounded-4 bg-light p-3">
+      <div class="text-center py-4 px-3">
         <i class="bi bi-people text-muted display-6"></i>
         <h6 class="fw-bold mt-2 mb-1">You're all set!</h6>
         <p class="text-muted small mb-0">You're enrolled in your primary cohort. Continue to the feed to explore more.</p>

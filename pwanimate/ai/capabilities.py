@@ -86,6 +86,16 @@ def model_capability(provider: str, model: str) -> ModelCapability:
             return ModelCapability(images=True, max_images=3)
         return TEXT_ONLY
 
+    if provider == "ollama":
+        configured = {
+            str(getattr(settings, "PWANIMATE_OLLAMA_OCR_MODEL", "deepseek-ocr:pwanimate-q4_K_M")),
+            str(getattr(settings, "TIMETABLE_OCR_MODEL", "") or ""),
+        }
+        configured.discard("")
+        if model in configured:
+            return ModelCapability(images=True, max_images=1)
+        return TEXT_ONLY
+
     if provider == "cloudflare":
         allowed = _configured_vision_models().get("cloudflare", [])
         if not model:

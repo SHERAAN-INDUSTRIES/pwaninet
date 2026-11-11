@@ -16,7 +16,7 @@
             <div class="pwanimate-conversation-info">
                 <div class="pwanimate-conversation-title d-flex align-items-center gap-1" title="{{ conv.title }}">
                     {% if conv.study_session %}
-                        <i class="bi bi-mortarboard-fill text-primary flex-shrink-0" title="{% trans 'Study Mode Session' %}"></i>
+                        <i data-lucide="graduation-cap" class="text-primary flex-shrink-0" title="{% trans 'Study Mode Session' %}"></i>
                     {% endif %}
                     <span class="text-truncate">{{ conv.title|default:_("New Conversation") }}</span>
                 </div>
@@ -49,7 +49,7 @@
                         aria-label="{% trans 'Delete conversation' %}"
                         title="{% trans 'Delete conversation' %}"
                         onclick="event.stopPropagation(); event.preventDefault(); window.handleDeleteSparkConversation('{{ conv.id }}');">
-                    <i class="bi bi-trash3"></i>
+                    <i data-lucide="trash-2"></i>
                 </button>
             </div>
         </div>

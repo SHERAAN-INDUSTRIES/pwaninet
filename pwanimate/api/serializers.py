@@ -42,6 +42,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "id",
             "role",
             "content",
+            "activity",
             "citations",
             "sources",
             "people",

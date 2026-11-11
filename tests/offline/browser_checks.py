@@ -2,6 +2,7 @@
 Run from repository root: .venv/bin/python tests/offline/browser_checks.py
 """
 import json
+import mimetypes
 import subprocess
 from pathlib import Path
 import threading
@@ -16,6 +17,7 @@ VIDEO = Path('/tmp/vasto-offline-test.mp4')
 class Fixture(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
     fail_routes = set()
+    slow_routes = set()
     chat_version = 1
     notification_version = 1
     def do_POST(self):
@@ -31,6 +33,7 @@ class Fixture(BaseHTTPRequestHandler):
         self.do_GET()
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path in self.slow_routes: time.sleep(1.8)
         if path == '/groups/44/chat/':
             self.send_response(302)
             self.send_header('Location', '/messaging/conversation/1/')
@@ -41,7 +44,7 @@ class Fixture(BaseHTTPRequestHandler):
         if path.startswith('/static/'):
             file = ROOT / path.lstrip('/')
             if file.is_file():
-                kind = 'application/javascript' if file.suffix == '.js' else 'text/css' if file.suffix == '.css' else 'image/svg+xml'
+                kind = mimetypes.guess_type(file.name)[0] or 'application/octet-stream'
                 return self.send_file(file, kind)
             return self.respond(b'', 'text/plain', status=404)
         if path == '/test-video.mp4':
@@ -62,7 +65,7 @@ class Fixture(BaseHTTPRequestHandler):
         if path == '/users/logout/': owner = ''
         if path == '/api/error/': return self.respond(b'error', 'text/plain', status=503)
         if path == '/post/00000000-0000-0000-0000-000000000403/': return self.respond(b'denied', 'text/html', status=403, owner=owner)
-        html = f'''<!doctype html><html><head><title>Fixture</title></head><body data-user-id="{owner}"><nav><a href="/">Feed</a><a href="/documents/">Documents</a></nav><main><h1>Account {owner}</h1><div id="posts"><article class="post-card" data-post-id="p1">Post one <video data-post-id="p1" poster="/static/test-poster.svg"></video><button data-media-type="video" data-download-allowed="true" data-url="/test-video.mp4">Download</button></article></div><form><input name="csrfmiddlewaretoken" value="SECRET_CSRF"></form><script>window.SECRET_CSRF='TOKEN_IN_SCRIPT';</script></main><script src="/static/js/offline-capture.js" defer></script><script>navigator.serviceWorker.register('/service-worker.js');</script></body></html>'''
+        html = f'''<!doctype html><html><head><title>Fixture</title></head><body data-user-id="{owner}"><nav><a href="/">Feed</a><a href="/documents/">Documents</a></nav><main><h1>Account {owner}</h1><div id="posts"><article class="post-card" data-post-id="p1">Post one <video data-post-id="p1" poster="/static/test-poster.svg"></video><button data-media-type="video" data-download-allowed="true" data-url="/test-video.mp4">Download</button></article></div><form><input name="csrfmiddlewaretoken" value="SECRET_CSRF"></form><script>window.SECRET_CSRF='TOKEN_IN_SCRIPT';</script></main><script src="/static/js/offline-resources.js" defer></script><script src="/static/js/offline-capture.js" defer></script><script>navigator.serviceWorker.register('/service-worker.js');</script></body></html>'''
         if path.startswith('/messaging/conversation/'):
             html = html.replace('<main>', f'<main><div id="messagesContainer"><div class="message-wrapper" data-message-id="10">Previous message</div>{"<div class=message-wrapper data-message-id=12>New synced message</div>" if self.chat_version == 2 else ""}</div><script src="/static/js/messaging/offline-cache.js"></script>')
         if path == '/notifications/':
@@ -113,17 +116,15 @@ def main():
             poll('''async path => { const names = await caches.keys(); const name = names.find(n => n.startsWith('vasto-private-pages-v1-')); return name && !!await (await caches.open(name)).match(location.origin + path); }''', arg=path)
         saved()
         checks.append('eligible rendered page saved under account 1')
+        assert page.locator('.offline-save-button').count()==0
+        assert page.locator('[data-media-type=video][data-download-allowed=true]').count()==1
+        checks.append('media cards keep the existing download control without an extra offline-save button')
         page.evaluate('''() => {
             const posts = document.querySelector('#posts');
             posts.insertAdjacentHTML('beforeend', '<article class="post-card" data-post-id="p2">Post two</article><article class="post-card" data-post-id="p3">Post three</article><article class="post-card" data-post-id="p2">DUPLICATE</article>');
         }''')
         poll('''async () => { const response = await (await caches.open('vasto-private-pages-v1-1')).match(location.origin + '/'); return response && (await response.text()).includes('Post three'); }''')
         checks.append('rendered pagination persisted after DOM update')
-        if VIDEO.exists():
-            page.get_by_role('button', name='Save for offline', exact=True).click()
-            page.get_by_role('button', name='Remove offline video').wait_for()
-            poll('''async () => { const r = await (await caches.open('vasto-private-pages-v1-1')).match(location.origin + '/'); return r && (await r.text()).includes('data-offline-download-id="p1"'); }''')
-            checks.append('MP4 bytes and metadata committed before ready state')
         page.goto(origin + '/pwanimate/00000000-0000-0000-0000-000000000001/')
         saved('/pwanimate/00000000-0000-0000-0000-000000000001/')
         page.goto(origin + '/documents/')
@@ -135,29 +136,21 @@ def main():
         checks.append('CSRF values, original scripts and duplicate post IDs excluded')
         context.set_offline(True)
         page.goto(origin + '/?offline_saved=1')
-        page.get_by_text('End of saved content. Connect to load more.').wait_for()
+        page.get_by_text('You are offline viewing cached pages').wait_for()
         assert page.locator('.post-card').count() == 3
         assert page.locator('.post-card').all_text_contents() == ['Post one Download', 'Post two', 'Post three']
         checks.append('offline navigation restores all loaded posts in order')
-        if VIDEO.exists():
-            assert page.evaluate('''async () => { const r = await fetch('/offline-media-stream/p1', {headers:{Range:'bytes=2-9'}}); return r.status === 206 && (await r.arrayBuffer()).byteLength === 8; }''')
-            assert page.evaluate('''async () => (await fetch('/offline-media-stream/p1', {headers:{Range:'bytes=999999999-'}})).status''') == 416
-            page.locator('video').evaluate('v => { v.muted = true; return v.play(); }')
-            poll('() => document.querySelector("video").currentTime > 0.1')
-            page.locator('video').evaluate('v => v.currentTime = 1.5')
-            poll('() => document.querySelector("video").currentTime >= 1.5')
-            checks.append('saved MP4 plays and seeks offline; byte range/416 checks pass')
         page.goto(origin + '/pwanimate/00000000-0000-0000-0000-000000000001/')
-        page.get_by_text('End of saved content. Connect to load more.').wait_for()
+        page.get_by_text('You are offline viewing cached pages').wait_for()
         checks.append('visited Pwanimate conversation opens offline')
         page.goto(origin + '/documents/')
-        page.get_by_text('End of saved content. Connect to load more.').wait_for()
+        page.get_by_text('You are offline viewing cached pages').wait_for()
         page.go_back()
         assert '/pwanimate/' in page.url
         checks.append('saved route history/back navigation works')
         page.goto(origin + '/groups/999/')
-        page.get_by_text('This page needs an initial online visit').wait_for()
-        checks.append('unvisited route renders inline offline state')
+        page.get_by_text('You are offline viewing cached pages').wait_for()
+        checks.append('unvisited route resumes saved content without a blocking page')
         context.set_offline(False)
         page.goto(origin + '/messaging/conversation/1/')
         saved('/messaging/conversation/1/')
@@ -220,7 +213,7 @@ def main():
         page.goto(origin + '/users/logout/')
         context.set_offline(True)
         page.goto(origin)
-        page.get_by_text('This page needs an initial online visit').wait_for()
+        page.get_by_text('You are offline viewing cached pages').wait_for()
         checks.append('logout prevents reopening prior managed pages')
         context.set_offline(False)
         context.clear_cookies()
@@ -234,29 +227,28 @@ def main():
         page.wait_for_timeout(1500)
         assert page.evaluate('''async () => (await (await (await caches.open('vasto-private-pages-v1-1')).match(location.origin + '/')).text()).includes('Post two')''')
         checks.append('successful feed refresh retains authorized earlier pages')
+        Fixture.slow_routes.add('/')
+        page.goto(origin + '/?offline_saved=1')
+        assert page.locator('[data-offline-indicator]:visible').count() == 0
+        assert page.locator('#posts').count() == 1
+        assert page.locator('.post-card').count() == 1
+        checks.append('slow online navigation ignores saved flag and waits for the live page')
+        Fixture.slow_routes.clear()
         Fixture.fail_routes.add('/')
-        page.goto(origin)
-        page.get_by_text('End of saved content. Connect to load more.').wait_for()
-        assert 'Post two' in page.locator('body').inner_text()
-        checks.append('server 503 refresh preserves last good content')
+        response = page.goto(origin)
+        assert response.status == 503
+        assert page.locator('[data-offline-indicator]:visible').count() == 0
+        assert page.locator('body').inner_text() == 'unavailable'
+        checks.append('online server 503 is not replaced with an offline page')
         Fixture.fail_routes.clear()
         page.goto(origin)
         saved()
-        if VIDEO.exists():
-            button = page.get_by_role('button', name='Save for offline', exact=True)
-            button.wait_for()
-            page.evaluate('''() => document.querySelector('[data-url]').dataset.url = '/interrupted.mp4' ''')
-            dialogs = []
-            page.on('dialog', lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
-            button.click()
-            poll('''() => document.querySelector('.offline-save-button')?.disabled === false''')
-            assert dialogs
-            assert page.evaluate('''async () => { const db = await new Promise(resolve => {const r=indexedDB.open('vasto_offline_media_1',1);r.onsuccess=()=>resolve(r.result)}); return await new Promise(resolve=>{const r=db.transaction('files').objectStore('files').getAll();r.onsuccess=()=>{resolve(r.result.length===0);db.close();}}); }''')
-            checks.append('interrupted download never creates ready media metadata')
         # Fresh browser context has no hosted cache; the local launch document is self-contained.
-        assert 'https://pwaninet.app' in (ROOT / 'www/index.html').read_text()
+        assert 'https://pwaninet.app' in (ROOT / 'www/launch.js').read_text()
+        assert 'reader.js' not in (ROOT / 'www/index.html').read_text()
         assert not json.loads((ROOT / 'capacitor.config.json').read_text())['server'].get('url')
         checks.append('release config starts from bundled assets')
+        assert not errors, errors
         browser.close()
     server.shutdown()
     print(json.dumps({'passed': checks, 'page_errors': errors}, indent=2))

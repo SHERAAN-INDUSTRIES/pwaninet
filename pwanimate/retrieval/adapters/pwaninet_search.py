@@ -331,6 +331,7 @@ class pwaninetSearchAdapter:
                     url=url,
                     citation=f"Document: {item.get('title', '')}",
                     metadata={
+                        "document_id": getattr(raw_doc, 'id', item.get('id')),
                         "category_display": item.get("category_display"),
                         "file_type": doc_ext,
                         "download_count": item.get("download_count"),

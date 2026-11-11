@@ -1,6 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
+    buildFeatures { resValues = true }
     namespace "com.vasto.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
@@ -16,6 +17,7 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    testBuildType project.hasProperty('offlineCheck') ? 'offlineCheck' : 'debug'
     signingConfigs {
         release {
             def keystorePath = System.getenv("KEYSTORE_PATH")
@@ -28,6 +30,14 @@ android {
         }
     }
     buildTypes {
+        offlineCheck {
+            initWith debug
+            applicationIdSuffix '.offlinecheck'
+            versionNameSuffix '-offlinecheck'
+            matchingFallbacks = ['debug']
+            resValue 'string', 'app_name', 'Vasto Offline Check'
+            resValue 'string', 'title_activity_main', 'Vasto Offline Check'
+        }
         release {
             signingConfig signingConfigs.release
             minifyEnabled false
@@ -68,3 +78,16 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+// The isolated storage-test app has no Google/Firebase client registration.
+// Production and normal debug builds retain their existing Google configuration.
+tasks.configureEach {
+    if (name == 'processOfflineCheckGoogleServices') enabled = false
+}
+
+// Bundle only the existing offline runtime and UI dependencies; page layouts stay snapshots.
+tasks.register('prepareOfflineAssets', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine 'python3', 'scripts/bundle-offline-assets.py', '--android'
+}
+tasks.named('preBuild').configure { dependsOn 'prepareOfflineAssets' }

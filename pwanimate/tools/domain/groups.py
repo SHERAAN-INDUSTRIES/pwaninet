@@ -82,7 +82,7 @@ class GroupAnnouncementsTool(BaseDomainTool):
                 )
 
         # Fetch posts using existing domain query helper
-        posts_qs = get_group_posts(group)[:limit]
+        posts_qs = get_group_posts(group, user)[:limit]
 
         announcements: List[Dict[str, Any]] = []
         for post in posts_qs:

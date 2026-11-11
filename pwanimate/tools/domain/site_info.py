@@ -12,13 +12,13 @@ from pwanimate.services.site_content import SiteContentService
 
 class SiteInfoTool(BaseDomainTool):
     name = "site_info"
-    description = "Get information about vasto or Pwanimate features and capabilities."
+    description = "Read official first-party information about Vasto (formerly Pwaninet), Spark (formerly Pwanimate), platform creator and capabilities. Prefer this source for platform identity questions."
     parameters_schema = {
         "type": "object",
         "properties": {
             "topic": {
                 "type": "string",
-                "description": "The topic to get information about (e.g., 'about', 'pwanimate', 'features', 'privacy')",
+                "description": "The topic to get information about Use 'about' for Vasto history/creator; use 'pwanimate' for Spark identity/capabilities. 'spark' is an alias.",
             },
         },
         "required": ["topic"],

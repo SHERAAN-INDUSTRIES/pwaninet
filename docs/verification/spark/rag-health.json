@@ -1,0 +1,25 @@
+{
+  "embedding": {
+    "provider": "SelfHostedEmbeddingProvider",
+    "model": "multilingual-e5-base",
+    "dimensions": 768,
+    "configured": true,
+    "probe": "ok",
+    "probe_ms": 72.1
+  },
+  "versions": {
+    "NOT INGESTED": 16,
+    "READY": 16,
+    "NO FILE": 1
+  },
+  "chunks": [
+    {
+      "embedding_model": "multilingual-e5-base",
+      "embedding_status": "completed",
+      "is_active": true,
+      "count": 2468
+    }
+  ],
+  "synthetic_active_timetables": 0,
+  "quarantined_placeholders": 2
+}

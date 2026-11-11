@@ -1,0 +1,8 @@
+{
+  "checks": [
+    "Live HTTP SSE: public plan and running tool visible before final response",
+    "Approve-all sends exact shown IDs, resumes without another user message, and final activity collapses/expands"
+  ],
+  "page_errors": [],
+  "fixture": "Actual Django chat template and complete production chat client; synthetic streamed responses; no real messages sent"
+}

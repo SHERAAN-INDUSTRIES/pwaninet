@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "header call icon has no border/background, dark/light theme color, and a 44px target",
+    "start socket event before HTTP response does not auto-cancel; correct recipient and no premature timer",
+    "ringing requires a signaling acknowledgement",
+    "visible End call label",
+    "centered voice-call title/timer, left-chevron back, profile below and bottom control pill",
+    "audio-ready event starts duration; microphone selection survives live theme changes",
+    "keyboard focus stays within the dialog; Escape minimizes; pill sits below the header at normal and reduced viewport heights",
+    "pill and media session survive actual HTMX navigation from messaging into the app shell",
+    "returning from home during a phone call restores the complete styled chat layout",
+    "full document reload reconnects the same call and restores clock, mute, speaker and minimized pill",
+    "phone/tablet/desktop, landscape, 150% text and 44px targets",
+    "desktop uses a nonmodal bottom-left panel with drag and bounded expansion",
+    "desktop position, dimensions and expansion are restored after a full reload",
+    "ending from pill releases media and shows a brief outcome without opening the full screen",
+    "incoming desktop invitation uses the same nonmodal bottom-left panel",
+    "incoming banner/full screen share state; caller cancellation removes invitation",
+    "returning from full-screen call to the current chat preserves DOM/layout without a request or swap",
+    "blocked microphone gives accurate retry instructions and creates no invitation",
+    "reduced motion; real bundled LiveKit SDK acquires and releases a browser-provided fake microphone",
+    "call-history bubbles keep sent/received shapes, directional icons and actual start time"
+  ],
+  "page_errors": [],
+  "boundary": "mock signaling and media; actual templates/controller/navigation"
+}

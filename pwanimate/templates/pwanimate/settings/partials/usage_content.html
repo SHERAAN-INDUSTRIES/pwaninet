@@ -22,7 +22,7 @@
                     </div>
                 </div>
                 <span class="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
-                    <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>{% trans "Spark Active" %}
+                    <i data-lucide="circle-check-big" class="me-1" aria-hidden="true"></i>{% trans "Spark Active" %}
                 </span>
             </div>
 
@@ -46,7 +46,7 @@
                 </p>
             </div>
             <span class="badge {% if tier.is_free %}bg-secondary-subtle text-secondary{% else %}bg-primary-subtle text-primary{% endif %} px-3 py-2 rounded-pill">
-                <i class="bi bi-person-circle me-1" aria-hidden="true"></i>{% if tier.name %}{{ tier.name }}{% else %}{% trans "Free" %}{% endif %}
+                <i data-lucide="circle-user" class="me-1" aria-hidden="true"></i>{% if tier.name %}{{ tier.name }}{% else %}{% trans "Free" %}{% endif %}
             </span>
         </div>
 
@@ -139,19 +139,19 @@
             <h6 class="fw-bold mb-2">{% trans "Included with your tier" %}</h6>
             <ul class="list-group list-group-flush rounded-3 border mb-0">
                 <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                    <span class="small"><i class="bi bi-lightning-charge me-2 text-primary"></i>{% trans "All four Spark engines" %}</span>
+                    <span class="small"><i data-lucide="zap" class="me-2 text-primary"></i>{% trans "All four Spark engines" %}</span>
                     <span class="badge bg-secondary-subtle text-secondary small">{% trans "Included" %}</span>
                 </li>
                 <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                    <span class="small"><i class="bi bi-search me-2 text-primary"></i>{% trans "Campus document retrieval" %}</span>
+                    <span class="small"><i data-lucide="search" class="me-2 text-primary"></i>{% trans "Campus document retrieval" %}</span>
                     <span class="badge bg-secondary-subtle text-secondary small">{% trans "Unlimited" %}</span>
                 </li>
                 <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                    <span class="small"><i class="bi bi-people me-2 text-primary"></i>{% trans "Peer discovery & group announcements" %}</span>
+                    <span class="small"><i data-lucide="users" class="me-2 text-primary"></i>{% trans "Peer discovery & group announcements" %}</span>
                     <span class="badge bg-secondary-subtle text-secondary small">{% trans "Included" %}</span>
                 </li>
                 <li class="list-group-item d-flex align-items-center justify-content-between py-2 px-3" style="background: transparent;">
-                    <span class="small"><i class="bi bi-cpu me-2 text-primary"></i>{% trans "Premium model turns" %}</span>
+                    <span class="small"><i data-lucide="cpu" class="me-2 text-primary"></i>{% trans "Premium model turns" %}</span>
                     <span class="badge bg-secondary-subtle text-secondary small">
                         {% if tier.is_free %}{% trans "Paid tiers" %}{% else %}{% trans "Included" %}{% endif %}
                     </span>
@@ -164,7 +164,7 @@
 
         <div class="d-flex flex-wrap align-items-center gap-2">
             <button type="button" class="btn btn-primary btn-sm" data-open-subscription>
-                <i class="bi bi-stars me-1" aria-hidden="true"></i>{% trans "See upgrade options" %}
+                <i data-lucide="sparkles" class="me-1" aria-hidden="true"></i>{% trans "See upgrade options" %}
             </button>
             <span class="text-muted small">
                 {% trans "Pay with M-Pesa · no card needed" %}
@@ -184,7 +184,7 @@
         <div class="card border rounded-3 p-3 mb-4 shadow-sm" style="background-color: var(--pwanimate-card-bg);">
             <div class="d-flex align-items-start gap-3">
                 <div class="text-secondary mt-1">
-                    <i class="bi bi-info-circle fs-4" aria-hidden="true"></i>
+                    <i data-lucide="info" class="fs-4" aria-hidden="true"></i>
                 </div>
                 <div>
                     <h6 class="fw-bold mb-1">{% trans "Detailed Usage Metrics in Preparation" %}</h6>

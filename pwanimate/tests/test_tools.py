@@ -362,9 +362,12 @@ class UserProfileToolTestCase(TestCase):
             last_name="Smith",
             bio="CS Sophomore",
             headline="Open source enthusiast",
-            profile_privacy=PrivacyLevel.PUBLIC,
+            profile_privacy=PrivacyLevel.AUTHENTICATED,
             email="alice@vasto.local",
         )
+        # Legacy PUBLIC rows can remain in storage, but are no longer a valid creation choice.
+        User.objects.filter(pk=self.public_user.pk).update(profile_privacy=PrivacyLevel.PUBLIC)
+        self.public_user.refresh_from_db()
         self.followers_user = User.objects.create_user(
             username="bob_followers",
             first_name="Bob",

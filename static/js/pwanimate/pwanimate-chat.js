@@ -27,6 +27,9 @@
                window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     }
 
+    // Icon helpers (sparkIconSpec / sparkRenderIcons / sparkSetIcon) live in
+    // static/js/pwanimate/spark-icons.js and are exposed on window.
+
     function isSparkCitationLink(element) {
         if (!element) return false;
         const citationControl = (element.matches && element.matches('a, button'))
@@ -123,6 +126,17 @@
             this.mobileList = document.getElementById('pwanimate-mobile-list');
             this.quotaStatusEl = document.getElementById('pwanimate-quota-status');
             this.isGenerating = false;
+            this.waitingForInput = false;
+            // Activity event ids whose clarification/approval widget was already
+            // answered — replayed events render resolved instead of re-armed.
+            this.resolvedActivityEvents = new Set();
+            // Durable-run coordination: the pending structured interaction the
+            // composer may answer, and the run currently executing server-side.
+            this.pendingInteraction = null;
+            this.activeRunId = null;
+            this._interactionBlockEl = null;
+            this._interactionBlockSig = '';
+            this._interactionSubmitting = false;
             this.abortController = null;
             this.resizeFrame = null;
             this.lastPreviewTriggerEl = null;
@@ -137,7 +151,9 @@
             // Phase 1 Workspace Geometry & State Contract
             this.leftRailCollapsed = localStorage.getItem('pwanimate_left_rail_collapsed') === 'true';
             const parsedPreferred = parseInt(localStorage.getItem('pwanimate_context_rail_width'), 10);
-            this.savedPreferredWidth = (!isNaN(parsedPreferred) && parsedPreferred >= 280 && parsedPreferred <= 650) ? parsedPreferred : 360;
+            // null means "no deliberate user preference" — the rail then
+            // defaults to the equal split computed by calculateEffectiveContextLimits().
+            this.savedPreferredWidth = (!isNaN(parsedPreferred) && parsedPreferred >= 200 && parsedPreferred <= 2400) ? parsedPreferred : null;
             this.currentRenderedWidth = 0;
             // Start closed. Initial context resources are loaded immediately
             // after workspace geometry initializes and will open the tray.
@@ -156,6 +172,10 @@
             this.activeContextIndex = -1;
             this.previewDocViewer = null;
             this.contextDocViewer = null;
+            // Canonical live page state keyed by document identity. Viewer
+            // page-change callbacks write here; getContextResourcesForRequest()
+            // snapshots it at send time so remounts/re-previews never send stale pages.
+            this.viewerPageState = {};
 
             // Persistent Study Mode state
             this.activeStudySession = null;
@@ -430,7 +450,7 @@
                         return;
                     }
                     if (holder) {
-                        holder.innerHTML = `<i class="bi bi-check2"></i><span>${escapeHtml(data.message || 'Saved.')}</span>`;
+                        holder.innerHTML = `<i data-lucide="check"></i><span>${escapeHtml(data.message || 'Saved.')}</span>`;
                     }
                 } catch (error) {
                     button.disabled = false;
@@ -506,7 +526,10 @@
             if (!this.subscriptionOverlay) return;
             this.subscriptionOverlay.hidden = true;
             const payment = document.getElementById('pwanimateSubscriptionPayment');
-            if (payment) payment.hidden = true;
+            if (payment) {
+                payment.hidden = true;
+                payment.classList.remove('is-active');
+            }
         }
 
         async loadTiers() {
@@ -563,7 +586,15 @@
                 status.classList.remove('is-error', 'is-success');
             }
             if (demoButton) demoButton.classList.add('d-none');
-            if (payment) payment.hidden = false;
+            if (payment) {
+                payment.hidden = false;
+                payment.classList.add('is-active');
+                // The payment panel sits below the tier cards; bring it into
+                // view so it never looks like it failed to open.
+                requestAnimationFrame(() => {
+                    payment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            }
             const phone = document.getElementById('pwanimatePaymentPhone');
             if (phone) phone.focus();
         }
@@ -834,7 +865,7 @@
                 if (statusTextEl) {
                     statusTextEl.textContent = shortLabel;
                 } else {
-                    statusBadge.innerHTML = `<i class="bi bi-mortarboard-fill"></i><span>${escapeHtml(shortLabel)}</span>`;
+                    statusBadge.innerHTML = `<i data-lucide="graduation-cap"></i><span>${escapeHtml(shortLabel)}</span>`;
                 }
             }
 
@@ -886,12 +917,12 @@
                 pauseResumeBtn.dataset.studyStatusAction = nextAction;
                 pauseResumeBtn.title = nextAction === 'pause' ? 'Pause Study Session' : 'Resume Study Session';
                 if (pauseResumeIcon && pauseResumeText) {
-                    pauseResumeIcon.className = `bi ${nextAction === 'pause' ? 'bi-pause-fill' : 'bi-play-fill'}`;
+                    sparkSetIcon(pauseResumeIcon, nextAction === 'pause' ? 'pause' : 'play');
                     pauseResumeText.textContent = nextAction === 'pause' ? 'Pause' : 'Resume';
                 } else {
                     pauseResumeBtn.innerHTML = nextAction === 'pause'
-                        ? '<i class="bi bi-pause-fill"></i><span class="pwanimate-study-btn-label">Pause</span>'
-                        : '<i class="bi bi-play-fill"></i><span class="pwanimate-study-btn-label">Resume</span>';
+                        ? '<i data-lucide="pause"></i><span class="pwanimate-study-btn-label">Pause</span>'
+                        : '<i data-lucide="play"></i><span class="pwanimate-study-btn-label">Resume</span>';
                 }
                 pauseResumeBtn.classList.remove('d-none');
             }
@@ -1216,32 +1247,32 @@
                 <div class="row g-2">
                     <div class="col-12 col-md-6">
                         <div class="p-2 rounded-3 border bg-body-tertiary h-100">
-                            <div class="fw-semibold x-small text-uppercase text-primary mb-1"><i class="bi bi-book me-1"></i>Concepts Explained</div>
+                            <div class="fw-semibold x-small text-uppercase text-primary mb-1"><i data-lucide="book-open" class="me-1"></i>Concepts Explained</div>
                             <ul class="small mb-0 ps-3">${renderList(ckpt.concepts_explained, 'None recorded yet.')}</ul>
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <div class="p-2 rounded-3 border bg-body-tertiary h-100">
-                            <div class="fw-semibold x-small text-uppercase text-success mb-1"><i class="bi bi-patch-check-fill me-1"></i>Verified Demonstrated Mastery</div>
+                            <div class="fw-semibold x-small text-uppercase text-success mb-1"><i data-lucide="badge-check" class="me-1"></i>Verified Demonstrated Mastery</div>
                             <ul class="small mb-0 ps-3">${demonstratedItems}</ul>
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <div class="p-2 rounded-3 border bg-body-tertiary h-100">
-                            <div class="fw-semibold x-small text-uppercase text-warning-emphasis mb-1"><i class="bi bi-lightbulb me-1"></i>Inferred Understanding (Unverified)</div>
+                            <div class="fw-semibold x-small text-uppercase text-warning-emphasis mb-1"><i data-lucide="lightbulb" class="me-1"></i>Inferred Understanding (Unverified)</div>
                             <ul class="small mb-0 ps-3">${renderList(ckpt.inferred_understanding, 'No unverified inferences.')}</ul>
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <div class="p-2 rounded-3 border bg-body-tertiary h-100">
-                            <div class="fw-semibold x-small text-uppercase text-danger mb-1"><i class="bi bi-question-circle me-1"></i>Open Questions & Misconceptions</div>
+                            <div class="fw-semibold x-small text-uppercase text-danger mb-1"><i data-lucide="circle-help" class="me-1"></i>Open Questions & Misconceptions</div>
                             <ul class="small mb-0 ps-3">${renderList(ckpt.misconceptions, 'None identified.')}</ul>
                         </div>
                     </div>
                     ${ckpt.next_step ? `
                     <div class="col-12">
                         <div class="p-2 rounded-3 border border-primary-subtle bg-primary-subtle text-primary-emphasis small">
-                            <strong><i class="bi bi-signpost-split me-1"></i>Recommended Next Step:</strong> ${escapeHtml(ckpt.next_step)}
+                            <strong><i data-lucide="signpost" class="me-1"></i>Recommended Next Step:</strong> ${escapeHtml(ckpt.next_step)}
                         </div>
                     </div>` : ''}
                 </div>
@@ -1292,7 +1323,7 @@
                         learning_objective: learningObjective,
                     });
                     if (created && button) {
-                        button.innerHTML = '<i class="bi bi-check2 me-1"></i>Saved';
+                        button.innerHTML = '<i data-lucide="check" class="me-1"></i>Saved';
                     }
                     return;
                 }
@@ -1314,7 +1345,7 @@
                     this.activeStudySession = data.study_session;
                     this.syncStudyModeUI();
                     this.refreshConversationsList();
-                    if (button) button.innerHTML = '<i class="bi bi-check2 me-1"></i>Saved';
+                    if (button) button.innerHTML = '<i data-lucide="check" class="me-1"></i>Saved';
                 }
             } catch (err) {
                 console.error('[Spark] Error saving study metadata:', err);
@@ -1322,7 +1353,7 @@
                 setTimeout(() => {
                     if (button) {
                         button.disabled = false;
-                        button.innerHTML = originalHtml || '<i class="bi bi-check2 me-1"></i>Save Topic & Objective';
+                        button.innerHTML = originalHtml || '<i data-lucide="check" class="me-1"></i>Save Topic & Objective';
                     }
                 }, 1400);
             }
@@ -1372,7 +1403,7 @@
             } finally {
                 if (button) {
                     button.disabled = false;
-                    button.innerHTML = originalHtml || '<i class="bi bi-arrow-repeat me-1"></i>Refresh Checkpoint Now';
+                    button.innerHTML = originalHtml || '<i data-lucide="refresh-cw" class="me-1"></i>Refresh Checkpoint Now';
                 }
             }
         }
@@ -1422,7 +1453,7 @@
             } finally {
                 if (button) {
                     button.disabled = false;
-                    button.innerHTML = originalHtml || '<i class="bi bi-stars me-1"></i>Generate / Refresh Summary';
+                    button.innerHTML = originalHtml || '<i data-lucide="sparkles" class="me-1"></i>Generate / Refresh Summary';
                 }
             }
         }
@@ -1473,7 +1504,7 @@
                 const downloadUrl = data.download_url || (data.exported_document && data.exported_document.download_url) || '';
                 if (statusEl) {
                     statusEl.className = 'small mt-2 text-success';
-                    statusEl.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>Exported ${escapeHtml(fmt.toUpperCase())} to My Resources.${downloadUrl ? ` <a href="${escapeHtml(downloadUrl)}" class="fw-semibold" target="_blank" rel="noopener">Download file</a>` : ''}`;
+                    statusEl.innerHTML = `<i data-lucide="circle-check-big" class="me-1"></i>Exported ${escapeHtml(fmt.toUpperCase())} to My Resources.${downloadUrl ? ` <a href="${escapeHtml(downloadUrl)}" class="fw-semibold" target="_blank" rel="noopener">Download file</a>` : ''}`;
                     statusEl.classList.remove('d-none');
                 }
                 if (downloadUrl) {
@@ -1595,7 +1626,7 @@
                 if (statusEl) {
                     const colName = data.collection ? data.collection.name : (collectionName || 'collection');
                     statusEl.className = 'small mt-2 text-success';
-                    statusEl.innerHTML = `<i class="bi bi-bookmark-check-fill me-1"></i>Saved to collection <strong>${escapeHtml(colName)}</strong>!`;
+                    statusEl.innerHTML = `<i data-lucide="bookmark-check" class="me-1"></i>Saved to collection <strong>${escapeHtml(colName)}</strong>!`;
                     statusEl.classList.remove('d-none');
                 }
                 if (newFormEl) newFormEl.classList.add('d-none');
@@ -1614,7 +1645,7 @@
             } finally {
                 if (button) {
                     button.disabled = false;
-                    button.innerHTML = originalHtml || '<i class="bi bi-bookmark-plus me-1"></i>Save to Collection';
+                    button.innerHTML = originalHtml || '<i data-lucide="bookmark-plus" class="me-1"></i>Save to Collection';
                 }
             }
         }
@@ -1755,11 +1786,12 @@
                     const fileType = escapeHtml((book.file_type || 'file').toUpperCase());
                     const thumbnail = book.thumbnail_url
                         ? `<img src="${escapeHtml(book.thumbnail_url)}" alt="" class="pwanimate-context-book-thumbnail">`
-                        : '<span class="pwanimate-context-book-icon"><i class="bi bi-journal-bookmark-fill"></i></span>';
+                        : '<span class="pwanimate-context-book-icon"><i data-lucide="book-marked"></i></span>';
                     return `<button type="button" class="pwanimate-context-book-result" data-context-document-index="${index}">
                         ${thumbnail}
                         <span class="pwanimate-context-book-copy"><strong>${title}</strong><small>${unitBadge}${category} · ${fileType}</small></span>
-                        <i class="bi bi-arrow-up-right pwanimate-context-book-open"></i>
+                        <i data-lucide="download" class="pwanimate-context-book-offline" data-offline-save-doc="${escapeHtml(book.document_share_id || book.document_id || '')}" title="Save for offline" role="button" aria-label="Save ${title} for offline"></i>
+                        <i data-lucide="arrow-up-right" class="pwanimate-context-book-open"></i>
                     </button>`;
                 }).join('');
             } catch (error) {
@@ -1779,101 +1811,32 @@
             }
         }
 
-        initEmptyStateWelcome() {
-            const emptyState = this.transcript && this.transcript.querySelector('#pwanimate-empty-state');
-            if (!emptyState) return;
-
-            const greetingEl = emptyState.querySelector('#pwanimate-empty-greeting');
-            const questionEl = emptyState.querySelector('#pwanimate-empty-question');
-            const suggestionsEl = emptyState.querySelector('#pwanimate-empty-suggestions');
-            if (!greetingEl || !questionEl || !suggestionsEl) return;
-
-            const name = (emptyState.dataset.nickname || emptyState.dataset.username || emptyState.dataset.displayName || '').trim();
-            const tone = (emptyState.dataset.tone || 'neutral').toLowerCase();
-            const interests = (emptyState.dataset.interests || '').split(',').map(value => value.trim()).filter(Boolean);
-            const friendly = tone === 'friendly';
-            const formal = tone === 'professional' || tone === 'academic';
-
-            let welcomeLines;
-            if (formal) {
-                welcomeLines = [
-                    { greeting: `Hello${name ? `, ${name}` : ''}.`, question: 'What would you like to work on today?' },
-                    { greeting: `Good to see you${name ? `, ${name}` : ''}.`, question: 'Where should we start?' },
-                    { greeting: `I'm ready when you are${name ? `, ${name}` : ''}.`, question: 'How can I support your studies today?' }
-                ];
-            } else if (friendly) {
-                welcomeLines = [
-                    { greeting: `Hey${name ? ` ${name}` : ''} 👋 How've you been today?`, question: 'What are we getting into today?' },
-                    { greeting: `What's up${name ? `, ${name}` : ''}? I'm here for you.`, question: 'What are we tackling first?' },
-                    { greeting: `Good to see you${name ? `, ${name}` : ''}!`, question: 'What are we in the mood to work on?' },
-                    { greeting: `Hey${name ? ` ${name}` : ''},`, question: 'What’s on your mind today?' }
-                ];
-            } else {
-                welcomeLines = [
-                    { greeting: `Hi${name ? `, ${name}` : ''}.`, question: 'What are we up to today?' },
-                    { greeting: `What's on your mind${name ? `, ${name}` : ''}?`, question: 'Want to talk something through or get some studying done?' },
-                    { greeting: `I'm here for you${name ? `, ${name}` : ''}.`, question: 'Where should we start?' },
-                    { greeting: `Hey${name ? ` ${name}` : ''} — how's today going?`, question: 'What should we tackle first?' }
-                ];
-            }
-
-            if (interests.length) {
-                const interest = interests[Math.floor(Math.random() * interests.length)];
-                welcomeLines.push({
-                    greeting: `Good to see you${name ? `, ${name}` : ''}.`,
-                    question: `Want to use ${interest} for an example today, or start somewhere else?`
-                });
-            }
-
-            const storageKey = `pwanimate_empty_welcome_${emptyState.dataset.username || 'student'}`;
-            let previousIndex = -1;
+        async initEmptyStateWelcome() {
+            const state = this.transcript && this.transcript.querySelector('#pwanimate-empty-state');
+            if (!state) return;
+            const greeting = state.querySelector('#pwanimate-empty-greeting');
+            const question = state.querySelector('#pwanimate-empty-question');
+            const suggestions = state.querySelector('#pwanimate-empty-suggestions');
+            if (!greeting || !question || !suggestions) return;
+            greeting.textContent = 'Hello' + (state.dataset.nickname || state.dataset.username ? ', ' + (state.dataset.nickname || state.dataset.username) : '') + '.';
+            question.textContent = 'What would you like to work on today?';
+            suggestions.replaceChildren();
             try {
-                previousIndex = Number.parseInt(sessionStorage.getItem(storageKey), 10);
-            } catch (_) {
-                // Use the random selection when session storage is unavailable.
-            }
-            let welcomeIndex = Math.floor(Math.random() * welcomeLines.length);
-            if (welcomeLines.length > 1 && welcomeIndex === previousIndex) {
-                welcomeIndex = (welcomeIndex + 1 + Math.floor(Math.random() * (welcomeLines.length - 1))) % welcomeLines.length;
-            }
-            try {
-                sessionStorage.setItem(storageKey, String(welcomeIndex));
-            } catch (_) {
-                // Ignore storage restrictions; the selected copy still displays.
-            }
-
-            greetingEl.textContent = welcomeLines[welcomeIndex].greeting;
-            questionEl.textContent = welcomeLines[welcomeIndex].question;
-
-            const suggestions = [
-                { label: 'Explain a tricky topic', prompt: 'Help me understand a topic I find difficult. Ask me which topic first.' },
-                { label: 'Find notes or past papers', prompt: 'Help me find lecture notes or past papers for my programme.' },
-                { label: 'Plan a study session', prompt: 'Help me plan a focused study session for today.' },
-                { label: 'Explain it with an example', prompt: 'Explain a difficult academic idea using a simple, concrete example.' },
-                { label: 'Quiz me', prompt: 'Quiz me on a topic I am studying, one question at a time. First ask me which topic.' },
-                { label: 'Brainstorm an assignment', prompt: 'Help me brainstorm ideas for an assignment. Ask what the assignment is about.' }
-            ];
-            if (interests.length) {
-                const interest = interests[Math.floor(Math.random() * interests.length)];
-                suggestions.push({
-                    label: `Explore ${interest}`,
-                    prompt: `Can you help me explore ${interest}? Suggest a useful way to connect it with something I'm studying, if relevant.`
+                const response = await fetch('/api/pwanimate/memory/welcome/', {credentials: 'same-origin', cache: 'no-store'});
+                if (!response.ok) return;
+                const data = await response.json();
+                if (!state.isConnected) return;
+                greeting.textContent = data.greeting;
+                question.textContent = data.question;
+                (data.suggestions || []).forEach(item => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'pwanimate-suggestion-chip';
+                    button.dataset.prompt = item.prompt;
+                    button.textContent = item.label;
+                    suggestions.appendChild(button);
                 });
-            }
-
-            suggestionsEl.replaceChildren();
-            for (let i = suggestions.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [suggestions[i], suggestions[j]] = [suggestions[j], suggestions[i]];
-            }
-            suggestions.slice(0, 3).forEach(suggestion => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'pwanimate-suggestion-chip';
-                button.dataset.prompt = suggestion.prompt;
-                button.textContent = suggestion.label;
-                suggestionsEl.appendChild(button);
-            });
+            } catch (_) { /* Neutral welcome stays usable when offline. */ }
         }
 
         initMarkdown() {
@@ -2165,7 +2128,8 @@
             link.append(copy);
 
             const externalIcon = document.createElement('i');
-            externalIcon.className = 'bi bi-box-arrow-up-right pwanimate-web-source-external';
+            externalIcon.setAttribute('data-lucide', 'external-link');
+            externalIcon.className = 'pwanimate-web-source-external';
             externalIcon.setAttribute('aria-hidden', 'true');
             link.appendChild(externalIcon);
             return link;
@@ -2280,7 +2244,7 @@
                 copyBtn.type = 'button';
                 copyBtn.className = 'pwanimate-code-copy-btn';
                 copyBtn.setAttribute('aria-label', 'Copy code');
-                copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> <span>Copy</span>';
+                copyBtn.innerHTML = '<i data-lucide="copy"></i> <span>Copy</span>';
 
                 header.appendChild(langSpan);
                 header.appendChild(copyBtn);
@@ -2315,7 +2279,7 @@
                         btn.type = 'button';
                         btn.className = 'pwanimate-show-more-btn';
                         btn.setAttribute('aria-expanded', 'false');
-                        btn.innerHTML = '<i class="bi bi-chevron-down"></i> <span>Show more</span>';
+                        btn.innerHTML = '<i data-lucide="chevron-down"></i> <span>Show more</span>';
                         wrapper.appendChild(btn);
                     }
                 }
@@ -2330,8 +2294,8 @@
                 const originalHtml = btnElement.innerHTML;
                 btnElement.classList.add('copied');
                 btnElement.innerHTML = btnElement.classList.contains('pwanimate-code-copy-btn')
-                    ? '<i class="bi bi-check2 text-success"></i> <span>Copied!</span>'
-                    : '<i class="bi bi-check2 text-success"></i>';
+                    ? '<i data-lucide="check" class="text-success"></i> <span>Copied!</span>'
+                    : '<i data-lucide="check" class="text-success"></i>';
                 setTimeout(() => {
                     btnElement.classList.remove('copied');
                     btnElement.innerHTML = originalHtml;
@@ -2578,8 +2542,8 @@
                             const isExpanded = bubble.classList.toggle('is-expanded');
                             showMoreBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
                             showMoreBtn.innerHTML = isExpanded
-                                ? '<i class="bi bi-chevron-up"></i> <span>Show less</span>'
-                                : '<i class="bi bi-chevron-down"></i> <span>Show more</span>';
+                                ? '<i data-lucide="chevron-up"></i> <span>Show less</span>'
+                                : '<i data-lucide="chevron-down"></i> <span>Show more</span>';
                         }
                         return;
                     }
@@ -2917,6 +2881,29 @@
                     return;
                 }
 
+                const offlineTabBtn = e.target.closest('#desktopTabOfflineBtn, #mobileTabOfflineBtn');
+                if (offlineTabBtn) {
+                    e.preventDefault();
+                    this.switchWorkspaceTab('offline');
+                    return;
+                }
+
+                // Consolidated rail overflow menu
+                const railMenuAction = e.target.closest('#desktopRailMenu [data-rail-action]');
+                if (railMenuAction) {
+                    e.preventDefault();
+                    this.handleRailMenuAction(railMenuAction.dataset.railAction);
+                    return;
+                }
+
+                // Offline tab list actions (Read / Add to context / Save / Update / Remove)
+                const offlineTabAction = e.target.closest('[data-offline-tab-action]');
+                if (offlineTabAction) {
+                    e.preventDefault();
+                    this.handleOfflineTabAction(offlineTabAction.dataset.offlineTabAction, offlineTabAction.dataset.shareId);
+                    return;
+                }
+
                 // Add to Context buttons (Desktop & Mobile)
                 const addContextBtn = e.target.closest('#desktopPreviewAddToContextBtn, #previewSheetAddToContextBtn');
                 if (addContextBtn) {
@@ -3058,7 +3045,7 @@
             // Refresh quota button
             if (this.refreshQuotaBtn) {
                 this.refreshQuotaBtn.addEventListener('click', () => {
-                    const icon = this.refreshQuotaBtn.querySelector('i');
+                    const icon = this.refreshQuotaBtn.querySelector('svg, i');
                     if (icon) icon.classList.add('pwanimate-spin');
                     this.fetchQuotaStatus().finally(() => {
                         setTimeout(() => {
@@ -3108,15 +3095,14 @@
         // Reflect playback state on a single per-message speaker button.
         setSpeakBtnState(btn, active) {
             if (!btn) return;
-            const icon = btn.querySelector('i');
+            const icon = btn.querySelector('svg, i');
             btn.classList.toggle('is-speaking', active);
             btn.setAttribute('aria-pressed', String(active));
             const label = active ? 'Stop reading aloud' : 'Read this reply aloud';
             btn.title = label;
             btn.setAttribute('aria-label', label);
             if (icon) {
-                icon.classList.toggle('bi-volume-up-fill', !active);
-                icon.classList.toggle('bi-stop-circle-fill', active);
+                sparkSetIcon(icon, active ? 'circle-stop' : 'volume-2');
             }
         }
 
@@ -3896,6 +3882,9 @@
                 primaryText: primaryText,
                 primaryIcon: primaryIcon,
                 docIcon: docIcon,
+                // Local offline bytes (Blob) — consumed by the viewer only;
+                // stripped before context payloads are serialized.
+                fileBlob: meta.fileBlob || null,
                 rawMeta: meta
             };
         }
@@ -3905,6 +3894,7 @@
         }
 
         previewResource(url, title, meta = {}) {
+            try { performance.mark('pw:preview-click'); } catch (_) {}
             this.lastPreviewTriggerEl = meta.triggerEl || null;
             const resource = this.normalizeResource(url, title, meta);
 
@@ -3942,6 +3932,7 @@
                     let offcanvas = bootstrap.Offcanvas.getInstance(sheetEl);
                     if (!offcanvas) offcanvas = new bootstrap.Offcanvas(sheetEl);
                     offcanvas.show();
+                    this._expandMobileSheetForReading(sheetEl);
                 }
             }
 
@@ -3961,32 +3952,30 @@
         }
 
         switchWorkspaceTab(tabName) {
-            const targetTab = (tabName === 'context') ? 'context' : 'preview';
+            const validTabs = ['preview', 'context', 'offline'];
+            const targetTab = validTabs.includes(tabName) ? tabName : 'preview';
             this.activeWorkspaceTab = targetTab;
 
-            // Desktop Tab Buttons & Panes
-            const deskPrevBtn = document.getElementById('desktopTabPreviewBtn');
-            const deskCtxBtn = document.getElementById('desktopTabContextBtn');
-            const deskPrevPane = document.getElementById('desktopTabPreviewPane');
-            const deskCtxPane = document.getElementById('desktopTabContextPane');
+            const tabIds = {
+                preview: { btn: 'desktopTabPreviewBtn', pane: 'desktopTabPreviewPane', mobBtn: 'mobileTabPreviewBtn', mobPane: 'mobileTabPreviewPane' },
+                context: { btn: 'desktopTabContextBtn', pane: 'desktopTabContextPane', mobBtn: 'mobileTabContextBtn', mobPane: 'mobileTabContextPane' },
+                offline: { btn: 'desktopTabOfflineBtn', pane: 'desktopTabOfflinePane', mobBtn: 'mobileTabOfflineBtn', mobPane: 'mobileTabOfflinePane' },
+            };
 
-            // Mobile Tab Buttons & Panes
-            const mobPrevBtn = document.getElementById('mobileTabPreviewBtn');
-            const mobCtxBtn = document.getElementById('mobileTabContextBtn');
-            const mobPrevPane = document.getElementById('mobileTabPreviewPane');
-            const mobCtxPane = document.getElementById('mobileTabContextPane');
+            for (const name of validTabs) {
+                const ids = tabIds[name];
+                const isActive = name === targetTab;
+                const deskBtn = document.getElementById(ids.btn);
+                const deskPane = document.getElementById(ids.pane);
+                const mobBtn = document.getElementById(ids.mobBtn);
+                const mobPane = document.getElementById(ids.mobPane);
+                if (deskBtn) { deskBtn.classList.toggle('active', isActive); deskBtn.setAttribute('aria-selected', isActive ? 'true' : 'false'); }
+                if (deskPane) { deskPane.classList.toggle('show', isActive); deskPane.classList.toggle('active', isActive); }
+                if (mobBtn) { mobBtn.classList.toggle('active', isActive); mobBtn.setAttribute('aria-selected', isActive ? 'true' : 'false'); }
+                if (mobPane) { mobPane.classList.toggle('show', isActive); mobPane.classList.toggle('active', isActive); }
+            }
 
             if (targetTab === 'preview') {
-                if (deskPrevBtn) { deskPrevBtn.classList.add('active'); deskPrevBtn.setAttribute('aria-selected', 'true'); }
-                if (deskCtxBtn) { deskCtxBtn.classList.remove('active'); deskCtxBtn.setAttribute('aria-selected', 'false'); }
-                if (deskPrevPane) { deskPrevPane.classList.add('show', 'active'); }
-                if (deskCtxPane) { deskCtxPane.classList.remove('show', 'active'); }
-
-                if (mobPrevBtn) { mobPrevBtn.classList.add('active'); mobPrevBtn.setAttribute('aria-selected', 'true'); }
-                if (mobCtxBtn) { mobCtxBtn.classList.remove('active'); mobCtxBtn.setAttribute('aria-selected', 'false'); }
-                if (mobPrevPane) { mobPrevPane.classList.add('show', 'active'); }
-                if (mobCtxPane) { mobCtxPane.classList.remove('show', 'active'); }
-
                 if (this.previewDocViewer && typeof this.previewDocViewer.handleResize === 'function') {
                     requestAnimationFrame(() => {
                         if (this.previewDocViewer && typeof this.previewDocViewer.handleResize === 'function') {
@@ -3994,17 +3983,7 @@
                         }
                     });
                 }
-            } else {
-                if (deskPrevBtn) { deskPrevBtn.classList.remove('active'); deskPrevBtn.setAttribute('aria-selected', 'false'); }
-                if (deskCtxBtn) { deskCtxBtn.classList.add('active'); deskCtxBtn.setAttribute('aria-selected', 'true'); }
-                if (deskPrevPane) { deskPrevPane.classList.remove('show', 'active'); }
-                if (deskCtxPane) { deskCtxPane.classList.add('show', 'active'); }
-
-                if (mobPrevBtn) { mobPrevBtn.classList.remove('active'); mobPrevBtn.setAttribute('aria-selected', 'false'); }
-                if (mobCtxBtn) { mobCtxBtn.classList.add('active'); mobCtxBtn.setAttribute('aria-selected', 'true'); }
-                if (mobPrevPane) { mobPrevPane.classList.remove('show', 'active'); }
-                if (mobCtxPane) { mobCtxPane.classList.add('show', 'active'); }
-
+            } else if (targetTab === 'context') {
                 if (this.contextResources.length > 0 && this.activeContextIndex < 0) {
                     this.activeContextIndex = 0;
                 }
@@ -4017,16 +3996,357 @@
                         }
                     });
                 }
+            } else if (targetTab === 'offline') {
+                this.renderOfflineTab();
             }
+            this.syncRailDocTitle();
             this.syncDocumentStudyUI();
         }
 
+        /* ==========================================================================
+           Document-first workspace: rail title, overflow menu, offline tab
+           ========================================================================== */
+
+        _activeRailResource() {
+            if (this.activeWorkspaceTab === 'context') {
+                const idx = (this.activeContextIndex >= 0) ? this.activeContextIndex : 0;
+                return this.contextResources[idx] || null;
+            }
+            return this.previewResourceState || null;
+        }
+
+        syncRailDocTitle() {
+            const el = document.getElementById('desktopRailDocTitle');
+            if (!el) return;
+            const resource = this._activeRailResource();
+            const title = resource && resource.title ? resource.title : '';
+            if (title) {
+                el.textContent = title;
+                el.title = title;
+                el.classList.remove('d-none');
+            } else {
+                el.textContent = '';
+                el.classList.add('d-none');
+            }
+            this.syncRailMenuState();
+        }
+
+        syncRailMenuState() {
+            const menu = document.getElementById('desktopRailMenu');
+            if (!menu) return;
+            const resource = this._activeRailResource();
+            const hasResource = Boolean(resource);
+            const isDoc = hasResource && (resource.previewType === 'document' || resource.documentShareId || resource.fileType === 'pdf');
+            const viewer = this.activeWorkspaceTab === 'context' ? this.contextDocViewer : this.previewDocViewer;
+            const hasViewer = Boolean(viewer);
+            const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+            const map = {
+                'open-original': hasResource && Boolean(resource.url || resource.mediaUrl),
+                'download': hasViewer || (hasResource && Boolean(resource.url)),
+                'save-offline': online && isDoc && Boolean(resource.documentShareId),
+                'refresh': hasViewer,
+                'fullscreen': hasViewer,
+                'add-context': Boolean(this.previewResourceState) && online,
+                'remove-context': this.activeWorkspaceTab === 'context' && this.contextResources.length > 0,
+                'close-preview': hasResource || this.contextResources.length > 0,
+            };
+            menu.querySelectorAll('[data-rail-action]').forEach(item => {
+                const enabled = map[item.dataset.railAction] !== false;
+                item.classList.toggle('disabled', !enabled);
+                item.style.opacity = enabled ? '' : '0.45';
+                item.style.pointerEvents = enabled ? '' : 'none';
+            });
+        }
+
+        handleRailMenuAction(action) {
+            const resource = this._activeRailResource();
+            const isContextSurface = this.activeWorkspaceTab === 'context';
+            const viewer = isContextSurface ? this.contextDocViewer : this.previewDocViewer;
+            switch (action) {
+                case 'open-original': {
+                    const url = resource && (resource.url || resource.mediaUrl);
+                    if (url) window.open(url, '_blank', 'noopener');
+                    break;
+                }
+                case 'download': {
+                    if (viewer && typeof viewer.trackAndDownload === 'function') {
+                        viewer.trackAndDownload();
+                    } else if (resource && resource.url) {
+                        window.open(resource.url, '_blank', 'noopener');
+                    }
+                    break;
+                }
+                case 'save-offline': {
+                    const shareId = resource && resource.documentShareId;
+                    if (!shareId || !window.PwaniOfflineLibrary) break;
+                    const lib = window.PwaniOfflineLibrary;
+                    lib.save(shareId).then(() => {
+                        this.renderOfflineTab();
+                    }).catch(err => {
+                        alert((err && err.message) || 'Could not save this document offline.');
+                    });
+                    break;
+                }
+                case 'refresh': {
+                    if (viewer && typeof viewer.initialize === 'function') {
+                        viewer.initialize();
+                    }
+                    break;
+                }
+                case 'fullscreen': {
+                    if (viewer && typeof viewer.toggleFullscreen === 'function') {
+                        viewer.toggleFullscreen();
+                    }
+                    break;
+                }
+                case 'add-context': {
+                    if (this.previewResourceState) this.addResourceToContext(this.previewResourceState);
+                    break;
+                }
+                case 'remove-context': {
+                    this.removeResourceFromContext(this.activeContextIndex >= 0 ? this.activeContextIndex : 0);
+                    break;
+                }
+                case 'close-preview': {
+                    this.closePreview();
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        /* ---------------- Offline tab ---------------- */
+
+        _offlineSearchBound = false;
+
+        _bindOfflineSearchInputs() {
+            if (this._offlineSearchBound) return;
+            this._offlineSearchBound = true;
+            ['desktopOfflineSearch', 'mobileOfflineSearch'].forEach(id => {
+                const input = document.getElementById(id);
+                if (!input) return;
+                input.addEventListener('input', () => {
+                    this._offlineQuery = input.value || '';
+                    this.renderOfflineTab();
+                });
+            });
+        }
+
+        async renderOfflineTab() {
+            this._bindOfflineSearchInputs();
+            const containers = [
+                document.getElementById('desktopOfflineList'),
+                document.getElementById('mobileOfflineList'),
+            ].filter(Boolean);
+            if (!containers.length) return;
+            const lib = window.PwaniOfflineLibrary;
+            containers.forEach(el => {
+                el.innerHTML = '<div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>';
+            });
+            if (!lib || typeof lib.list !== 'function') {
+                containers.forEach(el => { el.innerHTML = '<div class="text-muted small py-4 text-center">Offline library is unavailable.</div>'; });
+                return;
+            }
+
+            let records = [];
+            try { records = await lib.list(); } catch (e) { records = []; }
+
+            // Remote catalog powers "available to save" and update detection.
+            let remoteDocs = [];
+            const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+            if (online) {
+                try {
+                    const resp = await fetch('/api/pwanimate/offline/library/', {
+                        credentials: 'same-origin',
+                        headers: { Accept: 'application/json' },
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        remoteDocs = Array.isArray(data.documents) ? data.documents : [];
+                    }
+                } catch (_) { /* offline or unauthorized — saved list still renders */ }
+            }
+
+            const query = (this._offlineQuery || '').trim().toLowerCase();
+            const savedIds = new Set(records.map(r => r.share_id));
+            const remoteById = new Map(remoteDocs.map(d => [d.document_id, d]));
+
+            const matches = (record) => {
+                if (!query) return true;
+                const hay = [record.title, record.unit_code, record.unit_name, record.category,
+                    record.file && record.file.filename, record.description]
+                    .filter(Boolean).join(' ').toLowerCase();
+                return hay.includes(query);
+            };
+
+            const esc = (v) => String(v == null ? '' : v)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            const fmtBytes = (n) => {
+                n = Number(n) || 0;
+                if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+                if (n >= 1024) return Math.round(n / 1024) + ' KB';
+                return n + ' B';
+            };
+
+            const savedHtml = records.filter(matches).map(record => {
+                const shareId = esc(record.share_id);
+                const title = esc(record.title || 'Untitled document');
+                const unit = record.unit_code
+                    ? `${esc(record.unit_code)}${record.unit_name ? ' — ' + esc(record.unit_name) : ''}`
+                    : esc(record.category || 'Document');
+                const size = record.file && record.file.size_bytes ? fmtBytes(record.file.size_bytes) : '';
+                const pages = record.file && record.file.page_count ? `${record.file.page_count} pages` : '';
+                const remote = remoteById.get(record.share_id);
+                const updateAvailable = Boolean(remote && record.doc_updated_at && remote.updated_at && remote.updated_at > record.doc_updated_at);
+                const hasBlob = Boolean(record.file_blob);
+                const meta = [unit, size, pages, record.chunks ? `${record.chunks.length} sections` : ''].filter(Boolean).join(' · ');
+                return `<div class="pwanimate-offline-item d-flex align-items-center gap-2 p-2 mb-2" role="listitem" data-share-id="${shareId}">
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-semibold small text-truncate">${title}</div>
+                        <div class="text-muted" style="font-size:0.72rem;">${meta}</div>
+                        <div class="d-flex align-items-center gap-1 mt-1">
+                            <span class="badge rounded-pill bg-success-subtle text-success-emphasis pwanimate-offline-badge">${hasBlob ? 'On device' : 'Metadata only'}</span>
+                            ${updateAvailable ? '<span class="badge rounded-pill bg-warning-subtle text-warning-emphasis pwanimate-offline-badge">Update available</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="pwanimate-offline-actions d-flex flex-column gap-1 flex-shrink-0">
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-2" data-offline-tab-action="read" data-share-id="${shareId}" ${hasBlob ? '' : 'disabled'}><i data-lucide="book-open"></i> Read</button>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2" data-offline-tab-action="context" data-share-id="${shareId}" title="Add to Spark context" ${online ? '' : 'disabled'}><i data-lucide="plus"></i></button>
+                            ${updateAvailable ? `<button type="button" class="btn btn-sm btn-outline-warning rounded-pill px-2" data-offline-tab-action="update" data-share-id="${shareId}" title="Download latest version"><i data-lucide="refresh-cw"></i></button>` : ''}
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2" data-offline-tab-action="remove" data-share-id="${shareId}" title="Remove offline copy"><i data-lucide="trash-2"></i></button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const available = online ? remoteDocs.filter(d => !savedIds.has(d.document_id) && matches({
+                title: d.title, unit_code: d.unit_code, unit_name: d.unit_name, category: d.category,
+                description: d.description,
+            })).slice(0, 50).map(doc => {
+                const shareId = esc(doc.document_id);
+                const unit = doc.unit_code ? `${esc(doc.unit_code)}${doc.unit_name ? ' — ' + esc(doc.unit_name) : ''}` : esc(doc.category || 'Document');
+                const size = doc.file && doc.file.size_bytes ? fmtBytes(doc.file.size_bytes) : '';
+                return `<div class="pwanimate-offline-item d-flex align-items-center gap-2 p-2 mb-2" role="listitem">
+                    <div class="flex-grow-1 min-width-0">
+                        <div class="fw-semibold small text-truncate">${esc(doc.title)}</div>
+                        <div class="text-muted" style="font-size:0.72rem;">${unit}${size ? ' · ' + size : ''} · ${doc.chunk_count || 0} sections</div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2 flex-shrink-0" data-offline-tab-action="save" data-share-id="${shareId}"><i data-lucide="download"></i> Save</button>
+                </div>`;
+            }).join('') : '';
+
+            const html = `
+                ${savedHtml ? `<div class="text-muted text-uppercase fw-semibold mb-2" style="font-size:0.68rem;letter-spacing:0.04em;">Saved on this device</div>${savedHtml}` : '<div class="text-muted small py-3">No documents saved on this device yet.</div>'}
+                ${available ? `<div class="text-muted text-uppercase fw-semibold mb-2 mt-3" style="font-size:0.68rem;letter-spacing:0.04em;">Available to save</div>${available}` : ''}
+            `;
+            containers.forEach(el => { el.innerHTML = html; });
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                try { window.lucide.createIcons(); } catch (_) {}
+            }
+        }
+
+        async handleOfflineTabAction(action, shareId) {
+            const lib = window.PwaniOfflineLibrary;
+            if (!lib || !shareId) return;
+            try {
+                if (action === 'read') {
+                    await this.openOfflineDocument(shareId);
+                } else if (action === 'context') {
+                    const resource = await this._offlineContextResource(shareId);
+                    if (resource) this.addResourceToContext(resource);
+                } else if (action === 'save' || action === 'update') {
+                    await lib.save(shareId);
+                    this.renderOfflineTab();
+                } else if (action === 'remove') {
+                    await lib.remove(shareId);
+                    this.renderOfflineTab();
+                }
+            } catch (err) {
+                alert((err && err.message) || 'Offline library action failed.');
+            }
+        }
+
+        async _offlineContextResource(shareId) {
+            const lib = window.PwaniOfflineLibrary;
+            const record = await lib.get(shareId);
+            if (!record) return null;
+            // Prefer the local blob so the Context tab can render the same PDF
+            // without a network fetch; fall back to no media when bytes are gone.
+            let blobUrl = '';
+            let fileBlob = null;
+            if (record.file_blob) {
+                if (typeof lib.getBlobUrl === 'function') {
+                    try { blobUrl = await lib.getBlobUrl(shareId); } catch (_) { blobUrl = ''; }
+                }
+                if (typeof lib.getBlob === 'function') {
+                    try { fileBlob = await lib.getBlob(shareId); } catch (_) { fileBlob = null; }
+                }
+            }
+            return this.normalizeResource(`/documents/document/${shareId}/`, record.title || 'Document', {
+                mediaUrl: blobUrl,
+                fileBlob: fileBlob,
+                fileType: (record.file && record.file.extension) || 'pdf',
+                resourceType: 'document',
+                documentShareId: shareId,
+                documentId: record.document_pk || shareId,
+                documentVersionId: record.document_version_id || '',
+                fileId: (record.file && record.file.file_id) || '',
+                pageNumber: 1,
+                url: `/documents/document/${shareId}/`,
+                thumbnailUrl: (record.file && record.file.preview_url) || '',
+            });
+        }
+
+        async openOfflineDocument(shareId) {
+            const lib = window.PwaniOfflineLibrary;
+            if (!lib) return;
+            const record = await lib.get(shareId);
+            if (!record) {
+                alert('This document is no longer saved on this device.');
+                this.renderOfflineTab();
+                return;
+            }
+            if (!record.file_blob) {
+                alert('The local file for this document is missing. Re-download it while online.');
+                return;
+            }
+            let blobUrl;
+            let fileBlob = null;
+            try {
+                blobUrl = await lib.getBlobUrl(shareId);
+                if (typeof lib.getBlob === 'function') {
+                    fileBlob = await lib.getBlob(shareId);
+                }
+            } catch (err) {
+                alert('The saved file appears to be corrupted. Remove it and save it again while online.');
+                return;
+            }
+            const file = record.file || {};
+            const ext = (file.extension || 'pdf').toLowerCase();
+            const meta = {
+                mediaUrl: blobUrl,
+                fileBlob: fileBlob,
+                fileType: ext,
+                resourceType: 'document',
+                documentShareId: shareId,
+                documentId: record.document_pk || shareId,
+                documentVersionId: record.document_version_id || '',
+                fileId: file.file_id || '',
+                pageNumber: 1,
+                thumbnailUrl: file.preview_url || '',
+            };
+            this.previewResource(`/documents/document/${shareId}/`, record.title || 'Document', meta);
+        }
 
         addResourceToContext(resource) {
             if (!resource) return;
 
             // Deduplicate
             const existingIndex = this.contextResources.findIndex(item =>
+                (resource.documentShareId && item.documentShareId === resource.documentShareId) ||
                 (resource.documentId && item.documentId === resource.documentId) ||
                 (resource.attachmentId && item.attachmentId === resource.attachmentId) ||
                 (resource.mediaUrl && item.mediaUrl === resource.mediaUrl) ||
@@ -4054,10 +4374,21 @@
             this.switchWorkspaceTab('context');
         }
 
+        _resourceStateKey(details) {
+            // Stable identity for page-state tracking: prefer the public share
+            // UUID, then internal id, attachment id, media URL, or page URL.
+            if (!details) return '';
+            return String(
+                details.documentShareId || details.documentId ||
+                (details.attachmentId ? 'att:' + details.attachmentId : '') ||
+                details.mediaUrl || details.url || ''
+            );
+        }
+
         getContextResourcesForRequest() {
             const resources = [...this.contextResources];
             const preview = this.previewResourceState;
-            if (!preview) return resources;
+            if (!preview) return this._snapshotResourcePages(resources);
 
             const alreadyIncluded = resources.some(item =>
                 (preview.documentId && item.documentId === preview.documentId) ||
@@ -4067,7 +4398,24 @@
                 (preview.url && item.url === preview.url)
             );
             if (!alreadyIncluded) resources.push(preview);
-            return resources;
+            return this._snapshotResourcePages(resources);
+        }
+
+        _snapshotResourcePages(resources) {
+            // Immutable request-time snapshot: overlay the live viewer page
+            // state onto a shallow copy so in-flight requests keep the page
+            // that was visible when the message was sent.
+            return (resources || []).map(item => {
+                const { fileBlob, ...safeItem } = item || {};
+                const key = this._resourceStateKey(safeItem);
+                const state = key ? this.viewerPageState[key] : null;
+                if (!state || !state.page) return safeItem;
+                return {
+                    ...safeItem,
+                    pageNumber: state.page,
+                    totalPages: state.totalPages || safeItem.totalPages || null,
+                };
+            });
         }
 
         removeResourceFromContext(index) {
@@ -4163,7 +4511,7 @@
                 }
                 if (cardPage) {
                     const pageLabel = totalPages ? `Viewing Page ${page} of ${totalPages}` : `Viewing Page ${page}`;
-                    cardPage.innerHTML = `<i class="bi bi-file-earmark-richtext me-1"></i><span>${escapeHtml(pageLabel)}</span>`;
+                    cardPage.innerHTML = `<i data-lucide="file-text" class="me-1"></i><span>${escapeHtml(pageLabel)}</span>`;
                 }
                 if (btnExplain) btnExplain.textContent = `Explain Page ${page}`;
                 if (btnTakeaways) btnTakeaways.textContent = `Key takeaways from Page ${page}`;
@@ -4250,20 +4598,20 @@
             if (deskBtn) {
                 if (isAdded) {
                     deskBtn.className = 'btn btn-sm btn-outline-success rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1 disabled';
-                    deskBtn.innerHTML = '<i class="bi bi-check-lg"></i> <span>In Context</span>';
+                    deskBtn.innerHTML = '<i data-lucide="check"></i> <span>In Context</span>';
                 } else {
                     deskBtn.className = 'btn btn-sm btn-primary rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1';
-                    deskBtn.innerHTML = '<i class="bi bi-plus-lg"></i> <span id="desktopPreviewAddToContextText">+ Add to Context</span>';
+                    deskBtn.innerHTML = '<i data-lucide="plus"></i> <span id="desktopPreviewAddToContextText">+ Add to Context</span>';
                 }
             }
 
             if (mobBtn) {
                 if (isAdded) {
                     mobBtn.className = 'btn btn-sm btn-outline-success rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1 disabled';
-                    mobBtn.innerHTML = '<i class="bi bi-check-lg"></i> <span>In Context</span>';
+                    mobBtn.innerHTML = '<i data-lucide="check"></i> <span>In Context</span>';
                 } else {
                     mobBtn.className = 'btn btn-sm btn-primary rounded-pill px-2 py-0 d-inline-flex align-items-center gap-1';
-                    mobBtn.innerHTML = '<i class="bi bi-plus-lg"></i> <span id="previewSheetAddToContextText">+ Add to Context</span>';
+                    mobBtn.innerHTML = '<i data-lucide="plus"></i> <span id="previewSheetAddToContextText">+ Add to Context</span>';
                 }
             }
         }
@@ -4299,13 +4647,15 @@
             const chipsHtml = this.contextResources.map((res, idx) => {
                 const isActive = idx === this.activeContextIndex;
                 const safeTitle = escapeHtml(res.title || 'Resource');
-                const safeIcon = escapeHtml(res.icon || 'bi-file-earmark');
+                const chipIcon = sparkIconSpec(res.icon || 'bi-file-earmark');
+                const safeIcon = escapeHtml(chipIcon.name);
+                const chipIconExtra = escapeHtml(chipIcon.extra);
                 return `
                     <div class="pwanimate-context-chip ${isActive ? 'active' : ''}" data-index="${idx}" role="button" tabindex="0">
-                        <i class="bi ${safeIcon} me-1"></i>
+                        <i data-lucide="${safeIcon}" class="me-1${chipIconExtra ? ' ' + chipIconExtra : ''}"></i>
                         <span class="pwanimate-chip-title" title="${safeTitle}">${safeTitle}</span>
                         <button type="button" class="pwanimate-chip-remove" data-index="${idx}" aria-label="Remove ${safeTitle}">
-                            <i class="bi bi-x"></i>
+                            <i data-lucide="x"></i>
                         </button>
                     </div>
                 `;
@@ -4322,6 +4672,7 @@
                     this.renderSurface('mobileContext', activeResource, true);
                 }
             }
+            this.syncRailDocTitle();
             this.syncDocumentStudyUI();
         }
 
@@ -4348,7 +4699,7 @@
                 categoryBadge.className = `pwanimate-preview-badge badge rounded-pill px-2 py-1 ${details.badgeClass}`;
             }
             if (categoryIcon) {
-                categoryIcon.className = `bi ${details.icon} me-1`;
+                sparkSetIcon(categoryIcon, details.icon);
             }
             if (categoryText) {
                 categoryText.textContent = details.category;
@@ -4475,15 +4826,35 @@
                 docViewer.classList.add('d-flex');
 
                 const initialPage = (details.pageNumber && !isNaN(details.pageNumber)) ? parseInt(details.pageNumber, 10) : 1;
+                const viewerStateKey = this._resourceStateKey(details);
+                // Seed canonical page state so a document that is never
+                // navigated still reports its mounted page at send time.
+                if (viewerStateKey) {
+                    this.viewerPageState[viewerStateKey] = {
+                        page: initialPage,
+                        totalPages: details.totalPages || null,
+                    };
+                }
                 const options = {
                     compact: true,
                     fitContainer: true,
+                    minimalChrome: true,
                     initialPage: initialPage,
                     showDownload: true,
                     showFullscreen: true,
+                    fileBlob: details.fileBlob || null,
                     onPageChange: (page, totalPages) => {
                         details.pageNumber = page;
                         if (totalPages) details.totalPages = totalPages;
+                        // Write canonical state by document identity — the
+                        // `details` object may be replaced by re-preview/remount,
+                        // but this key always resolves to the live page.
+                        if (viewerStateKey) {
+                            this.viewerPageState[viewerStateKey] = {
+                                page: page,
+                                totalPages: totalPages || details.totalPages || null,
+                            };
+                        }
                         if (locBadge && locText) {
                             locBadge.classList.remove('d-none');
                             locText.textContent = totalPages ? `p. ${page} / ${totalPages}` : `p. ${page}`;
@@ -4507,10 +4878,18 @@
                     this.previewDocViewer = viewerInstance;
                 }
                 viewerInstance.initialize().then(() => {
+                    try {
+                        performance.mark('pw:preview-viewer-ready');
+                        performance.measure('pw:preview-to-viewer', 'pw:preview-click', 'pw:preview-viewer-ready');
+                    } catch (_) {}
                     if (typeof viewerInstance.getTotalPages === 'function') {
                         const tp = viewerInstance.getTotalPages();
                         if (tp) {
                             details.totalPages = tp;
+                            if (viewerStateKey) {
+                                const st = this.viewerPageState[viewerStateKey] || {};
+                                this.viewerPageState[viewerStateKey] = { page: st.page || initialPage, totalPages: tp };
+                            }
                             this.syncDocumentStudyUI();
                         }
                     }
@@ -4543,7 +4922,7 @@
             const primaryTextEl = container.querySelector(`#${prefix}PrimaryText`);
             const primaryIconEl = container.querySelector(`#${prefix}PrimaryIcon`);
             if (primaryTextEl) primaryTextEl.textContent = details.primaryText;
-            if (primaryIconEl) primaryIconEl.className = `bi ${details.primaryIcon} me-1`;
+            if (primaryIconEl) sparkSetIcon(primaryIconEl, details.primaryIcon);
 
             if (primaryAction) {
                 primaryAction.href = details.url;
@@ -4585,6 +4964,7 @@
             if (details.previewType === 'profile') {
                 this.loadProfilePreviewCard(container, prefix, details);
             }
+            this.syncRailDocTitle();
         }
 
         async loadProfilePreviewCard(container, prefix, details) {
@@ -4631,7 +5011,7 @@
                 if (docThumb) docThumb.src = '';
                 if (docIconWrapper) docIconWrapper.classList.remove('d-none');
             }
-            if (docIcon) docIcon.className = `bi ${details.docIcon}`;
+            if (docIcon) sparkSetIcon(docIcon, details.docIcon);
             if (docTitle) docTitle.textContent = details.title;
             if (docMeta) docMeta.textContent = details.subtitle;
             if (docDesc) docDesc.textContent = details.description;
@@ -4680,6 +5060,7 @@
             }
 
             this.updateAddToContextButtons();
+            this.syncRailDocTitle();
 
             if (this.contextResources.length === 0) {
                 this.closeContextRail();
@@ -4795,16 +5176,25 @@
             const availableWidth = window.innerWidth;
             const leftWidth = this.leftRailCollapsed ? 56 : 240;
             const minCenterWidth = 480;
-            const configuredMax = 650;
             const configuredMin = 280;
 
-            const effectiveMax = Math.max(configuredMin, Math.min(configuredMax, availableWidth - leftWidth - minCenterWidth));
-            return { min: configuredMin, max: effectiveMax };
+            // Default target: an equal split of the workspace remaining after
+            // the global navigation rail. The chat pane keeps a usable minimum;
+            // on narrow desktops the rail yields first.
+            const splitWidth = Math.floor((availableWidth - leftWidth) / 2);
+            const effectiveMax = Math.max(
+                configuredMin,
+                Math.min(splitWidth, availableWidth - leftWidth - minCenterWidth)
+            );
+            return { min: configuredMin, max: effectiveMax, split: splitWidth };
         }
 
         updateContextRailWidth(saveToStorage = false) {
             const limits = this.calculateEffectiveContextLimits();
-            this.currentRenderedWidth = Math.max(limits.min, Math.min(this.savedPreferredWidth, limits.max));
+            // Equal split is the default; a saved preference only applies when
+            // the user deliberately resized the rail.
+            const preferred = (this.savedPreferredWidth != null) ? this.savedPreferredWidth : limits.split;
+            this.currentRenderedWidth = Math.max(limits.min, Math.min(preferred, limits.max));
             document.documentElement.style.setProperty('--pwanimate-context-rail-width', `${this.currentRenderedWidth}px`);
             document.body.style.setProperty('--pwanimate-context-rail-width', `${this.currentRenderedWidth}px`);
             if (this.resizerEl) {
@@ -4836,6 +5226,30 @@
             let offcanvas = window.bootstrap.Offcanvas.getInstance(sheetEl);
             if (!offcanvas) offcanvas = new window.bootstrap.Offcanvas(sheetEl);
             offcanvas.show();
+            if (tabName === 'preview' || tabName === 'context') {
+                this._expandMobileSheetForReading(sheetEl);
+            }
+        }
+
+        /**
+         * Expanded document-reading state for the mobile bottom sheet:
+         * grow to nearly the full viewport (minus top safe area) while keeping
+         * the drag handle and sheet chrome. Matches bottom-sheet-handles.js math.
+         */
+        _expandMobileSheetForReading(sheetEl) {
+            const apply = () => {
+                const viewportHeight = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vasto-safe-area-top')) || 0;
+                const maxHeight = Math.max(280, viewportHeight - Math.max(16, safeTop + 8));
+                sheetEl.style.setProperty('height', `${maxHeight}px`, 'important');
+                sheetEl.style.setProperty('max-height', `${maxHeight}px`, 'important');
+                sheetEl.dataset.bottomSheetSize = 'expanded';
+            };
+            if (sheetEl.classList.contains('show')) {
+                apply();
+            } else {
+                sheetEl.addEventListener('shown.bs.offcanvas', apply, { once: true });
+            }
         }
 
         openContextRail() {
@@ -4854,6 +5268,8 @@
 
             if (this.activeWorkspaceTab === 'context') {
                 this.syncContextView();
+            } else if (this.activeWorkspaceTab === 'offline') {
+                this.renderOfflineTab();
             } else {
                 // Restore preview if active details exist (State D -> State C), otherwise show empty state (State B)
                 const emptyState = document.getElementById('desktopPreviewEmpty');
@@ -4905,9 +5321,9 @@
             if (toggleBtn) {
                 toggleBtn.setAttribute('aria-expanded', this.contextRailOpen ? 'true' : 'false');
                 toggleBtn.setAttribute('title', this.contextRailOpen ? 'Close Context Rail' : 'Open Context Rail');
-                const icon = toggleBtn.querySelector('i');
+                const icon = toggleBtn.querySelector('i, svg');
                 if (icon) {
-                    icon.className = this.contextRailOpen ? 'bi bi-layout-sidebar-inset-reverse' : 'bi bi-layout-sidebar-reverse';
+                    sparkSetIcon(icon, this.contextRailOpen ? 'bi-layout-sidebar-inset-reverse' : 'bi-layout-sidebar-reverse');
                 }
             }
         }
@@ -4931,7 +5347,7 @@
                 this.isResizing = true;
                 document.body.classList.add('pwanimate-resizing');
                 startX = e.clientX;
-                startWidth = this.currentRenderedWidth || this.savedPreferredWidth;
+                startWidth = this.currentRenderedWidth || this.savedPreferredWidth || this.calculateEffectiveContextLimits().split;
 
                 const resizerNode = document.getElementById('pwanimateRailResizer') || this.resizerEl;
                 if (resizerNode && typeof resizerNode.setPointerCapture === 'function') {
@@ -5043,8 +5459,27 @@
             };
             document.addEventListener('keydown', onKeyDown);
 
+            // Double-click resets to the equal split and clears any saved preference.
+            const onDoubleClick = (e) => {
+                const targetResizer = e.target.closest('#pwanimateRailResizer');
+                if (!targetResizer) return;
+                this.savedPreferredWidth = null;
+                try {
+                    localStorage.removeItem('pwanimate_context_rail_width');
+                } catch (err) {}
+                this.updateContextRailWidth(false);
+                if (this.previewDocViewer && typeof this.previewDocViewer.handleResize === 'function') {
+                    this.previewDocViewer.handleResize();
+                }
+                if (this.contextDocViewer && typeof this.contextDocViewer.handleResize === 'function') {
+                    this.contextDocViewer.handleResize();
+                }
+            };
+            document.addEventListener('dblclick', onDoubleClick);
+
             this._resizerCleanup = () => {
                 document.removeEventListener('pointerdown', delegatedPointerDown);
+                document.removeEventListener('dblclick', onDoubleClick);
                 window.removeEventListener('pointermove', onPointerMove);
                 window.removeEventListener('pointerup', onPointerUp);
                 window.removeEventListener('pointercancel', onPointerUp);
@@ -5103,15 +5538,475 @@
             const disclaimer = this.transcript.querySelector('.pwanimate-chat-disclaimer');
             if (disclaimer) this.transcript.insertBefore(row, disclaimer);
             else this.transcript.appendChild(row);
+            sparkRenderIcons(row);
         }
 
         setGenerating(loading) {
             this.isGenerating = loading;
-            if (loading) this.stopSpeaking();
+            if (loading) {
+                this.stopSpeaking();
+                this.waitingForInput = false;
+            }
             if (this.input) this.input.disabled = loading;
             if (this.voiceBtn) this.voiceBtn.disabled = loading || this.voiceStarting || !this.voiceRecorderSupported;
             if (loading && (this.voiceListening || this.voiceStarting || this.voiceStopping)) this.cancelVoiceCapture();
             this.updateSendButtonState();
+        }
+
+        // The agent run stays alive while it waits on the student; keep the
+        // send button pulsing so the engine visibly remains on standby.
+        // `interaction` is the serialized pending interaction (prompt,
+        // options, input_type, allow_custom_answer) when one exists.
+        setWaitingForInput(waiting, interaction = null, runId = null) {
+            this.waitingForInput = Boolean(waiting);
+            if (interaction && interaction.interaction_id) {
+                this.pendingInteraction = {
+                    run_id: interaction.run_id || runId || (this.pendingInteraction && this.pendingInteraction.run_id),
+                    interaction_id: interaction.interaction_id,
+                    input_type: interaction.input_type || 'text',
+                    kind: interaction.kind || 'clarification',
+                    prompt: interaction.prompt || '',
+                    options: Array.isArray(interaction.options) ? interaction.options : [],
+                    questions: Array.isArray(interaction.questions) ? interaction.questions : [],
+                    allow_custom_answer: interaction.allow_custom_answer !== false,
+                };
+            }
+            this._syncInteractionBlock();
+            this.updateSendButtonState();
+        }
+
+        // While a structured interaction is pending, the floating block above
+        // the composer IS the answer path (same authoritative backend
+        // resolution as before). A "new task" escape keeps unrelated requests
+        // possible; the run stays paused server-side either way.
+        _interactionSignature() {
+            const pi = this.pendingInteraction;
+            return (this.waitingForInput && pi) ? `${pi.run_id}:${pi.interaction_id}` : '';
+        }
+
+        _syncInteractionBlock() {
+            if (!this.composerForm) return;
+            const sig = this._interactionSignature();
+            if (this._interactionBlockEl && this._interactionBlockSig === sig) return;
+            if (this._interactionBlockEl) {
+                this._interactionBlockEl.remove();
+                this._interactionBlockEl = null;
+                this._interactionBlockSig = '';
+            }
+            if (!sig) return;
+            const el = this._buildInteractionBlock(this.pendingInteraction);
+            this.composerForm.parentNode.insertBefore(el, this.composerForm);
+            this._interactionBlockEl = el;
+            this._interactionBlockSig = sig;
+            if (window.sparkRenderIcons) window.sparkRenderIcons(el);
+        }
+
+        // Renders the answer controls for ONE question spec and returns
+        // {read, controls}: read() yields the normalized answer payload
+        // ({text}|{selected}|{confirmed}) or undefined when unanswered.
+        _questionControls(q, initial, onChange) {
+            const frag = document.createDocumentFragment();
+            const controls = [];
+            let current = initial || null;
+            const itype = q.input_type || 'text';
+            const options = Array.isArray(q.options) ? q.options.filter(o => o && (o.id || o.label)) : [];
+            const emit = (value) => { current = value; if (onChange) onChange(value); };
+
+            if (itype === 'confirm') {
+                const yes = document.createElement('button');
+                yes.type = 'button'; yes.className = 'btn btn-sm btn-primary spark-interaction-submit';
+                yes.textContent = 'Confirm';
+                const no = document.createElement('button');
+                no.type = 'button'; no.className = 'btn btn-sm btn-outline-secondary spark-interaction-submit';
+                no.textContent = 'Decline';
+                if (current && current.confirmed === true) yes.classList.add('is-selected');
+                if (current && current.confirmed === false) no.classList.add('is-selected');
+                yes.addEventListener('click', () => emit({confirmed: true}));
+                no.addEventListener('click', () => emit({confirmed: false}));
+                frag.append(yes, no);
+                controls.push(yes, no);
+                return {read: () => current, controls, el: frag};
+            }
+
+            if ((itype === 'single_choice' || itype === 'multi_choice') && options.length) {
+                const wrap = document.createElement('div');
+                wrap.className = 'spark-interaction-choices';
+                const selected = new Set((current && current.selected) || []);
+                let customInput = null;
+                const syncCustom = () => {
+                    if (!customInput) return;
+                    const text = (customInput.value || '').trim();
+                    if (text) {
+                        emit(itype === 'single_choice' ? {text} : {selected: [...selected], text});
+                    } else if (itype === 'single_choice' && !selected.size) {
+                        emit(null);
+                    } else if (itype === 'multi_choice') {
+                        emit(selected.size ? {selected: [...selected]} : null);
+                    }
+                };
+                for (const opt of options) {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'spark-interaction-option' + (selected.has(opt.id) ? ' is-selected' : '');
+                    b.textContent = opt.label || opt.id;
+                    b.addEventListener('click', () => {
+                        if (itype === 'single_choice') {
+                            wrap.querySelectorAll('.spark-interaction-option').forEach(x => x.classList.remove('is-selected'));
+                            selected.clear();
+                            if (selected.has(opt.id)) { selected.delete(opt.id); b.classList.remove('is-selected'); }
+                            else { selected.add(opt.id); b.classList.add('is-selected'); }
+                            if (customInput) { customInput.value = ''; customInput.hidden = true; }
+                            emit(selected.size ? {selected: [...selected]} : null);
+                        } else {
+                            if (selected.has(opt.id)) { selected.delete(opt.id); b.classList.remove('is-selected'); }
+                            else { selected.add(opt.id); b.classList.add('is-selected'); }
+                            syncCustom();
+                        }
+                    });
+                    controls.push(b);
+                    wrap.appendChild(b);
+                }
+                frag.appendChild(wrap);
+                if (q.allow_custom_answer !== false && itype === 'multi_choice') {
+                    // Multi-select keeps a visible free-text field alongside
+                    // the choices, matching the original single-question UI.
+                    const holder = document.createElement('div');
+                    holder.className = 'spark-interaction-custom';
+                    customInput = document.createElement('input');
+                    customInput.className = 'spark-interaction-input';
+                    customInput.type = 'text';
+                    customInput.placeholder = 'Your answer';
+                    customInput.maxLength = 1000;
+                    if (current && current.text) customInput.value = current.text;
+                    customInput.addEventListener('input', syncCustom);
+                    holder.appendChild(customInput);
+                    frag.appendChild(holder);
+                } else if (q.allow_custom_answer !== false) {
+                    const other = document.createElement('button');
+                    other.type = 'button';
+                    other.className = 'spark-interaction-option spark-interaction-other';
+                    other.textContent = 'Other — enter my own answer';
+                    other.addEventListener('click', () => {
+                        other.hidden = true;
+                        const holder = document.createElement('div');
+                        holder.className = 'spark-interaction-custom';
+                        const input = document.createElement('input');
+                        input.className = 'spark-interaction-input';
+                        input.type = 'text';
+                        input.placeholder = 'Your answer';
+                        input.maxLength = 1000;
+                        if (current && current.text && !current.selected) input.value = current.text;
+                        input.addEventListener('input', syncCustom);
+                        holder.appendChild(input);
+                        frag.appendChild(holder);
+                        customInput = input;
+                        requestAnimationFrame(() => input.focus());
+                    });
+                    controls.push(other);
+                    frag.appendChild(other);
+                }
+                return {read: () => current, controls, el: frag};
+            }
+
+            // Free text (and choice questions that lost their options).
+            const input = document.createElement(itype === 'text' ? 'textarea' : 'input');
+            input.className = 'spark-interaction-input';
+            input.placeholder = 'Your answer';
+            if (input.tagName === 'TEXTAREA') { input.rows = 2; input.maxLength = 2000; }
+            else { input.type = 'text'; input.maxLength = 1000; }
+            if (current && current.text) input.value = current.text;
+            input.addEventListener('input', () => {
+                const text = (input.value || '').trim();
+                emit(text ? {text} : null);
+            });
+            frag.appendChild(input);
+            controls.push(input);
+            return {read: () => current, controls, el: frag};
+        }
+
+        _buildInteractionBlock(pi) {
+            const el = document.createElement('div');
+            el.className = 'spark-interaction-block';
+            el.dataset.runId = pi.run_id;
+            el.dataset.interactionId = pi.interaction_id;
+
+            const head = document.createElement('div');
+            head.className = 'spark-interaction-head';
+            const icon = document.createElement('i');
+            icon.setAttribute('data-lucide', 'message-circle-question');
+            const kind = document.createElement('span');
+            kind.className = 'spark-interaction-kind';
+            kind.textContent = pi.kind === 'approval' ? 'Approval needed' : 'Spark asks';
+            head.append(icon, kind);
+            el.appendChild(head);
+
+            const progress = document.createElement('p');
+            progress.className = 'spark-interaction-progress';
+            el.appendChild(progress);
+
+            const prompt = document.createElement('p');
+            prompt.className = 'spark-interaction-prompt';
+            el.appendChild(prompt);
+
+            const status = document.createElement('p');
+            status.className = 'spark-interaction-status';
+            status.setAttribute('role', 'status');
+            el.appendChild(status);
+
+            const body = document.createElement('div');
+            body.className = 'spark-interaction-body';
+            el.appendChild(body);
+
+            const isGroup = pi.input_type === 'group';
+            const questions = isGroup
+                ? (Array.isArray(pi.questions) && pi.questions.length ? pi.questions
+                    : (Array.isArray(pi.options) ? pi.options : []))
+                : [{id: 'q1', prompt: pi.prompt || 'Spark has a question.',
+                    input_type: pi.input_type || 'text', options: pi.options || [],
+                    required: pi.required !== false,
+                    allow_custom_answer: pi.allow_custom_answer !== false}];
+
+            // Editing state: independent answers per stable question id,
+            // current index, and submission lifecycle. Drafts persist in
+            // localStorage so a refresh restores progress and answers.
+            const state = {index: 0, answers: {}, submitting: false};
+            const draftKey = 'spark-interaction-draft:' + pi.interaction_id;
+            try {
+                const draft = JSON.parse(localStorage.getItem(draftKey) || 'null');
+                if (draft && typeof draft === 'object') {
+                    if (Number.isInteger(draft.index)) state.index = Math.min(Math.max(draft.index, 0), questions.length - 1);
+                    if (draft.answers && typeof draft.answers === 'object') state.answers = draft.answers;
+                }
+            } catch (_) {}
+            const saveDraft = () => {
+                try { localStorage.setItem(draftKey, JSON.stringify({index: state.index, answers: state.answers})); } catch (_) {}
+            };
+            const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch (_) {} };
+
+            let view = null;      // {read, controls} for the visible question
+            const allControls = [];
+
+            const setBusy = (busy) => {
+                state.submitting = busy;
+                document.querySelectorAll('.spark-interaction-block button, .spark-interaction-block input, .spark-interaction-block textarea')
+                    .forEach(c => { c.disabled = busy; });
+                status.textContent = busy ? 'Sending…' : '';
+                status.classList.remove('is-error');
+            };
+            const fail = (message) => {
+                status.dataset.error = '1';
+                status.textContent = message || 'Could not send your answer. Try again.';
+                status.classList.add('is-error');
+                setBusy(false);
+            };
+            const submit = (payload) => {
+                if (this.isGenerating || state.submitting) return;
+                setBusy(true);
+                this.resumeInteraction(pi.run_id, pi.interaction_id, payload, null)
+                    .then(() => { state.submitting = false; clearDraft(); })
+                    .catch(err => {
+                        state.submitting = false;
+                        fail(err && err.message ? err.message : 'Could not send your answer. Try again.');
+                    });
+            };
+
+            const nav = document.createElement('div');
+            nav.className = 'spark-interaction-nav';
+            const backBtn = document.createElement('button');
+            backBtn.type = 'button'; backBtn.className = 'spark-interaction-nav-btn';
+            backBtn.textContent = 'Back';
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button'; nextBtn.className = 'btn btn-sm btn-primary spark-interaction-submit';
+            const sendBtn = document.createElement('button');
+            sendBtn.type = 'button'; sendBtn.className = 'btn btn-sm btn-primary spark-interaction-submit';
+            sendBtn.textContent = 'Send';
+
+            const collectCurrent = () => {
+                if (view) {
+                    const ans = view.read();
+                    const qid = questions[state.index] && questions[state.index].id;
+                    if (qid) {
+                        if (ans) state.answers[qid] = ans; else delete state.answers[qid];
+                    }
+                }
+            };
+
+            const render = () => {
+                collectCurrent();
+                saveDraft();
+                const q = questions[state.index];
+                body.replaceChildren();
+                allControls.length = 0;
+                progress.textContent = isGroup ? `Question ${state.index + 1} of ${questions.length}` : '';
+                progress.hidden = !isGroup;
+                prompt.textContent = q.prompt || 'Spark has a question.';
+                view = this._questionControls(q, state.answers[q.id], (value) => {
+                    if (value) state.answers[q.id] = value; else delete state.answers[q.id];
+                    saveDraft();
+                });
+                body.appendChild(view.el);
+                allControls.push(...view.controls);
+                nav.replaceChildren();
+                if (isGroup) {
+                    backBtn.disabled = state.index === 0 || state.submitting;
+                    backBtn.onclick = () => { if (state.index > 0) { state.index -= 1; render(); } };
+                    if (state.index < questions.length - 1) {
+                        nextBtn.textContent = 'Next';
+                        nextBtn.disabled = state.submitting;
+                        nextBtn.onclick = () => { state.index += 1; render(); };
+                        nav.append(backBtn, nextBtn);
+                    } else {
+                        sendBtn.disabled = state.submitting;
+                        sendBtn.onclick = () => {
+                            collectCurrent();
+                            const missing = questions.findIndex(qq =>
+                                qq.required !== false && !state.answers[qq.id]);
+                            if (missing >= 0) {
+                                state.index = missing;
+                                render();
+                                status.dataset.error = '1';
+                                status.textContent = 'Please answer every required question.';
+                                status.classList.add('is-error');
+                                return;
+                            }
+                            const answers = {};
+                            for (const qq of questions) {
+                                if (state.answers[qq.id]) answers[qq.id] = state.answers[qq.id];
+                            }
+                            submit({answers});
+                        };
+                        nav.append(backBtn, sendBtn);
+                    }
+                } else {
+                    // Mode A: explicit Send — selecting an option never
+                    // resolves the interaction by itself.
+                    sendBtn.textContent = 'Send';
+                    sendBtn.disabled = state.submitting;
+                    sendBtn.onclick = () => {
+                        collectCurrent();
+                        const qid = questions[0].id;
+                        const ans = state.answers[qid];
+                        if (!ans) { status.textContent = 'Please answer the question.'; status.classList.add('is-error'); return; }
+                        if (ans.confirmed !== undefined) submit({confirmed: ans.confirmed});
+                        else if (ans.selected) submit({selected: ans.selected, ...(ans.text ? {text: ans.text} : {})});
+                        else submit({text: ans.text});
+                    };
+                    nav.append(sendBtn);
+                }
+                el.querySelector('.spark-interaction-nav-slot')?.remove();
+                const slot = document.createElement('div');
+                slot.className = 'spark-interaction-nav-slot';
+                slot.appendChild(nav);
+                body.after(slot);
+                if (window.sparkRenderIcons) window.sparkRenderIcons(body);
+            };
+
+            const foot = document.createElement('div');
+            foot.className = 'spark-interaction-foot';
+            const fresh = document.createElement('button');
+            fresh.type = 'button';
+            fresh.className = 'spark-interaction-link';
+            fresh.textContent = 'New task';
+            fresh.addEventListener('click', () => {
+                // The run stays paused server-side; its trail still offers the
+                // answer path if the student returns to it.
+                this.pendingInteraction = null;
+                this.setWaitingForInput(false);
+                if (this.input) this.input.focus();
+            });
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'spark-interaction-link';
+            cancel.textContent = 'Cancel task';
+            cancel.addEventListener('click', () => {
+                const runId = pi.run_id;
+                this.pendingInteraction = null;
+                this.setWaitingForInput(false);
+                if (runId) this.cancelRun(runId);
+            });
+            foot.append(fresh, cancel);
+            el.appendChild(foot);
+            render();
+            return el;
+        }
+
+        // Mark the compact trail record for this run as answered once the
+        // backend accepts the interaction.
+        _markClarificationResolved(runId) {
+            if (!runId || !this.transcript) return;
+            this.transcript.querySelectorAll(`.spark-clarification[data-run-id="${CSS.escape(String(runId))}"]`).forEach(box => {
+                box.classList.add('spark-clarification-resolved');
+                const note = box.querySelector('.spark-clarification-note');
+                if (note) note.textContent = 'Answered.';
+            });
+        }
+
+        // Record which run/interaction the latest activity implies so the
+        // composer, the cancel control, and reload-recovery all agree.
+        _trackRunState(data, events) {
+            const list = Array.isArray(events) ? events : (data && data.activity) || [];
+            let latestWait = null;
+            for (const e of list) {
+                if (e && e.run_id && (e.kind === 'clarification' || e.kind === 'approval')
+                        && e.status === 'waiting') {
+                    latestWait = e;
+                }
+            }
+            const metaRun = data && data.metadata && data.metadata.run;
+            const interaction = (data && data.interaction)
+                || (metaRun && metaRun.interaction) || null;
+            if (interaction && interaction.interaction_id) {
+                this.pendingInteraction = {
+                    run_id: interaction.run_id || (metaRun && metaRun.id) || data.run_id,
+                    interaction_id: interaction.interaction_id,
+                    input_type: interaction.input_type || 'text',
+                    kind: interaction.kind || 'clarification',
+                    prompt: interaction.prompt || '',
+                    options: Array.isArray(interaction.options) ? interaction.options : [],
+                    questions: Array.isArray(interaction.questions) ? interaction.questions : [],
+                    allow_custom_answer: interaction.allow_custom_answer !== false,
+                };
+            } else if (latestWait && latestWait.kind === 'clarification') {
+                this.pendingInteraction = {
+                    run_id: latestWait.run_id,
+                    interaction_id: latestWait.interaction_id || null,
+                    input_type: latestWait.input_type || 'text',
+                    kind: 'clarification',
+                    prompt: latestWait.text || '',
+                    options: Array.isArray(latestWait.options) ? latestWait.options : [],
+                    questions: Array.isArray(latestWait.questions) ? latestWait.questions : [],
+                    allow_custom_answer: latestWait.allow_custom_answer !== false,
+                };
+            } else {
+                this.pendingInteraction = null;
+            }
+            this.activeRunId = (latestWait && latestWait.run_id)
+                || (interaction && interaction.run_id)
+                || (data && data.run_id) || null;
+            this._syncInteractionBlock();
+        }
+
+        _clearRunState() {
+            const resolvedRunId = this.pendingInteraction && this.pendingInteraction.run_id;
+            if (resolvedRunId) this._markClarificationResolved(resolvedRunId);
+            this.pendingInteraction = null;
+            this.activeRunId = null;
+            this._syncInteractionBlock();
+        }
+
+        async cancelRun(runId) {
+            if (!runId) return;
+            try {
+                await fetch(`/api/pwanimate/agent-runs/${encodeURIComponent(runId)}/cancel/`, {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json',
+                              'Accept': 'application/json',
+                              'X-CSRFToken': getCsrfToken()},
+                    body: '{}',
+                });
+            } catch (error) {
+                console.warn('[Spark] Could not cancel run', runId, error);
+            }
         }
 
         updateSendButtonState() {
@@ -5123,12 +6018,17 @@
                 this.sendBtn.setAttribute('title', 'Stop voice input before sending');
                 return;
             }
-            if (this.isGenerating) {
+            if (this.isGenerating || this.waitingForInput) {
                 this.sendBtn.disabled = false;
                 this.sendBtn.classList.add('is-generating');
                 this.sendBtn.classList.remove('is-active');
-                this.sendBtn.setAttribute('aria-label', 'Stop generating');
-                this.sendBtn.setAttribute('title', 'Stop generating (Esc)');
+                if (this.isGenerating) {
+                    this.sendBtn.setAttribute('aria-label', 'Stop generating');
+                    this.sendBtn.setAttribute('title', 'Stop generating (Esc)');
+                } else {
+                    this.sendBtn.setAttribute('aria-label', 'Spark is waiting for your input');
+                    this.sendBtn.setAttribute('title', 'Spark is paused until you respond');
+                }
                 return;
             }
 
@@ -5280,13 +6180,16 @@
 
             if (isImage) {
                 const iconEl = document.createElement('i');
-                iconEl.className = 'pwanimate-staged-icon bi bi-image';
+                iconEl.setAttribute('data-lucide', 'image');
+                iconEl.className = 'pwanimate-staged-icon';
                 mediaContainer.appendChild(iconEl);
             } else {
                 const iconEl = document.createElement('i');
-                iconEl.className = 'pwanimate-staged-icon bi bi-file-earmark-text';
+                iconEl.setAttribute('data-lucide', 'file-text');
+                iconEl.className = 'pwanimate-staged-icon';
                 mediaContainer.appendChild(iconEl);
             }
+            sparkRenderIcons(mediaContainer);
 
             // Add spinner inside the media container
             const spinner = document.createElement('span');
@@ -5378,7 +6281,7 @@
                     removeBtn.type = 'button';
                     removeBtn.className = 'pwanimate-staged-remove';
                     removeBtn.setAttribute('aria-label', `Remove ${data.file_name}`);
-                    removeBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+                    removeBtn.innerHTML = '<i data-lucide="x"></i>';
                     removeBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         this.stagedAttachments = this.stagedAttachments.filter(a => a.id !== data.id);
@@ -5506,6 +6409,9 @@
             } catch (e) {
                 console.error('[Spark] Abort error:', e);
             }
+            // Aborting the fetch only drops the stream — the durable run keeps
+            // executing server-side unless we explicitly cancel it.
+            if (this.activeRunId) this.cancelRun(this.activeRunId);
         }
 
         showSystemNotice(text) {
@@ -5513,7 +6419,7 @@
             row.className = 'pwanimate-message-row assistant d-flex justify-content-center';
             row.innerHTML = `
                 <div class="pwanimate-system-notice">
-                    <i class="bi bi-stop-circle"></i>
+                    <i data-lucide="circle-stop"></i>
                     <span>${escapeHtml(text)}</span>
                 </div>
             `;
@@ -5546,11 +6452,11 @@
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data.error || 'Could not create the document. Please try again.');
-                button.innerHTML = '<i class="bi bi-check2 me-2"></i>Saved in My Resources';
+                button.innerHTML = '<i data-lucide="check" class="me-2"></i>Saved in My Resources';
                 window.location.assign(data.download_url);
             } catch (error) {
                 console.error('[Spark] Resource export failed:', error);
-                button.innerHTML = '<i class="bi bi-exclamation-circle me-2"></i>Could not prepare file';
+                button.innerHTML = '<i data-lucide="circle-alert" class="me-2"></i>Could not prepare file';
                 window.setTimeout(() => { button.innerHTML = originalMarkup; }, 2600);
                 return;
             } finally {
@@ -5570,12 +6476,16 @@
             const hasStagedAttachments = isRetry
                 ? (retryOptions.attachments || []).length > 0
                 : (this.stagedAttachments && this.stagedAttachments.length > 0);
-            if (!text && !hasStagedAttachments) return;
+            if (!text && !hasStagedAttachments) {
+                if (this.waitingForInput) this.showSystemNotice('Spark is waiting for your input above — answer the question or review the actions to continue.');
+                return;
+            }
 
             const isBareStudyCommand = !isRetry && /^\s*@study\s*$/i.test(text) && !hasStagedAttachments;
 
             // Setup AbortController for modern cancellation support
             this.abortController = new AbortController();
+            let awaitingInput = false;
 
             // Clear input & reset height
             if (!isRetry) {
@@ -5658,6 +6568,18 @@
                 if (contextResources.length > 0) {
                     payload.context_resources = contextResources;
                 }
+                // Composer-as-answer: while a structured interaction is
+                // pending, a typed reply resolves THAT interaction through the
+                // same authoritative path as the embedded widget — it does not
+                // start an unrelated turn.
+                if (this.waitingForInput && this.pendingInteraction && text
+                        && this.pendingInteraction.input_type !== 'group') {
+                    if (this.pendingInteraction.interaction_id) {
+                        payload.interaction_id = this.pendingInteraction.interaction_id;
+                    } else {
+                        payload.resume_run_id = this.pendingInteraction.run_id;
+                    }
+                }
 
                 const response = await fetch('/api/pwanimate/chat/', {
                     method: 'POST',
@@ -5696,6 +6618,11 @@
                     if (!streamRow) {
                         this.removeTypingIndicator();
                         streamRow = this.createStreamingRow();
+                        this.adoptActivity(streamRow, [], false, false);
+                        // The final answer has started streaming: collapse the
+                        // completed preparation trail unless the student
+                        // explicitly opened it.
+                        if (this.currentActivityTrail) this.currentActivityTrail.finish();
                     }
                     streamRaw += chunkText;
                     if (!streamRenderTimer) {
@@ -5779,6 +6706,12 @@
                 }
 
                 const meta = data.metadata || {};
+                awaitingInput = responseOk && Boolean(meta.awaiting_approval || meta.awaiting_clarification);
+                if (awaitingInput) {
+                    this._trackRunState(data);
+                } else if (responseOk) {
+                    this._clearRunState();
+                }
                 console.log('[Spark Telemetry]', {
                     conversation_id: data.conversation_id,
                     provider: data.provider,
@@ -5794,7 +6727,15 @@
                     fallback_used: data.fallback_info ? data.fallback_info.fallback_used : false
                 });
 
-                const assistantRow = this.appendAssistantMessage(data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || []);
+                // Interim Spark updates persisted server-side render here when
+                // they were not already shown live during streaming.
+                (data.activity || []).forEach(e => {
+                    if (e && e.kind === 'say') this.appendInterimMessage(e.text, e.id);
+                });
+                // A paused run shows only the trail's input block — the question
+                // or approval prompt is not a normal answer bubble.
+                const assistantRow = this.appendAssistantMessage(awaitingInput ? '' : data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || []);
+                this.adoptActivity(assistantRow, data.activity || [], Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification));
                 const disclaimer = this.transcript.querySelector('#pwanimate-chat-disclaimer');
                 if (disclaimer) disclaimer.classList.remove('d-none');
                 this.scrollToMessageStart(assistantRow);
@@ -5808,10 +6749,12 @@
                 if (err.name === 'AbortError') {
                     console.log('[Spark] Chat request aborted by user.');
                     this.removeTypingIndicator();
+                    this.preserveInterruptedActivity();
                     this.showSystemNotice('Generation stopped');
                 } else {
                     console.error('[Spark] Chat network error:', err);
                     this.removeTypingIndicator();
+                    this.preserveInterruptedActivity();
                     this.showErrorBubble(
                         'Network connection error. Please check your internet connection.',
                         text,
@@ -5822,6 +6765,7 @@
             } finally {
                 this.abortController = null;
                 this.setGenerating(false);
+                this.setWaitingForInput(awaitingInput);
                 if (this.input && isFinePointerDevice()) {
                     this.input.focus();
                 }
@@ -5850,7 +6794,7 @@
                         </a>`;
                     }
                     return `<a ${commonAttrs} data-preview-type="document" class="pwanimate-message-attachment pwanimate-attachment-doc-chip badge text-decoration-none d-inline-flex align-items-center gap-1 p-2" title="Preview ${escapeHtml(fileName)}">
-                        <i class="bi bi-file-earmark-text fs-6"></i>
+                        <i data-lucide="file-text" class="fs-6"></i>
                         <span class="text-truncate" style="max-width: 140px;">${escapeHtml(fileName)}</span>
                     </a>`;
                 }).join('');
@@ -5865,10 +6809,10 @@
                     </div>
                     <div class="pwanimate-message-actions user-actions">
                         <button type="button" class="btn pwanimate-action-btn copy-btn" title="Copy message" aria-label="Copy message">
-                            <i class="bi bi-clipboard"></i>
+                            <i data-lucide="copy"></i>
                         </button>
                         <button type="button" class="btn pwanimate-action-btn edit-btn" title="Edit message" aria-label="Edit message">
-                            <i class="bi bi-pencil"></i>
+                            <i data-lucide="pencil"></i>
                         </button>
                     </div>
                 </div>
@@ -5906,7 +6850,73 @@
                 </div>
             `;
             this.appendTranscriptRow(row);
+            // The trail appears lazily on the first real activity event, so
+            // lightweight questions stay silent and keep only the dots.
+            this.currentActivityTrail = null;
+            this.renderedSayIds = new Set();
 
+        }
+
+        appendInterimMessage(text, eventId) {
+            if (!text || !String(text).trim()) return null;
+            if (!this.renderedSayIds) this.renderedSayIds = new Set();
+            if (eventId && this.renderedSayIds.has(eventId)) return null;
+            if (eventId) this.renderedSayIds.add(eventId);
+            const row = document.createElement('div');
+            row.className = 'pwanimate-message-row assistant pwanimate-interim-row';
+            row.innerHTML = `
+                <div class="pwanimate-message-content">
+                    <div class="pwanimate-assistant-bubble pwanimate-interim-bubble">
+                        <div class="pwanimate-markdown-body">${this.renderMarkdownWithMathAndCode(String(text))}</div>
+                    </div>
+                </div>
+            `;
+            const typing = this.transcript ? this.transcript.querySelector('#pwanimate-typing-row') : null;
+            if (typing && typing.parentNode === this.transcript) {
+                this.transcript.insertBefore(row, typing);
+            } else {
+                this.appendTranscriptRow(row);
+            }
+            this.scrollToBottom();
+            return row;
+        }
+
+        ensureActivityTrail() {
+            if (this.currentActivityTrail) return this.currentActivityTrail;
+            if (!window.SparkActivity) return null;
+            const trail = window.SparkActivity.create();
+            trail.add({id:'request',kind:'stage',text:'Looking at your request',status:'running'});
+            const row = this.transcript ? this.transcript.querySelector('#pwanimate-typing-row') : null;
+            const bubble = row ? row.querySelector('.pwanimate-assistant-bubble') : null;
+            const loader = row ? row.querySelector('.pwanimate-thinking-loader') : null;
+            if (bubble && loader) {
+                // Anchored directly above the thinking dots: the chain grows
+                // upward while the loader stays put as the live indicator.
+                bubble.insertBefore(trail.element, loader);
+            } else if (bubble) {
+                bubble.appendChild(trail.element);
+            }
+            this.currentActivityTrail = trail;
+            return trail;
+        }
+
+        adoptActivity(row, events = [], waiting = false, finish = true) {
+            if (!row || !window.SparkActivity) return;
+            // Silent turns carry only the synthetic 'request' marker — do not
+            // attach an empty trail to the answer.
+            const hasWork = Boolean(this.currentActivityTrail)
+                || events.some(e => e && e.id !== 'request');
+            if (!hasWork) return;
+            const trail = this.currentActivityTrail || this.ensureActivityTrail() || window.SparkActivity.create();
+            events.forEach(event => trail.add(event));
+            const body = row.querySelector('.pwanimate-markdown-body');
+            if (body) body.before(trail.element);
+            else {
+                const content = row.querySelector('.pwanimate-message-content');
+                if (content) content.appendChild(trail.element);
+            }
+            if (finish) trail.finish(waiting);
+            this.currentActivityTrail = trail;
         }
 
         updateThinkingStatus(stage) {
@@ -5918,7 +6928,10 @@
                 searching_posts: 'Searching pwaninet…',
                 searching_documents: 'Searching the repository…'
             };
-            const label = labels[stage];
+            const label = labels[stage] || (stage === 'writing_answer' ? 'Putting the answer together…' : null);
+            if (label && this.currentActivityTrail) {
+                this.currentActivityTrail.add({id:'stage-'+stage,kind:'stage',text:label,status:'running'});
+            }
             const textEl = this.transcript
                 ? this.transcript.querySelector('#pwanimate-typing-row .pwanimate-thinking-text')
                 : null;
@@ -5956,7 +6969,37 @@
                     return;
                 }
 
-                if (eventName === 'status') {
+                if (eventName === 'activity') {
+                    if (payload && payload.kind === 'say') {
+                        // Spark speaks mid-task: a real bubble, not a trail step.
+                        this.appendInterimMessage(payload.text, payload.id);
+                    } else if (payload && payload.id !== 'request') {
+                        // The synthetic 'request' marker is seeded when the trail
+                        // first appears; it must not summon the trail by itself.
+                        this.ensureActivityTrail()?.add(payload);
+                    }
+                    if (payload && payload.run_id && payload.status === 'waiting'
+                            && (payload.kind === 'clarification' || payload.kind === 'approval')) {
+                        // A durable run just paused: the composer can now answer
+                        // the pending interaction through the same resolution path.
+                        this.activeRunId = payload.run_id;
+                        if (payload.kind === 'clarification') {
+                            this.pendingInteraction = {
+                                run_id: payload.run_id,
+                                interaction_id: payload.interaction_id || null,
+                                input_type: payload.input_type || 'text',
+                                kind: 'clarification',
+                                prompt: payload.text || '',
+                                options: Array.isArray(payload.options) ? payload.options : [],
+                                questions: Array.isArray(payload.questions) ? payload.questions : [],
+                                allow_custom_answer: payload.allow_custom_answer !== false,
+                            };
+                        } else {
+                            this.pendingInteraction = null;
+                        }
+                        this._syncInteractionBlock();
+                    }
+                } else if (eventName === 'status') {
                     this.updateThinkingStatus(payload.stage);
                 } else if (eventName === 'chunk') {
                     if (onChunk && typeof payload.text === 'string') {
@@ -6201,6 +7244,170 @@
             return row;
         }
 
+        preserveInterruptedActivity() {
+            if (!this.currentActivityTrail) return;
+            this.currentActivityTrail.finish(false, true);
+            if (!this.currentActivityTrail.element.isConnected) {
+                const row = document.createElement('div');
+                row.className = 'pwanimate-message-row assistant';
+                row.appendChild(this.currentActivityTrail.element);
+                this.appendTranscriptRow(row);
+            }
+        }
+
+        async resumeAgent(runId, decision, actionIds, priorTrail, eventId = null) {
+            if (this.isGenerating) return;
+            this.setGenerating(true);
+            this.abortController = new AbortController();
+            this.showTypingIndicator();
+            this.currentActivityTrail = priorTrail;
+            priorTrail.element.open = true;
+            priorTrail.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            let stillWaiting = false;
+            try {
+                const response = await fetch('/api/pwanimate/chat/', {
+                    method:'POST', credentials:'same-origin',signal:this.abortController.signal,
+                    headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json','X-CSRFToken':getCsrfToken()},
+                    body:JSON.stringify({resume_run_id:runId,decision,action_ids:actionIds})
+                });
+                const result = (response.headers.get('content-type') || '').includes('text/event-stream')
+                    ? await this.readChatEventStream(response) : {status_code:response.status,data:await response.json()};
+                const data = result.data || {};
+                if (result.status_code >= 400) throw new Error(data.error || 'Could not continue this task.');
+                if (data.approval_pending) {
+                    stillWaiting = true;
+                    this._trackRunState(data);
+                    if (eventId) this.resolvedActivityEvents.add(eventId);
+                    priorTrail.add({id:'approval-'+runId,kind:'approval',text:'Please review the remaining actions.',status:'waiting',run_id:runId,actions:data.run.actions});
+                    priorTrail.finish(true);
+                    // Replace the original approval controls, which may contain stale decisions.
+                    priorTrail.element.querySelectorAll('.spark-approval').forEach(box => {
+                        if (box !== priorTrail.element.querySelector('.spark-activity-step:last-child .spark-approval')) box.remove();
+                    });
+                    return;
+                }
+                this.removeTypingIndicator();
+                (data.activity || []).forEach(e => {
+                    if (e && e.kind === 'say') this.appendInterimMessage(e.text, e.id);
+                });
+                const awaitingNow = Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification);
+                if (eventId) this.resolvedActivityEvents.add(eventId);
+                if (awaitingNow) {
+                    // Still waiting: the paused trail already hosts the input
+                    // block — no new bubble, generation visibly continues.
+                    stillWaiting = true;
+                    this._trackRunState(data);
+                } else {
+                    this._clearRunState();
+                    const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id);
+                    this.adoptActivity(row,data.activity || [],false);
+                    // adoptActivity moved the trail into the answer row; drop the
+                    // emptied pause bubble so no blank Spark message remains.
+                    const trailEl = this.currentActivityTrail && this.currentActivityTrail.element;
+                    const pauseRow = priorTrail && priorTrail.element
+                        ? priorTrail.element.closest('.pwanimate-message-row') : null;
+                    if (trailEl && row.contains(trailEl) && pauseRow && pauseRow !== row) {
+                        pauseRow.remove();
+                    }
+                    this.scrollToMessageStart(row);
+                    this.refreshConversationsList();
+                }
+            } catch (error) {
+                // The dots must never outlive the request: a failed resume is
+                // over, so clear them before surfacing the notice.
+                this.removeTypingIndicator();
+                this.showSystemNotice(error.message || 'The task was interrupted. Refresh to see saved outcomes.');
+                priorTrail.element.querySelectorAll('button').forEach(b => { b.disabled = false; });
+                throw error;
+            } finally {
+                this.abortController = null;
+                this.setGenerating(false);
+                this.setWaitingForInput(stillWaiting);
+            }
+        }
+
+        async resumeClarification(runId, answer, priorTrail, eventId = null, interactionId = null) {
+            const payload = interactionId
+                ? {interaction_id: interactionId, resume_run_id: runId, answer: {text: answer}}
+                : {resume_run_id: runId, clarification_answer: answer};
+            return this._resumeChatPayload(payload, priorTrail, eventId);
+        }
+
+        // Structured interaction answers (single/multi choice, confirm, custom
+        // text) resolve through the same durable claim path as free text.
+        // `answer` matches the server contract: {text} | {selected:[ids]} |
+        // {confirmed:bool}.
+        async resumeInteraction(runId, interactionId, answer, priorTrail, eventId = null) {
+            return this._resumeChatPayload(
+                {interaction_id: interactionId, resume_run_id: runId, answer},
+                priorTrail, eventId);
+        }
+
+        async _resumeChatPayload(payload, priorTrail, eventId = null) {
+            if (this.isGenerating) return;
+            this.setGenerating(true);
+            this.abortController = new AbortController();
+            // Dots at the bottom signal live work; events still stream into
+            // the paused trail, which we scroll back into view.
+            this.showTypingIndicator();
+            this.currentActivityTrail = priorTrail || this.currentActivityTrail;
+            if (priorTrail) {
+                priorTrail.element.open = true;
+                priorTrail.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            let stillWaiting = false;
+            try {
+                const response = await fetch('/api/pwanimate/chat/', {
+                    method:'POST', credentials:'same-origin',signal:this.abortController.signal,
+                    headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json','X-CSRFToken':getCsrfToken()},
+                    body:JSON.stringify(payload)
+                });
+                const result = (response.headers.get('content-type') || '').includes('text/event-stream')
+                    ? await this.readChatEventStream(response) : {status_code:response.status,data:await response.json()};
+                const data = result.data || {};
+                if (result.status_code >= 400) throw new Error(data.error || 'Could not continue this task.');
+                if (data.approval_pending) {
+                    stillWaiting = true;
+                    this._trackRunState(data);
+                    if (eventId) this.resolvedActivityEvents.add(eventId);
+                    if (priorTrail) priorTrail.add({id:'approval-'+runId,kind:'approval',text:'Please review the remaining actions.',status:'waiting',run_id:runId,actions:data.run.actions});
+                    if (priorTrail) priorTrail.finish(true);
+                    return;
+                }
+                this.removeTypingIndicator();
+                (data.activity || []).forEach(e => {
+                    if (e && e.kind === 'say') this.appendInterimMessage(e.text, e.id);
+                });
+                const awaitingNow = Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification);
+                if (eventId) this.resolvedActivityEvents.add(eventId);
+                if (awaitingNow) {
+                    stillWaiting = true;
+                    this._trackRunState(data);
+                } else {
+                    this._clearRunState();
+                    const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id);
+                    this.adoptActivity(row,data.activity || [],false);
+                    const trailEl = this.currentActivityTrail && this.currentActivityTrail.element;
+                    const pauseRow = priorTrail && priorTrail.element
+                        ? priorTrail.element.closest('.pwanimate-message-row') : null;
+                    if (trailEl && row.contains(trailEl) && pauseRow && pauseRow !== row) {
+                        pauseRow.remove();
+                    }
+                    this.scrollToMessageStart(row);
+                    this.refreshConversationsList();
+                }
+            } catch (error) {
+                this.removeTypingIndicator();
+                this.showSystemNotice(error.message || 'The task was interrupted. Refresh to see saved outcomes.');
+                if (priorTrail) priorTrail.element.querySelectorAll('button, input').forEach(b => { b.disabled = false; });
+                throw error;
+            } finally {
+                this.abortController = null;
+                this.setGenerating(false);
+                this.setWaitingForInput(stillWaiting);
+            }
+        }
+
         // ------------------------------------------------- proposed actions
         async decideAction(actionId, decision, button) {
             if (!actionId) return;
@@ -6332,12 +7539,12 @@
                             data-programme-name="${escapeHtml(person.programme_name || person.programme || '')}"
                             data-bio="${escapeHtml(person.bio || '')}"
                             aria-label="View ${title}">
-                            <i class="bi bi-link-45deg"></i>
+                            <i data-lucide="link"></i>
                             <span>${title}</span>
                         </button>`;
                     }
                     return `<span class="pwanimate-citation-badge">
-                        <i class="bi bi-file-earmark-text"></i>
+                        <i data-lucide="file-text"></i>
                         <span>${title}</span>
                     </span>`;
                 }).join('');
@@ -6345,7 +7552,7 @@
                 citationsHtml = `
                     <div class="pwanimate-citations">
                         <div class="pwanimate-citations-header">
-                            <i class="bi bi-file-earmark-check"></i>
+                            <i data-lucide="file-check"></i>
                             <span>Sources referenced</span>
                         </div>
                         <div class="pwanimate-citation-list">${badges}</div>
@@ -6354,7 +7561,7 @@
             } else if (Array.isArray(citations) && citations.length > 0 && (!Array.isArray(people) || people.length === 0)) {
                 const badges = citations.map((cit) => `
                     <span class="pwanimate-citation-badge">
-                        <i class="bi bi-bookmark-fill"></i>
+                        <i data-lucide="bookmark"></i>
                         <span>${escapeHtml(cit)}</span>
                     </span>
                 `).join('');
@@ -6362,7 +7569,7 @@
                 citationsHtml = `
                     <div class="pwanimate-citations">
                         <div class="pwanimate-citations-header">
-                            <i class="bi bi-quote"></i>
+                            <i data-lucide="quote"></i>
                             <span>Citations</span>
                         </div>
                         <div class="pwanimate-citation-list">${badges}</div>
@@ -6384,7 +7591,7 @@
                     return `
                         <div class="pwanimate-action-card" data-action-id="${actionId}" data-action-status="${escapeHtml(action.status || 'pending')}">
                             <div class="pwanimate-action-card-header">
-                                <i class="bi bi-send"></i>
+                                <i data-lucide="send"></i>
                                 <span class="pwanimate-action-card-title">${statusText}</span>
                             </div>
                             <div class="pwanimate-action-card-body">${summary}</div>
@@ -6409,7 +7616,7 @@
                 if (attachmentId && policy === 'ask') {
                     fallbackHtml = `
                         <div class="pwanimate-fallback-notice pwanimate-vision-choice" data-vision-choice="${escapeHtml(attachmentId)}">
-                            <i class="bi bi-eye-slash"></i>
+                            <i data-lucide="eye-off"></i>
                             <span>Keep this image in the conversation?</span>
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-vision-policy="keep">Keep it</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-vision-policy="drop">Drop it</button>
@@ -6434,19 +7641,19 @@
                     <div class="pwanimate-message-actions assistant-actions">
                         <div class="dropdown pwanimate-resource-export">
                             <button type="button" class="btn pwanimate-action-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Save response to My Resources" aria-label="Save response to My Resources">
-                                <i class="bi bi-file-earmark-arrow-down"></i>
+                                <i data-lucide="file-down"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end pwanimate-resource-export-menu">
-                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i class="bi bi-filetype-pdf me-2"></i>Download PDF</button></li>
-                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i class="bi bi-filetype-docx me-2"></i>Download Word document</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i data-lucide="file-text" class="me-2"></i>Download PDF</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i data-lucide="file-text" class="me-2"></i>Download Word document</button></li>
                             </ul>
                         </div>
                         <button type="button" class="btn pwanimate-action-btn pwanimate-feedback-btn" data-feedback="helpful" title="This helped" aria-label="This helped">
-                            <i class="bi bi-hand-thumbs-up"></i>
+                            <i data-lucide="thumbs-up"></i>
                         </button>
                         <div class="dropdown pwanimate-feedback-reason">
                             <button type="button" class="btn pwanimate-action-btn pwanimate-feedback-btn" data-bs-toggle="dropdown" aria-expanded="false" title="This did not help" aria-label="This did not help">
-                                <i class="bi bi-hand-thumbs-down"></i>
+                                <i data-lucide="thumbs-down"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end pwanimate-feedback-reason-menu">
                                 <li><button type="button" class="dropdown-item pwanimate-feedback-reason-item" data-reason="wrong_answer">The answer is wrong</button></li>
@@ -6458,10 +7665,10 @@
                             </ul>
                         </div>
                         <button type="button" class="btn pwanimate-action-btn pwanimate-speak-btn" title="Read this reply aloud" aria-label="Read this reply aloud" aria-pressed="false">
-                            <i class="bi bi-volume-up-fill" aria-hidden="true"></i>
+                            <i data-lucide="volume-2" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn pwanimate-action-btn copy-btn" title="Copy answer" aria-label="Copy answer">
-                            <i class="bi bi-clipboard"></i>
+                            <i data-lucide="copy"></i>
                         </button>
                     </div>
                 </div>
@@ -6473,6 +7680,7 @@
                 this.postProcessMarkdownDOM(mdBody);
             }
             this.enhanceWebSources(row);
+            sparkRenderIcons(row);
             if (window.htmx && typeof window.htmx.process === 'function') {
                 window.htmx.process(row);
             }
@@ -6507,7 +7715,7 @@
                     const level = p.academic_level ? escapeHtml(p.academic_level) : '';
                     const prog = p.programme_name ? escapeHtml(p.programme_name) : '';
                     const sep = (level && prog) ? ' • ' : '';
-                    academicHtml = `<div class="pwanimate-person-academic small pwanimate-line-clamp-2 mb-2"><i class="bi bi-mortarboard me-1"></i>${level}${sep}${prog}</div>`;
+                    academicHtml = `<div class="pwanimate-person-academic small pwanimate-line-clamp-2 mb-2"><i data-lucide="graduation-cap" class="me-1"></i>${level}${sep}${prog}</div>`;
                 }
 
                 let headlineHtml = '';
@@ -6517,36 +7725,36 @@
 
                 let badgesHtml = '';
                 if (p.collaboration_status === 'open_to_projects') {
-                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i class="bi bi-code-slash me-1"></i>Open to Projects</span>`;
+                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i data-lucide="code" class="me-1"></i>Open to Projects</span>`;
                 } else if (p.collaboration_status === 'open_to_study_groups') {
-                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i class="bi bi-book me-1"></i>Open to Study Groups</span>`;
+                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i data-lucide="book-open" class="me-1"></i>Open to Study Groups</span>`;
                 } else if (p.collaboration_status === 'open_to_networking') {
-                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i class="bi bi-people me-1"></i>Open to Networking</span>`;
+                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i data-lucide="users" class="me-1"></i>Open to Networking</span>`;
                 } else if (p.collaboration_status === 'any_open') {
-                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i class="bi bi-person-check me-1"></i>Open to Collaborate</span>`;
+                    badgesHtml += `<span class="badge pwanimate-badge-collab"><i data-lucide="user-check" class="me-1"></i>Open to Collaborate</span>`;
                 }
 
                 if (Array.isArray(p.matched_skills)) {
                     p.matched_skills.forEach(skill => {
-                        badgesHtml += `<span class="badge pwanimate-badge-skill"><i class="bi bi-check2 me-1"></i>${escapeHtml(skill)}</span>`;
+                        badgesHtml += `<span class="badge pwanimate-badge-skill"><i data-lucide="check" class="me-1"></i>${escapeHtml(skill)}</span>`;
                     });
                 }
 
                 if (Array.isArray(p.matched_interests)) {
                     p.matched_interests.forEach(interest => {
-                        badgesHtml += `<span class="badge pwanimate-badge-interest"><i class="bi bi-star me-1"></i>${escapeHtml(interest)}</span>`;
+                        badgesHtml += `<span class="badge pwanimate-badge-interest"><i data-lucide="star" class="me-1"></i>${escapeHtml(interest)}</span>`;
                     });
                 }
 
                 if (p.evidence && typeof p.evidence === 'object') {
                     if (p.evidence.academic_alignment) {
-                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i class="bi bi-mortarboard-fill me-1"></i>${escapeHtml(p.evidence.academic_alignment)}</span>`;
+                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i data-lucide="graduation-cap" class="me-1"></i>${escapeHtml(p.evidence.academic_alignment)}</span>`;
                     }
                     if (p.evidence.mutual_connections_count) {
-                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i class="bi bi-people-fill me-1"></i>${p.evidence.mutual_connections_count} mutual</span>`;
+                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i data-lucide="users" class="me-1"></i>${p.evidence.mutual_connections_count} mutual</span>`;
                     }
                     if (p.evidence.shared_groups_count) {
-                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i class="bi bi-collection-fill me-1"></i>${p.evidence.shared_groups_count} groups</span>`;
+                        badgesHtml += `<span class="badge pwanimate-badge-evidence"><i data-lucide="library" class="me-1"></i>${p.evidence.shared_groups_count} groups</span>`;
                     }
                 }
 
@@ -6577,10 +7785,10 @@
                                     </div>
                                     <div class="d-flex align-items-center justify-content-end gap-2 mt-2 pt-1 border-top" style="border-color: var(--pwanimate-border) !important;">
                                         <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 pwanimate-person-preview-btn" data-profile-url="${profileUrl}" data-person="${personData}" style="font-size: 0.78rem;">
-                                            <i class="bi bi-layout-sidebar-inset me-1"></i>Preview here
+                                            <i data-lucide="panel-right-open" class="me-1"></i>Preview here
                                         </button>
                                         <a href="${profileUrl}" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 pwanimate-view-profile-btn" hx-get="${profileUrl}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true" style="font-size: 0.78rem;">
-                                            <i class="bi bi-person me-1"></i>View Profile
+                                            <i data-lucide="user" class="me-1"></i>View Profile
                                         </a>
                                     </div>
                                 </div>
@@ -6593,7 +7801,7 @@
             return `
                 <div class="pwanimate-people-section mt-3">
                     <div class="pwanimate-people-header d-flex align-items-center gap-2 mb-2 text-muted small fw-semibold">
-                        <i class="bi bi-people-fill text-primary"></i>
+                        <i data-lucide="users" class="text-primary"></i>
                         <span>Discovered Students & Peers</span>
                     </div>
                     <div class="pwanimate-people-grid row g-2">
@@ -6610,11 +7818,11 @@
                 <div class="pwanimate-message-content">
                     <div class="pwanimate-error-bubble">
                         <div>
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <i data-lucide="triangle-alert" class="me-2"></i>
                             <span>${escapeHtml(message)}</span>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-danger pwanimate-retry-btn">
-                            <i class="bi bi-arrow-clockwise"></i> Retry
+                            <i data-lucide="rotate-cw"></i> Retry
                         </button>
                     </div>
                 </div>
@@ -6733,7 +7941,7 @@
                     if (ss) {
                         const statusClass = escapeHtml(ss.status || 'active');
                         const statusTitle = escapeHtml((ss.status || 'active').replace(/^\w/, ch => ch.toUpperCase()));
-                        studyBadgeHtml = `<span class="badge rounded-pill pwanimate-study-conv-badge status-${statusClass}" title="Study Session (${statusTitle})"><i class="bi bi-mortarboard-fill me-1"></i>Study</span>`;
+                        studyBadgeHtml = `<span class="badge rounded-pill pwanimate-study-conv-badge status-${statusClass}" title="Study Session (${statusTitle})"><i data-lucide="graduation-cap" class="me-1"></i>Study</span>`;
                         if (ss.learning_objective) {
                             const objEscaped = escapeHtml(ss.learning_objective);
                             objectiveHtml = `<div class="text-muted text-truncate x-small mt-1" title="${objEscaped}">${objEscaped}</div>`;
@@ -6763,7 +7971,7 @@
                                     aria-label="Delete conversation"
                                     title="Delete conversation"
                                     onclick="event.stopPropagation(); event.preventDefault(); window.handleDeleteSparkConversation('${c.id}');">
-                                <i class="bi bi-trash3"></i>
+                                <i data-lucide="trash-2"></i>
                             </button>
                         </div>
                     `;
@@ -6906,7 +8114,7 @@
                 return {
                     dotClass: 'rate-limited',
                     statusText: 'Unavailable',
-                    badge: '<span class="pwanimate-status-badge rate-limited"><i class="bi bi-exclamation-octagon-fill"></i> Unavailable</span>',
+                    badge: '<span class="pwanimate-status-badge rate-limited"><i data-lucide="octagon-alert"></i> Unavailable</span>',
                 };
             }
             // primary_status is server-computed: WHY the primary candidate is or
@@ -6916,7 +8124,7 @@
                 return {
                     dotClass: 'healthy',
                     statusText: 'Ready',
-                    badge: '<span class="pwanimate-status-badge healthy"><i class="bi bi-check-circle-fill"></i> Operational</span>',
+                    badge: '<span class="pwanimate-status-badge healthy"><i data-lucide="circle-check-big"></i> Operational</span>',
                 };
             }
             if (item.cooldown_remaining > 0) {
@@ -6924,27 +8132,27 @@
                 return {
                     dotClass: 'rate-limited',
                     statusText: `Rate limited (${Math.ceil(item.cooldown_remaining)}s)`,
-                    badge: `<span class="pwanimate-status-badge rate-limited"><i class="bi bi-hourglass-split"></i> Rate Limited (${Math.ceil(item.cooldown_remaining)}s)</span>`,
+                    badge: `<span class="pwanimate-status-badge rate-limited"><i data-lucide="hourglass"></i> Rate Limited (${Math.ceil(item.cooldown_remaining)}s)</span>`,
                 };
             }
             if (primaryStatus === 'unconfigured') {
                 return {
                     dotClass: 'cooldown',
                     statusText: 'Backup active — primary provider not configured',
-                    badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-plug-fill"></i> Primary Not Configured</span>',
+                    badge: '<span class="pwanimate-status-badge cooldown"><i data-lucide="plug"></i> Primary Not Configured</span>',
                 };
             }
             if (item.fallbacks_ready > 0) {
                 return {
                     dotClass: 'cooldown',
                     statusText: 'Busy — backup routing active',
-                    badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-arrow-repeat"></i> Backup Active</span>',
+                    badge: '<span class="pwanimate-status-badge cooldown"><i data-lucide="refresh-cw"></i> Backup Active</span>',
                 };
             }
             return {
                 dotClass: 'cooldown',
                 statusText: 'Recovering',
-                badge: '<span class="pwanimate-status-badge cooldown"><i class="bi bi-arrow-repeat"></i> Recovering</span>',
+                badge: '<span class="pwanimate-status-badge cooldown"><i data-lucide="refresh-cw"></i> Recovering</span>',
             };
         }
 
@@ -6968,8 +8176,10 @@
                     autoItem.classList.add('active');
                     if (!autoItem.querySelector('.pwanimate-check-icon')) {
                         const icon = document.createElement('i');
-                        icon.className = 'bi bi-check2 text-primary pwanimate-check-icon';
+                        icon.setAttribute('data-lucide', 'check');
+                        icon.className = 'text-primary pwanimate-check-icon';
                         autoItem.appendChild(icon);
+                        sparkRenderIcons(autoItem);
                     }
                 } else {
                     autoItem.classList.remove('active');
@@ -6999,7 +8209,7 @@
                                     </div>
                                     <div class="text-muted" style="font-size: 0.72rem;">${escapeHtml(st.statusText)}</div>
                                 </div>
-                                ${isSelected ? '<i class="bi bi-check2 text-primary pwanimate-check-icon"></i>' : ''}
+                                ${isSelected ? '<i data-lucide="check" class="text-primary pwanimate-check-icon"></i>' : ''}
                             </button>
                         </li>
                     `;
@@ -7021,7 +8231,7 @@
                                 <span class="badge bg-primary-subtle text-primary" style="font-size: 0.7rem;">Smart Failover</span>
                             </div>
                             <span class="pwanimate-status-badge healthy">
-                                <i class="bi bi-shield-check"></i> Multi-tier Active
+                                <i data-lucide="shield-check"></i> Multi-tier Active
                             </span>
                         </div>
                         <p class="text-muted small mb-3">
@@ -7031,7 +8241,7 @@
                             <span class="text-muted small" style="font-size: 0.75rem;">Default production failover</span>
                             ${isAutoSelected ? `
                                 <button type="button" class="btn btn-sm btn-outline-primary active disabled" style="font-size: 0.8rem;">
-                                    <i class="bi bi-check2 me-1"></i>Active
+                                    <i data-lucide="check" class="me-1"></i>Active
                                 </button>
                             ` : `
                                 <button type="button" class="btn btn-sm btn-outline-primary pwanimate-modal-select-btn"
@@ -7069,7 +8279,7 @@
                                 <span class="text-muted" style="font-size: 0.75rem;">${escapeHtml(item.tagline || '')}</span>
                                 ${isSelected ? `
                                     <button type="button" class="btn btn-sm btn-outline-primary active disabled" style="font-size: 0.8rem;">
-                                        <i class="bi bi-check2 me-1"></i>Active
+                                        <i data-lucide="check" class="me-1"></i>Active
                                     </button>
                                 ` : `
                                     <button type="button" class="btn btn-sm btn-primary pwanimate-modal-select-btn"
@@ -7256,6 +8466,7 @@
                     }
                 });
             }
+            requestAnimationFrame(() => window.initSparkStudySettings?.(targetPane));
             // Scroll to top of scroll container
             if (isModal) {
                 const modalBody = document.getElementById('pwanimate-settings-modal-body');
@@ -7268,6 +8479,9 @@
             // Graceful fallback for HTMX dynamic swap if panes weren't preloaded
             const urlMap = {
                 personalization: '/pwanimate/settings/personalization/',
+                memory: '/pwanimate/settings/memory/',
+                plans: '/pwanimate/settings/plans/',
+                study: '/pwanimate/settings/study/',
                 usage: '/pwanimate/settings/usage/',
                 about: '/pwanimate/settings/about/'
             };
@@ -7277,6 +8491,52 @@
             }
         }
     };
+
+    // Opens the existing offline document library. On desktop the settings
+    // modal is dismissed first so the library modal does not stack backdrops.
+    window.openSparkOfflineSettings = function (scope) {
+        const isModal = scope === 'modal';
+        if (isModal) {
+            const modalEl = document.getElementById('pwanimateSettingsModal');
+            const inst = modalEl && window.bootstrap && window.bootstrap.Modal.getInstance(modalEl);
+            if (inst) inst.hide();
+        }
+        setTimeout(function () {
+            if (window.PwaniOfflineLibrary && typeof window.PwaniOfflineLibrary.open === 'function') {
+                window.PwaniOfflineLibrary.open();
+            }
+        }, isModal ? 300 : 0);
+    };
+
+    // Mobile offcanvas embedded panels (Settings / Study Sessions). Loading a
+    // panel inside the sheet keeps the chat workspace mounted, so the active
+    // conversation, scroll position and any in-flight generation survive.
+    window.sparkOpenOffcanvasPanel = function (url) {
+        var panel = document.getElementById('pwanimate-offcanvas-panel');
+        var menu = document.getElementById('pwanimate-offcanvas-menu');
+        if (!panel || !window.htmx) return;
+        panel.classList.remove('d-none');
+        panel.classList.add('d-flex');
+        if (menu) menu.classList.add('d-none');
+        window.htmx.ajax('GET', url, { target: '#pwanimate-offcanvas-panel', swap: 'innerHTML' });
+    };
+
+    window.sparkCloseOffcanvasPanel = function () {
+        var panel = document.getElementById('pwanimate-offcanvas-panel');
+        var menu = document.getElementById('pwanimate-offcanvas-menu');
+        if (panel) {
+            panel.classList.add('d-none');
+            panel.classList.remove('d-flex');
+            panel.innerHTML = '';
+        }
+        if (menu) menu.classList.remove('d-none');
+    };
+
+    // Reset to the menu pane whenever the sheet is dismissed. Delegated on
+    // document because the offcanvas node is replaced on page-content swaps.
+    document.addEventListener('hidden.bs.offcanvas', function (e) {
+        if (e.target && e.target.id === 'pwanimateMobileMenu') window.sparkCloseOffcanvasPanel();
+    });
 
     window.setSparkModalActiveTab = function (el) {
         if (!el) return;
@@ -7359,6 +8619,9 @@
             } else {
                 document.documentElement.classList.remove('pwanimate-active');
                 document.body.classList.remove('pwanimate-active');
+            }
+            if (evt.detail && evt.detail.target) {
+                sparkRenderIcons(evt.detail.target);
             }
         });
     }

@@ -51,6 +51,10 @@ class OrchestrationRequest:
     study_context: Optional[Any] = None
     conversation_memory: List[Dict[str, Any]] = field(default_factory=list)
     request_id: Optional[str] = None
+    user_message_id: Optional[int] = None
+    # Populated by the orchestrator before routing: the shared, authorized
+    # document-context resolution for this turn (DocumentTurnContext or None).
+    document_context: Optional[Any] = None
 
     def __post_init__(self):
         if not isinstance(self.query, str) or not self.query.strip():

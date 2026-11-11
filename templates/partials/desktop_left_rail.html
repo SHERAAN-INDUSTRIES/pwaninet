@@ -180,6 +180,12 @@
         {% endif %}
 
         <div class="pt-3">
+            <a href="{% url 'workspace:sync' %}"
+               class="left-rail-link nav-chip w-100 mb-2"
+               title="{% trans 'vasto Workspace' %}">
+                <img src="{% static 'vastologos/workspace_transparent.png' %}" alt="Workspace" class="left-rail-icon" style="width: 24px; height: 24px; object-fit: contain;">
+                <span class="left-rail-label">{% trans "Workspace" %}</span>
+            </a>
             <a href="{% url 'posts:create_post' %}"
                class="btn btn-primary w-100 left-rail-post-btn d-flex align-items-center justify-content-center gap-2"
                hx-get="{% url 'posts:create_post' %}"
