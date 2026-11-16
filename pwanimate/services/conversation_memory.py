@@ -1,4 +1,4 @@
-"""Semantic recall over a student's own persisted conversation messages."""
+"""Compatibility entry point for relevant owner-approved facts, never transcripts."""
 
 import logging
 import re
@@ -35,54 +35,10 @@ class ConversationMemoryService:
         exclude_conversation_id: Optional[Any] = None,
         limit: int = DEFAULT_LIMIT,
     ) -> List[Dict[str, Any]]:
-        if not user or not getattr(user, "is_authenticated", False):
+        if not str(query or '').strip():
             return []
-        from pwanimate.services.study_memory import StudyMemoryService
-        pref = StudyMemoryService.preference(user)
-        if not pref.enabled:
-            return []
-        query = str(query or "").strip()[: cls.MAX_QUERY_LENGTH]
-        if not query:
-            return []
-
-        limit = max(1, min(int(limit or cls.DEFAULT_LIMIT), 12))
-        qs = PwanimateMessageEmbedding.objects.filter(
-            user=user,
-            message__conversation__user=user,
-            status="completed",
-            embedding__isnull=False,
-        ).select_related("message", "message__conversation")
-        if pref.reset_at:
-            qs = qs.filter(message__created_at__gt=pref.reset_at)
-        if exclude_conversation_id:
-            qs = qs.exclude(message__conversation_id=exclude_conversation_id)
-
-        try:
-            provider = get_embedding_provider()
-            model_name = provider.get_model_name()
-            vector = provider.embed_query(query)
-            semantic_qs = qs.filter(embedding_model=model_name).annotate(
-                distance=CosineDistance("embedding", vector)
-            ).filter(distance__isnull=False, distance__lt=0.45).order_by("distance")[:limit]
-            results = [
-                cls._serialize(
-                    record.message,
-                    score=max(0.0, min(1.0, 1.0 - float(record.distance))),
-                    match_type="semantic",
-                )
-                for record in semantic_qs
-            ]
-            if results:
-                return results
-        except Exception:
-            logger.warning("Conversation semantic recall unavailable; using lexical fallback", exc_info=True)
-
-        return cls._lexical_fallback(
-            user,
-            query,
-            exclude_conversation_id=exclude_conversation_id,
-            limit=limit,
-        )
+        from pwanimate.services.personal_memory import PersonalMemoryService
+        return PersonalMemoryService.recall(user, query, limit=limit)
 
     @classmethod
     def _lexical_fallback(
@@ -93,41 +49,8 @@ class ConversationMemoryService:
         exclude_conversation_id: Optional[Any],
         limit: int,
     ) -> List[Dict[str, Any]]:
-        terms = [
-            term.lower()
-            for term in re.findall(r"[a-zA-Z0-9]{4,}", query)
-            if term.lower() not in _STOP_WORDS
-        ]
-        if not terms:
-            return []
-        filters = Q()
-        for term in terms[:8]:
-            filters |= Q(content__icontains=term)
-        messages_qs = PwanimateMessage.objects.filter(
-            conversation__user=user,
-            role__in=("user", "assistant"),
-        ).filter(filters).select_related("conversation").order_by("-created_at")
-        if exclude_conversation_id:
-            messages_qs = messages_qs.exclude(conversation_id=exclude_conversation_id)
-        from pwanimate.services.study_memory import StudyMemoryService
-        pref = StudyMemoryService.preference(user)
-        if not pref.enabled:
-            return []
-        if pref.reset_at:
-            messages_qs = messages_qs.filter(created_at__gt=pref.reset_at)
-        messages = messages_qs[: cls.MAX_FALLBACK_CANDIDATES]
-
-        scored = []
-        for message in messages:
-            text = (message.content or "").lower()
-            hits = sum(1 for term in terms if term in text)
-            if hits:
-                scored.append((hits, message))
-        scored.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
-        return [
-            cls._serialize(message, score=min(0.99, hits / max(1, len(terms))), match_type="lexical")
-            for hits, message in scored[:limit]
-        ]
+        # Kept as a compatibility hook; it must never search raw conversations.
+        return cls.search(user, query, limit=limit)
 
     @staticmethod
     def _serialize(message: PwanimateMessage, *, score: float, match_type: str) -> Dict[str, Any]:

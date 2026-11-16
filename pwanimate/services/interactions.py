@@ -22,6 +22,33 @@ class InteractionError(ValueError):
         self.code = code
 
 
+def question_key(prompt):
+    # Preserve operators, superscripts and TeX case: + and - are different questions.
+    text = unicodedata.normalize('NFC', str(prompt))
+    pieces = re.split(r'(\$\$[\s\S]*?\$\$|\$[^\n$]+?\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|`[^`]*`)', text)
+    return ''.join(piece if index % 2 else re.sub(r'\s+', ' ', piece).casefold()
+                   for index, piece in enumerate(pieces)).strip().rstrip(' .?!')
+
+
+def is_memory_consent_question(prompt):
+    text = str(prompt or '')
+    return bool(re.search(r'\b(save|saving|remember|store|storing)\b', text, re.I)
+                and re.search(r'\b(preference|preferences|fact|facts|personal|long.term memory)\b', text, re.I)
+                and re.search(r'\b(approve|approval|consent|permission|would you like|do you want|may I|can I|shall I)\b', text, re.I))
+
+
+def answered_questions(run):
+    """Persisted clarification evidence for this run, never personal-memory consent."""
+    result = []
+    for interaction in SparkAgentInteraction.objects.filter(run=run, user=run.user,
+            status=SparkAgentInteraction.STATUS_ANSWERED).order_by('created_at'):
+        if interaction.input_type == INPUT_GROUP:
+            result.extend(q.get('prompt','') for q in interaction.options or [] if isinstance(q,dict))
+        else:
+            result.append(interaction.prompt)
+    return result
+
+
 def _option_key(label, index):
     slug = re.sub(r'[^a-z0-9]+', '-', unicodedata.normalize('NFKD', str(label)).encode('ascii', 'ignore').decode().lower()).strip('-')
     return (slug or f'option-{index + 1}')[:40]
@@ -53,22 +80,63 @@ INPUT_GROUP = 'group'
 MAX_GROUP_QUESTIONS = 4
 
 
+_INLINE_CHOICE_MARKER = re.compile(
+    r'^\s*(?:\(\s*[A-Za-z]\s*\)|[A-Za-z1-9]\s*[).])\s+\S')
+
+
+def extract_inline_choices(prompt):
+    """Recover discrete options a model embedded in question prose.
+
+    Small planners often write "A) ... B) ... C) ..." inside the question
+    text instead of emitting structured fields. Only a trailing run of
+    marker lines counts, so numbered steps or mid-text lists are ignored.
+    Returns (clean_prompt, options) with options as [{'id','label'}];
+    (prompt, []) when no choice block is present."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        return prompt or '', []
+    lines = prompt.splitlines()
+    run, i = [], len(lines) - 1
+    while i >= 0:
+        line = lines[i]
+        if not line.strip():
+            i -= 1
+            continue
+        if _INLINE_CHOICE_MARKER.match(line):
+            run.append(i)
+            i -= 1
+            continue
+        break
+    run.reverse()
+    if len(run) < 2:
+        return prompt, []
+    first = run[0]
+    labels = []
+    for idx in run:
+        label = re.sub(r'^\s*(?:\(\s*[A-Za-z]\s*\)|[A-Za-z1-9]\s*[).])\s+', '', lines[idx]).strip()
+        if label:
+            labels.append(label)
+    if len(labels) < 2:
+        return prompt, []
+    clean = '\n'.join(lines[:first]).strip() or 'Spark has a question.'
+    return clean[:600], normalize_options(labels)
+
+
 def normalize_group_questions(raw):
     """Coerce a planner question list into bounded group-question dicts.
 
     Each entry: {'id','prompt','input_type','options','required',
-    'allow_custom_answer'}. Returns [] when fewer than two usable questions
-    remain — a single question stays on the single-question path.
+    'allow_custom_answer'}. Returns the usable questions; creation collapses one usable question to the single-question path.
     """
     if not isinstance(raw, list):
         return []
-    questions, seen = [], set()
+    questions, seen, prompts = [], set(), set()
     for index, entry in enumerate(raw[:MAX_GROUP_QUESTIONS]):
         if not isinstance(entry, dict):
             continue
         prompt = str(entry.get('question') or entry.get('prompt') or '').strip()[:600]
-        if not prompt:
+        if not prompt or question_key(prompt) in prompts or is_memory_consent_question(prompt):
             continue
+        prompts.add(question_key(prompt))
         qid = str(entry.get('id') or '').strip()[:40] or f'q{index + 1}'
         base, n = qid, 2
         while qid in seen:
@@ -76,13 +144,21 @@ def normalize_group_questions(raw):
             n += 1
         seen.add(qid)
         itype = str(entry.get('question_type') or entry.get('input_type') or 'text').strip().lower()
-        itype = {'single': INPUT_SINGLE, 'choice': INPUT_SINGLE,
-                 'multi': INPUT_MULTI}.get(itype, itype)
+        itype = {'single': SparkAgentInteraction.INPUT_SINGLE, 'choice': SparkAgentInteraction.INPUT_SINGLE,
+                 'multi': SparkAgentInteraction.INPUT_MULTI}.get(itype, itype)
         if itype not in {SparkAgentInteraction.INPUT_TEXT, SparkAgentInteraction.INPUT_SINGLE,
                          SparkAgentInteraction.INPUT_MULTI, SparkAgentInteraction.INPUT_CONFIRM}:
             itype = SparkAgentInteraction.INPUT_TEXT
         q_options = normalize_options(entry.get('question_options') or entry.get('options')) \
             if itype in {SparkAgentInteraction.INPUT_SINGLE, SparkAgentInteraction.INPUT_MULTI} else []
+        if not q_options:
+            # Recover options embedded as "A) ... B) ..." prose, or upgrade a
+            # text question whose answers are enumerable choice lines.
+            clean_prompt, inline_options = extract_inline_choices(prompt)
+            if len(inline_options) >= 2:
+                prompt = clean_prompt
+                q_options = inline_options
+                itype = SparkAgentInteraction.INPUT_SINGLE
         if itype in {SparkAgentInteraction.INPUT_SINGLE, SparkAgentInteraction.INPUT_MULTI} and not q_options:
             itype = SparkAgentInteraction.INPUT_TEXT
         questions.append({
@@ -91,16 +167,22 @@ def normalize_group_questions(raw):
             'required': bool(entry.get('required', True)),
             'allow_custom_answer': bool(entry.get('allow_custom_answer', True)),
         })
-    return questions if len(questions) >= 2 else []
+    return questions
 
 
 def create_interaction(run, *, kind=SparkAgentInteraction.KIND_CLARIFICATION,
                        input_type=SparkAgentInteraction.INPUT_TEXT, prompt='Ask Spark.',
                        options=None, allow_custom_answer=True, required=True,
                        user=None, conversation=None, questions=None):
-    """Create the run's pending interaction, retiring any older pending ones."""
+    """Reuse the authoritative pending contract, or create one under the run lock."""
     group = normalize_group_questions(questions)
-    if group:
+    if questions and not group:
+        raise InteractionError('No usable questions were provided.', 'invalid')
+    if len(group) == 1:
+        question = group[0]
+        prompt, input_type, options = question['prompt'], question['input_type'], question['options']
+        allow_custom_answer, required = question['allow_custom_answer'], question['required']
+    if len(group) > 1:
         input_type = INPUT_GROUP
         normalized = group
         prompt = 'Spark has a few questions for you.'
@@ -113,25 +195,29 @@ def create_interaction(run, *, kind=SparkAgentInteraction.KIND_CLARIFICATION,
         if input_type in {SparkAgentInteraction.INPUT_SINGLE, SparkAgentInteraction.INPUT_MULTI} and not normalized:
             input_type = SparkAgentInteraction.INPUT_TEXT
             allow_custom_answer = True
-    expires_at = run.expires_at
     with transaction.atomic():
-        SparkAgentInteraction.objects.filter(
-            run=run, status=SparkAgentInteraction.STATUS_PENDING,
-        ).exclude(prompt=prompt).update(status=SparkAgentInteraction.STATUS_CANCELLED,
-                                      resolved_at=timezone.now())
-        interaction, _ = SparkAgentInteraction.objects.update_or_create(
-            run=run, prompt=prompt, status=SparkAgentInteraction.STATUS_PENDING,
-            defaults={
-                'user': user or run.user,
-                'conversation': conversation,
-                'kind': kind,
-                'input_type': input_type,
-                'options': normalized,
-                'allow_custom_answer': bool(allow_custom_answer),
-                'required': bool(required),
-                'expires_at': expires_at,
-                'version': 1,
-            })
+        locked = SparkAgentRun.objects.select_for_update().get(pk=run.pk)
+        owner = user or locked.user
+        if owner.pk != locked.user_id or (conversation is not None and conversation.pk != locked.user_message.conversation_id):
+            raise InteractionError('This question is unavailable.', 'not_found')
+        if locked.expires_at <= timezone.now():
+            raise InteractionError('This question expired.', 'expired')
+        if locked.status != SparkAgentRun.STATUS_WAITING:
+            raise InteractionError('This task is no longer waiting.', 'resolved')
+        pending = pending_for_run(locked)
+        if pending is not None:
+            # Never overwrite a contract/draft or reset its version on replay.
+            return pending
+        asked = {question_key(q) for q in answered_questions(locked)}
+        candidates = [q['prompt'] for q in group] if len(group)>1 else [prompt]
+        if any(is_memory_consent_question(q) or question_key(q) in asked for q in candidates):
+            raise InteractionError('This question has already been handled.', 'repeated')
+        interaction = SparkAgentInteraction.objects.create(
+            run=locked, user=owner, conversation=conversation or locked.user_message.conversation,
+            kind=kind, input_type=input_type, prompt=prompt, options=normalized,
+            allow_custom_answer=bool(allow_custom_answer), required=bool(required),
+            expires_at=locked.expires_at, version=1)
+
     return interaction
 
 

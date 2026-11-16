@@ -1,0 +1,16 @@
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const source=fs.readFileSync('static/js/pwanimate/pwanimate-chat.js','utf8');
+const start=source.indexOf('        _showAcademicPreflight(payload) {');
+const end=source.indexOf('\n        _academicTrackingBlock(action)',start);
+const code=source.slice(start,end).replace('_showAcademicPreflight(payload) {','function(payload) {').trim();
+global.CSS={escape:String};
+const show=eval('('+code+')');
+const seen=new Map();
+const ctx={conversationId:null,transcript:{querySelector(selector){return seen.get(selector.match(/data-action-id="([^"]+)/)?.[1]);},appendChild(block){seen.set(block.id,block);}},_academicTrackingBlock(action){return {id:action.id};}};
+show.call(ctx,{conversation_id:'current',actions:[{id:'persisted'}]});
+assert.equal(ctx.conversationId,'current');assert.equal(seen.size,1);
+show.call(ctx,{conversation_id:'current',actions:[{id:'persisted'}]});assert.equal(seen.size,1);
+show.call(ctx,{conversation_id:'other',actions:[{id:'foreign'}]});assert.equal(seen.size,1);
+assert(source.indexOf("eventName === 'academic_consent'") < source.indexOf("eventName === 'chunk'"));
+console.log('PASS early academic event handler, new-chat identity, deduplication and conversation isolation');

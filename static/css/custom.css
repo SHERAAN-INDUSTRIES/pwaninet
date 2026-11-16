@@ -253,6 +253,8 @@
     font-size: 1.1rem !important;
     line-height: 1 !important;
     flex-shrink: 0 !important;
+    background: none !important;
+    border-radius: 0 !important;
 }
 
 .postcard-actions .engagement-button span,
@@ -314,6 +316,8 @@
     .postcard-actions .engagement-button i,
     .engagement-button i {
         font-size: 0.95rem !important;
+        background: none !important;
+        border-radius: 0 !important;
     }
 }
 

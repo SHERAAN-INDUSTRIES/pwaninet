@@ -1,7 +1,7 @@
 """
 Provider Quota Tracker for Pwanimate.
 
-Thread-safe, in-memory tracker recording rate-limit (429) events per provider.
+Thread-safe, in-memory tracker recording rate limits and failure holds per provider.
 Providers are considered rate-limited for a configurable cooldown period
 after the last 429 response. Used by AIGateway to drive automatic fallback.
 """
@@ -30,6 +30,7 @@ class QuotaTracker:
         self._lock = threading.Lock()
         # provider_name -> monotonic timestamp of last 429
         self._rate_limit_hits: Dict[str, float] = {}
+        self._blocked_until = {}
         self._cooldown = cooldown  # lazy-loaded from settings if None
 
     @property
@@ -55,6 +56,30 @@ class QuotaTracker:
                 self.cooldown,
             )
 
+    def record_failure(self, provider_name, model_name, exc):
+        """Bound retries; authentication/balance require operator intervention."""
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+        status = getattr(exc, 'status_code', None)
+        delay = self.cooldown if status == 429 else 15.0
+        if status in (401, 402, 403):
+            delay = float('inf')
+        retry = getattr(exc, 'details', {}).get('retry_after')
+        if retry:
+            try:
+                delay = max(delay, float(retry))
+            except (ValueError, TypeError):
+                try:
+                    delay = max(delay, (parsedate_to_datetime(retry) - datetime.now(timezone.utc)).total_seconds())
+                except (ValueError, TypeError, OverflowError):
+                    pass
+        key = self._make_key(provider_name, None if status in (401, 402, 403) else model_name)
+        with self._lock:
+            previous = max(0, self._blocked_until.get(key, 0) - time.monotonic())
+            if delay != float('inf'):
+                delay = max(delay, min(300, previous * 2))
+            self._blocked_until[key] = time.monotonic() + delay
+
     def is_rate_limited(self, provider_name: str, model_name: Optional[str] = None) -> bool:
         """
         Check if a provider or specific model is currently in cooldown from a 429.
@@ -67,6 +92,9 @@ class QuotaTracker:
         with self._lock:
             now = time.monotonic()
             for key in keys_to_check:
+                until = self._blocked_until.get(key, 0)
+                if until > now:
+                    return True
                 hit_time = self._rate_limit_hits.get(key)
                 if hit_time is not None:
                     elapsed = now - hit_time
@@ -80,12 +108,12 @@ class QuotaTracker:
         """Clear all recorded rate limit hits (useful for testing)."""
         with self._lock:
             self._rate_limit_hits.clear()
+            self._blocked_until.clear()
 
     def clear_candidate(self, provider_name: str, model_name: Optional[str] = None) -> None:
         """
         Clear cooldown for a specific provider/model candidate.
-        Used when a candidate fails with a transient error (e.g. connection
-        failure) so it can be retried immediately on the next request.
+        Operator/test reset; normal transient errors retain their bounded hold.
         """
         keys_to_clear = [self._make_key(provider_name, model_name)]
         if model_name:
@@ -93,6 +121,7 @@ class QuotaTracker:
         with self._lock:
             for key in keys_to_clear:
                 self._rate_limit_hits.pop(key, None)
+                self._blocked_until.pop(key, None)
 
     def get_cooldown_remaining(
         self, provider_name: str, model_name: Optional[str] = None
@@ -104,14 +133,14 @@ class QuotaTracker:
 
         with self._lock:
             now = time.monotonic()
-            max_remaining = 0.0
+            max_remaining = max([0.0] + [self._blocked_until.get(k, 0) - now for k in keys_to_check])
             for key in keys_to_check:
                 hit_time = self._rate_limit_hits.get(key)
                 if hit_time is not None:
                     remaining = self.cooldown - (now - hit_time)
                     if remaining > max_remaining:
                         max_remaining = remaining
-            return max(0.0, round(max_remaining, 1))
+            return 86400.0 if max_remaining == float("inf") else max(0.0, round(max_remaining, 1))
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -247,6 +276,7 @@ class QuotaTracker:
         """Clear all rate-limit records. Primarily for testing."""
         with self._lock:
             self._rate_limit_hits.clear()
+            self._blocked_until.clear()
 
 
 # Module-level singleton

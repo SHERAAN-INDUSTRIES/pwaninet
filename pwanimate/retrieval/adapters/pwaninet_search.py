@@ -265,7 +265,8 @@ class pwaninetSearchAdapter:
             query=query,
             user=request.user,
             limit=limit,
-            offset=0
+            offset=0,
+            filters=request.filters,
         )
 
         selected_document_ids = (request.filters or {}).get("document_ids")

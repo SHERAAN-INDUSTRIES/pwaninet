@@ -8,6 +8,7 @@ stream emits; nothing private is journaled here.
 """
 import hashlib
 import json
+from pwanimate.orchestrator.activity import public_event
 from django.db import transaction
 from django.db.models import Max
 from pwanimate.models import SparkAgentEvent, SparkAgentRun
@@ -27,7 +28,10 @@ def append(run, event_type, payload):
     seq is allocated under a row lock on the run so concurrent emitters
     (request thread, Celery worker, recovery) cannot collide.
     """
-    dedupe = _dedupe_key({'type': event_type, 'payload': payload})
+    if event_type == 'activity':
+        payload = public_event(payload)
+        if payload is None: return None
+    dedupe = _dedupe_key({'type': event_type, 'payload': {k:v for k,v in payload.items() if k != 'at'}})
     with transaction.atomic():
         locked = SparkAgentRun.objects.select_for_update().only('pk').get(pk=run.pk)
         if SparkAgentEvent.objects.filter(run=locked, dedupe_key=dedupe).exists():
@@ -60,5 +64,7 @@ def events_after(user, run_id, after_seq=0, limit=500):
 
 
 def serialize_event(event):
-    return {'seq': event.seq, 'type': event.type, 'payload': event.payload,
+    return {'seq': event.seq, 'type': event.type, 'payload': public_event(event.payload) if event.type == 'activity' else {
+                k:v for k,v in (event.payload or {}).items()
+                if k in {'run_id', 'attempt_id', 'interaction_id', 'retry', 'kind', 'via'}},
             'at': event.created_at.isoformat()}

@@ -217,65 +217,8 @@ def is_user_authorized_for_document(
     diagnostics. Visibility, ownership, deletion and AI-generation rules are
     unchanged. Content retrieval must keep the strict default.
     """
-    if not document or not getattr(user, "is_authenticated", False):
-        return False
-    if getattr(document, "is_deleted", False):
-        return False
-    if require_ready and (document.status != "ready" or not document.is_available):
-        return False
-
-    if document.uploaded_by_id == user.id:
-        return True
-
-    # Private AI-generated documents are strictly restricted to their uploader
-    if getattr(document, "is_ai_generated", False):
-        return False
-
-    is_admin_or_leader = (
-        user.is_staff
-        or user.is_superuser
-        or getattr(user, "global_role", None) in {"PRESIDENT", "DELEGATE"}
-    )
-    if is_admin_or_leader:
-        return True
-
-    if document.visibility == "public":
-        return True
-
-    if document.visibility == "restricted":
-        enrolled_unit_ids = set()
-        if hasattr(user, "get_enrolled_units"):
-            try:
-                enrolled_unit_ids = {
-                    e.academic_unit_id for e in user.get_enrolled_units(auto_sync=False)
-                }
-            except Exception:
-                enrolled_unit_ids = set()
-
-        if enrolled_unit_ids and document.academic_units.filter(
-            academic_unit_id__in=enrolled_unit_ids
-        ).exists():
-            return True
-
-        if document.academic_units.filter(
-            academic_unit__student_enrollments__user=user,
-            academic_unit__student_enrollments__is_active=True,
-        ).exists():
-            return True
-
-        programme = getattr(user, "programme", None)
-        if programme and document.academic_units.filter(
-            academic_unit__programme_units__programme=programme
-        ).exists():
-            return True
-
-        course = getattr(user, "course", None)
-        if course and document.academic_units.filter(
-            academic_unit__code__icontains=course.name
-        ).exists():
-            return True
-
-    return False
+    from documents.access_policy import DocumentAccessPolicy
+    return DocumentAccessPolicy.can_read(user, document, require_ready=require_ready)
 
 
 def inspect_open_document_availability(
@@ -516,11 +459,18 @@ class StudySessionService:
             return None
         if conversation.user_id != user.id:
             return None
-        return (
-            PwanimateStudySession.objects.select_related("conversation", "latest_checkpoint")
-            .filter(conversation=conversation, user=user)
-            .first()
-        )
+        from pwanimate.services.study_context import resolve
+        return resolve(user, conversation).session
+
+    @staticmethod
+    def decorate_conversations(user, conversations):
+        from pwanimate.services.study_context import resolve
+        result=list(conversations)
+        for conversation in result:
+            context=resolve(user,conversation)
+            conversation.resolved_study_session=context.session
+            conversation.study_handoff_required=context.session is None and bool(context.candidates)
+        return result
 
     @staticmethod
     def get_active_session(user: Any) -> Optional[PwanimateStudySession]:
@@ -627,6 +577,15 @@ class StudySessionService:
         if not user or not getattr(user, "is_authenticated", False):
             raise ValueError("Authenticated user is required for Study Mode.")
 
+        if conversation is not None:
+            from pwanimate.services.study_context import require_session, StudyConflict
+            canonical = require_session(user, conversation)
+            if canonical is not None:
+                if canonical.status != 'active':
+                    raise StudyConflict('Explicitly resume this paused session, or start a new conversation after ending it.')
+                if context_resources:
+                    cls.sync_context_state(canonical,user,context_resources)
+                return canonical
         clean_query = (query or "").strip()
         derived_title = (
             (title or "").strip()[:255]
@@ -660,6 +619,14 @@ class StudySessionService:
 
         now = timezone.now()
         with transaction.atomic():
+            if conversation is not None:
+                from pwanimate.models import PwanimateConversation
+                from pwanimate.services.study_context import require_session,StudyConflict
+                PwanimateConversation.objects.select_for_update().get(pk=conversation.pk,user=user)
+                canonical=require_session(user,conversation)
+                if canonical:
+                    if canonical.status!='active':raise StudyConflict('Explicitly resume the selected session.')
+                    return canonical
             if conversation is not None:
                 if conversation.user_id != user.id:
                     raise PermissionError("Cannot attach Study Mode session to another user's conversation.")
@@ -777,13 +744,22 @@ class StudySessionService:
         from pwanimate.services.personal_planner import PersonalPlannerService
         unit_obj, resolved_label = PersonalPlannerService.resolve_unit(unit, unit_label)
         scope = PersonalPlannerService.unit_scope_for(unit_obj, resolved_label)
-        existing = (
+        candidates = (
             PwanimateStudySession.objects.select_related("conversation")
             .filter(user=user, unit_scope=scope,
                     status__in=[PwanimateStudySession.STATUS_ACTIVE, PwanimateStudySession.STATUS_PAUSED])
             .order_by("-last_active_at")
-            .first()
         )
+        existing = None
+        for candidate in candidates[:100]:
+            if candidate.learning_record_id:
+                from pwanimate.services.unit_learning import UnitLearningService
+                try:
+                    UnitLearningService.require_writable(candidate.learning_record, user)
+                except ValueError:
+                    continue
+            existing = candidate
+            break
         if existing is not None:
             return cls.start_or_continue_session(
                 user=user, conversation=existing.conversation, unit=unit_obj,
@@ -916,9 +892,15 @@ class StudySessionService:
         )
         if not resolved_user or not resolved_id:
             return None
+        from pwanimate.services.study_context import lifecycle_target
+        initial=cls.get_owned_session(resolved_user,resolved_id)
+        if initial is None: return None
         with transaction.atomic():
+            from pwanimate.models import PwanimateConversation
+            PwanimateConversation.objects.select_for_update().get(pk=initial.academic_conversation_id or initial.conversation_id,user=resolved_user)
+            lifecycle_target(resolved_user,initial)
             session = (
-                PwanimateStudySession.objects.select_for_update()
+                PwanimateStudySession.objects.select_for_update(of=('self',))
                 .select_related("conversation")
                 .filter(id=resolved_id, user=resolved_user)
                 .first()
@@ -946,16 +928,24 @@ class StudySessionService:
         )
         if not resolved_user or not resolved_id:
             return None
+        from pwanimate.services.study_context import lifecycle_target
+        initial=cls.get_owned_session(resolved_user,resolved_id)
+        if initial is None: return None
         with transaction.atomic():
+            from pwanimate.models import PwanimateConversation
+            PwanimateConversation.objects.select_for_update().get(pk=initial.academic_conversation_id or initial.conversation_id,user=resolved_user)
+            lifecycle_target(resolved_user,initial)
             session = (
-                PwanimateStudySession.objects.select_for_update()
+                PwanimateStudySession.objects.select_for_update(of=('self',))
                 .select_related("conversation")
                 .filter(id=resolved_id, user=resolved_user)
                 .first()
             )
             if not session:
                 return None
-            cls._pause_other_active_sessions(resolved_user, exclude_session_id=session.id)
+            if session.status == 'completed':
+                raise ValueError('A completed session cannot reopen. Start a new session.')
+            cls._pause_other_active_sessions(resolved_user, exclude_session_id=session.id, unit_scope=session.unit_scope)
             now = timezone.now()
             session.status = PwanimateStudySession.STATUS_ACTIVE
             session.ended_at = None
@@ -989,9 +979,15 @@ class StudySessionService:
         )
         if not resolved_user or not resolved_id:
             return None
+        from pwanimate.services.study_context import lifecycle_target
+        initial=cls.get_owned_session(resolved_user,resolved_id)
+        if initial is None: return None
         with transaction.atomic():
+            from pwanimate.models import PwanimateConversation
+            PwanimateConversation.objects.select_for_update().get(pk=initial.academic_conversation_id or initial.conversation_id,user=resolved_user)
+            lifecycle_target(resolved_user,initial)
             session = (
-                PwanimateStudySession.objects.select_for_update()
+                PwanimateStudySession.objects.select_for_update(of=('self',))
                 .select_related("conversation")
                 .filter(id=resolved_id, user=resolved_user)
                 .first()
@@ -1428,7 +1424,7 @@ class StudySessionService:
         """Serialize a PwanimateStudySession for API responses and template JSON scripts."""
         if not session:
             return None
-        conv = session.conversation
+        conv = session.academic_conversation or session.conversation
         active_doc = None
         if isinstance(session.context_state, dict):
             active_doc = session.context_state.get("active_document")
@@ -1439,12 +1435,16 @@ class StudySessionService:
 
         payload: Dict[str, Any] = {
             "id": str(session.id),
-            "conversation_id": str(session.conversation_id),
+            "conversation_id": str(session.academic_conversation_id or session.conversation_id),
+            "home_conversation_id":str(session.conversation_id),
             "title": (conv.title if conv and conv.title else "") or session.current_topic or "Study Session",
             "status": session.status,
             "learning_objective": session.learning_objective or "",
             "current_topic": session.current_topic or "",
             "unit": str(session.unit_id) if session.unit_id else None,
+            "academic_conversation_id": str(session.academic_conversation_id) if session.academic_conversation_id else None,
+            "tracking_enabled": bool(session.learning_record_id),
+            "learning_record_id": str(session.learning_record_id) if session.learning_record_id else None,
             "unit_code": getattr(session.unit, "code", "") if session.unit_id else "",
             "unit_label": session.unit_label or "",
             "unit_scope": session.unit_scope or "general",
@@ -1466,12 +1466,16 @@ class StudySessionService:
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "last_active_at": session.last_active_at.isoformat() if session.last_active_at else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
-            "url": reverse("pwanimate:conversation_detail", args=[session.conversation_id]),
+            "url": reverse("pwanimate:conversation_detail", args=[session.academic_conversation_id or session.conversation_id]),
         }
         if include_restored_context and user is not None:
             restored_resources, notices = cls.restore_context_state(session, user)
             payload["restored_context_resources"] = restored_resources
             payload["unavailable_resource_notices"] = notices
+        from pwanimate.services.study_context import resolve
+        context=resolve(user or session.user,session.academic_conversation or session.conversation)
+        payload['resolved_study_context']=context.payload()
+        payload['tracking_enabled']=context.tracking=='authorized' and context.session is not None and context.session.pk==session.pk
         return payload
 
     @classmethod
@@ -1484,7 +1488,7 @@ class StudySessionService:
     ) -> List[ChatMessage]:
         """Load the bounded recent message window for a Study Mode session."""
         return ConversationService.load_history(
-            session.conversation,
+            session.academic_conversation or session.conversation,
             max_messages=max_messages,
             max_tokens=max_tokens,
             exclude_message_id=exclude_message_id,
@@ -1531,7 +1535,7 @@ class StudySessionService:
 
         # Selective retrieval of older conversation turns if the conversation exceeds the recent window
         older_turns: List[Dict[str, Any]] = []
-        conv = session.conversation
+        conv = session.academic_conversation or session.conversation
         all_msgs_qs = conv.messages.filter(role__in=["user", "assistant"]).order_by("-created_at", "-id")
         recent_count = len(recent_history)
         older_candidates = list(all_msgs_qs[recent_count : recent_count + 40])

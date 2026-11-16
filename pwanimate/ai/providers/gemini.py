@@ -218,6 +218,8 @@ class GeminiLLMProvider(BaseLLMProvider):
                 continue
             candidate = candidates[0]
             for part in (candidate.get("content") or {}).get("parts") or []:
+                if part.get("thought"):
+                    continue
                 piece = part.get("text")
                 if piece:
                     text_parts.append(piece)
@@ -230,7 +232,7 @@ class GeminiLLMProvider(BaseLLMProvider):
         synthetic = {
             "candidates": [{
                 "content": {"parts": [{"text": "".join(text_parts)}]},
-                "finishReason": finish_reason or "STOP",
+                "finishReason": finish_reason,
             }],
             "usageMetadata": usage,
         }
@@ -352,8 +354,9 @@ class GeminiLLMProvider(BaseLLMProvider):
 
         candidate = candidates[0]
         content_parts = candidate.get("content", {}).get("parts", [])
-        text = "".join(part.get("text", "") for part in content_parts)
-        finish_reason = candidate.get("finishReason", "stop").lower()
+        text = "".join(part.get("text", "") for part in content_parts if not part.get("thought"))
+        from pwanimate.ai.completion import normalize_finish_reason
+        finish_reason = normalize_finish_reason(candidate.get("finishReason"))
 
         usage = data.get("usageMetadata", {})
         prompt_tokens = usage.get("promptTokenCount")
@@ -381,6 +384,7 @@ class GeminiLLMProvider(BaseLLMProvider):
         metadata: Dict[str, Any] = {
             "gemini_finish_reason": candidate.get("finishReason"),
             "provider_finish_reason": candidate.get("finishReason"),
+            "terminal_finish_received": bool(candidate.get("finishReason")),
             "max_output_tokens": request.max_tokens,
             "thoughts_tokens": thoughts_tokens,
             "total_output_tokens": total_output_tokens,

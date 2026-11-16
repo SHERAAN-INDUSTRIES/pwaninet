@@ -48,9 +48,15 @@ def execute_agent_run(self, run_id: str, attempt_id: str) -> dict:
         return {"status": "duplicate", "run_id": run_id, "attempt_id": attempt_id}
     try:
         payload = agent_execution.execute_claimed(run)
-        return {"status": "ok", "run_id": run_id,
+        run.refresh_from_db()
+        success = (run.status == SparkAgentRun.STATUS_COMPLETED
+                   and run.result_message_id is not None
+                   and not payload.get('error')
+                   and payload.get('response_complete') is True)
+        return {"status": "ok" if success else run.status, "run_id": run_id,
+                "run_status": run.status, "application_success": success,
                 "cancelled": bool(payload.get("cancelled")),
-                "message_id": payload.get("message_id")}
+                "message_id": run.result_message_id}
     except Exception as exc:
         logger.exception("Agent run execution failed run=%s attempt=%s", run_id, attempt_id)
         try:
@@ -61,7 +67,7 @@ def execute_agent_run(self, run_id: str, attempt_id: str) -> dict:
             agent_journal.append(run, "run_failed", {"error": type(exc).__name__})
         except Exception:
             pass
-        return {"status": "error", "run_id": run_id, "error": type(exc).__name__}
+        return {"status": "error", "application_success": False, "run_id": run_id, "error": type(exc).__name__}
 
 
 @shared_task(name="pwanimate.tasks.recover_agent_runs")
@@ -98,7 +104,8 @@ def dispatch_run(run_id, attempt_id):
                 try:
                     fresh = SparkAgentRun.objects.get(pk=run_id)
                     if fresh.attempt_id == attempt_id and fresh.status == 'running':
-                        agent_execution.execute_claimed(fresh)
+                        # Share the durable duplicate-delivery guard with Celery.
+                        execute_agent_run.run(str(run_id), attempt_id)
                 except Exception:
                     logger.exception("Inline agent run execution failed run=%s", run_id)
                     try:

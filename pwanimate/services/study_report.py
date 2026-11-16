@@ -43,6 +43,8 @@ def session_stats(session) -> Dict[str, Any]:
         'questions_correct': total_correct,
         'accuracy_percent': round(total_correct / total_answered * 100) if total_answered else None,
         'assessments': assessments,
+        'mastery_state': 'insufficient_evidence',
+        'legacy_metric_semantics': 'Stored percentages do not certify mastery',
     }
 
 
@@ -53,8 +55,8 @@ def build_report_markdown(session, stats: Dict[str, Any]) -> str:
         '',
         f"**Target:** {stats['target_goal'] or session.learning_objective or session.current_topic or 'General study'}",
         f"**Time studied:** {stats['duration_minutes']} min  |  "
-        f"**Progress:** {stats['progress_percent']}%  |  "
-        f"**Mastery (tested):** {stats['mastery_percent']}%",
+        f"**Legacy progress:** {stats['progress_percent']}%  |  "
+        f"**Legacy score (uncertified):** {stats['mastery_percent']}%",
     ]
     if stats['roadmap_coverage_percent'] is not None:
         lines.append(f"**Roadmap coverage:** {stats['roadmap_coverage_percent']}%")
@@ -66,7 +68,7 @@ def build_report_markdown(session, stats: Dict[str, Any]) -> str:
             f"**{stats['questions_correct']}** correct "
             f"({stats['accuracy_percent']}% accuracy).")
     else:
-        lines.append('- No assessed questions answered yet — mastery stays at 0% until tests are completed.')
+        lines.append('- No decisive grades yet — accuracy is unavailable and mastery has insufficient evidence.')
     for a in stats['assessments']:
         flag = ' *(practice — not counted toward mastery)*' if a.get('counts_toward_mastery') is False else ''
         lines.append(
@@ -83,9 +85,9 @@ def build_report_markdown(session, stats: Dict[str, Any]) -> str:
         '',
         '## Honest read',
         '',
-        'Sections completed raise coverage; only correctly graded test answers raise '
-        'mastery. Self-reported understanding is not counted.',
-        f"Current standing: coverage and mastery combine into {stats['progress_percent']}% progress.",
+        'Sections completed raise coverage; legacy assessment accuracy was previously stored as '
+        'mastery. These legacy values do not certify understanding or retention.',
+        f"Historical combined progress (uncertified): {stats['progress_percent']}% progress.",
     ]
     return '\n'.join(lines)
 

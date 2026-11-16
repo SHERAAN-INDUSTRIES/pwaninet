@@ -271,7 +271,7 @@ class OpenRouterLLMProvider(BaseLLMProvider):
                     "content": "".join(content_parts),
                     "reasoning": "".join(reasoning_parts),
                 },
-                "finish_reason": finish_reason or "stop",
+                "finish_reason": finish_reason,
             }],
             "usage": usage,
         }
@@ -364,7 +364,7 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         if raw_finish:
             lower_finish = raw_finish.strip().lower()
             if lower_finish in ("length", "max_tokens"):
-                finish_reason = "max_tokens"
+                finish_reason = "length"
             elif lower_finish == "stop":
                 finish_reason = "stop"
             else:
@@ -386,14 +386,11 @@ class OpenRouterLLMProvider(BaseLLMProvider):
 
         # Empty content validation and recovery
         if not content:
-            if finish_reason == "max_tokens":
+            if finish_reason == "length":
                 raise AIProviderAPIError(
                     f"OpenRouter model '{model}' reached maximum token limit ({request.max_tokens}) during reasoning without generating visible content.",
                     provider=self.provider_name,
                 )
-            elif reasoning:
-                # Fall back to reasoning text if model only populated reasoning field on normal stop
-                content = reasoning
             else:
                 raise AIProviderAPIError(
                     f"OpenRouter model '{model}' generated empty content (finish_reason={raw_finish}).",
@@ -405,12 +402,11 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         metadata: Dict[str, Any] = {
             "openrouter_id": data.get("id"),
             "provider_finish_reason": raw_finish,
+            "terminal_finish_received": bool(raw_finish),
             "max_output_tokens": request.max_tokens,
             "thoughts_tokens": thoughts_tokens,
             "total_output_tokens": total_output_tokens,
         }
-        if reasoning:
-            metadata["reasoning"] = reasoning
 
         return LLMResponse(
             content=content,

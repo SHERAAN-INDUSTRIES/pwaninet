@@ -22,12 +22,12 @@ class ConversationMemoryServiceTests(TestCase):
             password="test-password",
         )
 
-    def test_lexical_fallback_is_owner_scoped_and_excludes_active_conversation(self):
+    def test_approved_fact_recall_is_owner_scoped_across_conversations(self):
         old_conversation = PwanimateConversation.objects.create(
             user=self.user,
             title="Database revision",
         )
-        PwanimateMessage.objects.create(
+        source = PwanimateMessage.objects.create(
             conversation=old_conversation,
             role="user",
             content="We studied database normalization and functional dependencies.",
@@ -48,6 +48,10 @@ class ConversationMemoryServiceTests(TestCase):
             content="Database normalization in the current thread.",
         )
 
+        from pwanimate.services.personal_memory import PersonalMemoryService
+        PersonalMemoryService.set_enabled(self.user, True)
+        fact = PersonalMemoryService.propose(self.user, source.content, source.pk)
+        PersonalMemoryService.change(self.user, fact.pk, 'approve', fact.version)
         with patch(
             "pwanimate.services.conversation_memory.get_embedding_provider",
             side_effect=RuntimeError("embedding service unavailable"),
@@ -60,7 +64,7 @@ class ConversationMemoryServiceTests(TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["conversation_id"], str(old_conversation.id))
-        self.assertEqual(results[0]["match_type"], "lexical")
+        self.assertEqual(results[0]["match_type"], "persistent_fact")
 
     def test_search_returns_empty_for_anonymous_users(self):
         self.assertEqual(
@@ -70,3 +74,10 @@ class ConversationMemoryServiceTests(TestCase):
             ),
             [],
         )
+
+    def test_raw_transcripts_are_not_implicitly_imported(self):
+        from pwanimate.services.personal_memory import PersonalMemoryService
+        PersonalMemoryService.set_enabled(self.user, True)
+        conversation = PwanimateConversation.objects.create(user=self.user)
+        PwanimateMessage.objects.create(conversation=conversation, role='user', content='I struggle with calculus')
+        self.assertEqual(ConversationMemoryService.search(self.user, 'calculus'), [])

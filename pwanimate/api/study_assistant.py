@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework.views import APIView
@@ -9,25 +10,92 @@ from pwanimate.services.assessment import AssessmentService, public_assessment
 from pwanimate.services.study_report import artifact_payload, generate_pack, session_stats
 from pwanimate.services.study_memory import StudyMemoryService
 from pwanimate.services.personal_planner import PersonalPlannerService, reminder_payload
+from pwanimate.api.academic_guard import AcademicSessionWriteGuard
 
 
 class MemoryView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
-        pref = StudyMemoryService.preference(request.user)
-        memories = SparkConversationDigest.objects.filter(conversation__user=request.user).order_by('-updated_at')[:20]
-        return Response({'enabled': pref.enabled, 'memories': [
-            {'conversation_id': str(m.conversation_id), 'topic': m.topic, 'summary': m.summary, 'next_step': m.next_step} for m in memories]})
+        from pwanimate.services.personal_memory import PersonalMemoryService, enabled, payload
+        from pwanimate.models import SparkPersonalMemory
+        pref = PersonalMemoryService.preference(request.user)
+        facts = SparkPersonalMemory.objects.filter(user=request.user)
+        conversation_id = request.query_params.get('conversation_id')
+        if conversation_id:
+            import uuid
+            try:
+                conversation_id = uuid.UUID(conversation_id)
+            except (ValueError, TypeError):
+                return Response({'detail':'Invalid conversation'},status=400)
+            facts = facts.filter(source_message__conversation_id=conversation_id)
+        if request.query_params.get('status') == 'proposed':
+            facts = facts.filter(status='proposed')
+        response = Response({'enabled': enabled(pref), 'automatic_extraction': pref.automatic_extraction, 'memories': [],
+            'facts': [payload(f) for f in facts.select_related('source_message').order_by('-updated_at')[:100]],
+            'raw_conversation_recall_enabled': False})
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+    def post(self, request):
+        from pwanimate.services.personal_memory import PersonalMemoryService, payload
+        try:
+            fact = PersonalMemoryService.propose(request.user, request.data.get('text'), request.data.get('source_message_id'),
+                category=request.data.get('category','semantic'))
+            return Response({'fact': payload(fact)}, status=201)
+        except (ValueError, ValidationError) as exc:
+            return Response({'detail': str(exc)},status=400)
+
     def patch(self, request):
-        if type(request.data.get('enabled')) is not bool:
-            return Response({'detail': 'enabled must be a boolean.'}, status=400)
-        pref = StudyMemoryService.preference(request.user)
-        pref.enabled = request.data['enabled']
-        pref.save(update_fields=['enabled'])
-        return Response({'enabled': pref.enabled})
+        from pwanimate.services.personal_memory import PersonalMemoryService, enabled, payload
+        try:
+            if 'fact_id' in request.data:
+                fact = PersonalMemoryService.change(request.user, request.data['fact_id'], request.data.get('action'),
+                    request.data.get('version'), request.data.get('text'))
+                return Response({'fact': payload(fact) if fact else None})
+            if 'automatic_extraction' in request.data:
+                pref=PersonalMemoryService.set_automatic(request.user,request.data['automatic_extraction'])
+            else:
+                pref=PersonalMemoryService.set_enabled(request.user,request.data.get('enabled'))
+            return Response({'enabled': enabled(pref), 'automatic_extraction': pref.automatic_extraction})
+        except LookupError:
+            return Response({'detail':'Memory not found'},status=404)
+        except (ValueError, TypeError, ValidationError) as exc:
+            return Response({'detail': str(exc)},status=400)
+
     def delete(self, request):
         StudyMemoryService.forget(request.user)
-        return Response({'forgotten': True, 'chat_history_deleted': False})
+        return Response({'forgotten':True,'chat_history_deleted':False,'academic_records_deleted':False})
+
+
+class MemoryDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, memory_id):
+        from pwanimate.models import SparkPersonalMemory
+        from pwanimate.services.personal_memory import payload
+        fact = get_object_or_404(SparkPersonalMemory.objects.select_related('source_message'), pk=memory_id, user=request.user)
+        response = Response({'fact': payload(fact)})
+        response['Cache-Control'] = 'private, no-store'
+        return response
+
+    def patch(self, request, memory_id):
+        from pwanimate.services.personal_memory import PersonalMemoryService, payload
+        try:
+            fact = PersonalMemoryService.change(request.user, memory_id, request.data.get('action','edit'),
+                request.data.get('version'), request.data.get('text'))
+            return Response({'fact': payload(fact) if fact else None})
+        except LookupError:
+            return Response({'detail':'Memory not found'}, status=404)
+        except (ValueError, TypeError, ValidationError) as exc:
+            return Response({'detail':str(exc)}, status=400)
+
+    def delete(self, request, memory_id):
+        from pwanimate.services.personal_memory import PersonalMemoryService
+        try:
+            PersonalMemoryService.delete(request.user, memory_id)
+        except LookupError:
+            return Response({'detail':'Memory not found'}, status=404)
+        return Response(status=204)
 
 
 class WelcomeView(APIView):
@@ -78,7 +146,7 @@ class StudyPlansView(APIView):
         return Response({'plans': list(SparkStudyPlan.objects.filter(user=request.user).order_by('-created_at').values('id', 'title', 'objective', 'sessions')[:30])})
 
 
-class AssessmentView(APIView):
+class AssessmentView(AcademicSessionWriteGuard, APIView):
     """Generate and answer quizzes inside a unit-scoped study session.
 
     Answer keys never leave the server; grading is server-side only.
@@ -111,14 +179,14 @@ class AssessmentView(APIView):
                     return Response({'detail': 'Assessment not found.'}, status=404)
                 result = AssessmentService.submit_answer(
                     assessment, str(request.data.get('qid') or ''),
-                    str(request.data.get('answer') or ''))
+                    str(request.data.get('answer')) if type(request.data.get('answer')) in (str, int, float) else '')
                 return Response({'result': result, 'assessment': public_assessment(assessment)})
             return Response({'detail': "action must be 'generate' or 'answer'."}, status=400)
         except ValueError as exc:
             return Response({'detail': str(exc)}, status=400)
 
 
-class StudyReportView(APIView):
+class StudyReportView(AcademicSessionWriteGuard, APIView):
     """End-of-session pack: performance report, practice quiz, summary."""
     permission_classes = [IsAuthenticated]
 

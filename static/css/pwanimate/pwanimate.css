@@ -2862,6 +2862,83 @@ body.pwanimate-active.pwanimate-context-rail-open #pwanimateContextRailToggleBtn
     margin-top: 0.65rem;
 }
 
+/* Contextual follow-up suggestions (SALS 0.3 WP2) */
+.pwanimate-follow-ups {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--pwanimate-border);
+}
+
+.pwanimate-follow-ups-header {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pwanimate-muted);
+    margin-bottom: 0.5rem;
+}
+
+.pwanimate-follow-ups-header i {
+    color: var(--pwanimate-user-bubble, #2563eb);
+}
+
+.pwanimate-follow-ups-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.pwanimate-follow-up-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.85rem;
+    border: 1px solid var(--pwanimate-border);
+    border-radius: 999px;
+    background: var(--pwanimate-card-bg, #fff);
+    color: var(--pwanimate-asst-text);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+}
+
+.pwanimate-follow-up-link:hover:not(:disabled):not(.consumed):not(.expired):not(.cancelled) {
+    border-color: var(--pwanimate-user-bubble, #2563eb);
+    color: var(--pwanimate-user-bubble, #2563eb);
+    background: var(--pwanimate-user-bubble-bg, rgba(37, 99, 235, 0.05));
+}
+
+.pwanimate-follow-up-link:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pwanimate-follow-up-link.consumed {
+    border-color: #16a34a;
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.05);
+}
+
+.pwanimate-follow-up-link.expired,
+.pwanimate-follow-up-link.cancelled {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+.pwanimate-follow-up-link.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.pwanimate-follow-up-link i {
+    font-size: 0.95em;
+}
+
 .pwanimate-active-model-chip {
     display: inline-flex;
     align-items: center;
@@ -6258,7 +6335,7 @@ body.pwanimate-active .pwanimate-settings-mobile,
 .spark-clarification-resolved{opacity:.6}
 /* Floating interaction block — pending questions/choices sit directly above
    the composer, sharing its wrapper width, safe-area padding and centering. */
-.spark-interaction-block{pointer-events:auto;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 14px;border:1px solid var(--pwanimate-border);border-radius:14px;background:transparent;color:var(--pwanimate-asst-text);font-size:12.5px}
+.spark-interaction-block{pointer-events:auto;width:100%;box-sizing:border-box;margin:0 0 8px;padding:10px 14px;border:1px solid var(--pwanimate-border);border-radius:14px;background:var(--pwanimate-bg);color:var(--pwanimate-asst-text);font-size:12.5px;position:relative;isolation:isolate;max-height:55dvh;overflow-y:auto;overscroll-behavior:contain}
 .spark-interaction-head{display:flex;align-items:center;gap:7px;margin-bottom:6px}
 .spark-interaction-head svg.lucide{width:15px;height:15px;color:var(--pwanimate-muted)}
 .spark-interaction-kind{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--pwanimate-muted)}
@@ -6267,7 +6344,7 @@ body.pwanimate-active .pwanimate-settings-mobile,
 .spark-interaction-choices{display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto}
 .spark-interaction-option{min-height:34px;padding:6px 14px;border:1px solid var(--pwanimate-border);border-radius:16px;background:var(--pwanimate-bg);color:var(--pwanimate-asst-text);font-size:12.5px;cursor:pointer;transition:border-color .12s ease,background .12s ease}
 .spark-interaction-option:hover{border-color:var(--primary,#6366f1)}
-.spark-interaction-option.is-selected{border-color:var(--primary,#6366f1);background:color-mix(in srgb,var(--primary,#6366f1) 14%,transparent)}
+.spark-interaction-option.is-selected{border-color:var(--primary,#6366f1);background:color-mix(in srgb,var(--primary,#6366f1) 14%,var(--pwanimate-bg))}
 .spark-interaction-option:disabled,.spark-interaction-input:disabled,.spark-interaction-submit:disabled,.spark-interaction-link:disabled{opacity:.55;cursor:default}
 .spark-interaction-other{align-self:flex-start}
 .spark-interaction-custom{display:flex;gap:8px;align-items:center}
@@ -6289,8 +6366,23 @@ textarea.spark-interaction-input{border-radius:12px;resize:vertical;min-height:5
 .spark-interaction-nav-btn:hover{border-color:var(--primary,#6366f1)}
 .spark-interaction-nav-btn:disabled{opacity:.55;cursor:default}
 .spark-interaction-nav .spark-interaction-submit{margin-left:auto}
+.spark-interaction-hint{margin:0;font-size:11.5px;color:var(--pwanimate-muted);line-height:1.4}
+/* Unified composer interaction: the question panel is the upper section of
+   the composer surface — same background token, shared border, cohesive
+   radii, and the composer's own top border becomes the single seam. */
+.spark-interaction-block--merged{margin:0;padding:12px 16px 10px;border:1px solid var(--pwanimate-border);border-bottom:none;border-radius:26px 26px 0 0;background:var(--pwanimate-composer-bg);max-height:none;overflow:visible}
+.spark-interaction-block--merged + #pwanimate-composer-form{border-radius:0 0 26px 26px}
+.spark-interaction-block--merged .spark-interaction-foot{margin-top:10px;padding-top:8px}
+/* Composer focus lights the whole unified surface, panel border included. */
+.spark-interaction-block--merged:has(+ #pwanimate-composer-form:focus-within){border-color:var(--primary,#2563eb)}
+[data-theme="dark"] .spark-interaction-block--merged:has(+ #pwanimate-composer-form:focus-within){border-color:var(--primary,#6366f1)}
+/* The seam stays neutral: the panel's top edge is the single active border
+   when the unified surface is focused — the composer keeps its side/bottom
+   highlight but its top border does not double the active line. */
+.spark-interaction-block--merged + #pwanimate-composer-form:focus-within{border-top-color:var(--pwanimate-border)}
 @media (max-width: 768px) {
     .spark-interaction-block{padding:10px 12px;margin-bottom:6px}
+    .spark-interaction-block--merged{padding:10px 12px 8px}
     .spark-interaction-choices{flex-direction:column;align-items:stretch}
     .spark-interaction-option{width:100%;text-align:left}
     .spark-interaction-custom{flex-direction:column;align-items:stretch}
@@ -6371,3 +6463,21 @@ textarea.spark-interaction-input{border-radius:12px;resize:vertical;min-height:5
 [data-theme="dark"] .pwanimate-study-header-btn.is-danger svg.lucide,
 [data-bs-theme="dark"] .pwanimate-study-header-btn.is-danger svg.lucide { color: #f87171; }
 .pwanimate-subscription-includes svg.lucide { color: var(--primary, #2563eb); margin-right: 5px; }
+
+/* Quiz surfaces remain solid in both themes, including pending/disabled controls. */
+.spark-quiz-work,.spark-quiz-controls,.spark-quiz-history-entry,.spark-quiz-input,
+.spark-quiz-question .spark-quiz-option{background-color:var(--pwanimate-bg);color:var(--pwanimate-asst-text)}
+.spark-quiz-question .spark-quiz-option[aria-pressed="true"]{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.spark-quiz-question .spark-quiz-option:disabled{opacity:1;color:var(--pwanimate-muted)}
+.spark-quiz-question{overflow-wrap:anywhere;min-width:0}
+.spark-quiz-question input{scroll-margin-bottom:calc(16px + env(safe-area-inset-bottom))}
+
+.spark-memory-approval{background:var(--pwanimate-bg);max-width:100%;margin:12px 0;opacity:1}
+.spark-academic-approval{background:var(--pwanimate-bg);max-width:100%;margin:12px 0;opacity:1}
+.spark-memory-approval .spark-interaction-nav{flex-wrap:wrap}
+
+/* Interactive Markdown uses the same sanitized renderer as chat. Wide math
+   and code scroll inside the solid card instead of widening mobile layouts. */
+.spark-interaction-prompt.pwanimate-markdown-body{white-space:normal;min-width:0}
+.spark-interaction-block .katex-display,.spark-interaction-block pre{max-width:100%;overflow-x:auto;overflow-y:hidden}
+.spark-interaction-option>p:last-child,.spark-interaction-prompt>p:last-child{margin-bottom:0}

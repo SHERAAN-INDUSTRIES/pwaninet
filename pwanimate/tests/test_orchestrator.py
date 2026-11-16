@@ -602,3 +602,35 @@ class PwanimateChatAPITestCase(TestCase):
         response = view(request)
         self.assertEqual(response.status_code, 504)
         self.assertIn("timed out", response.data["error"])
+
+
+class PlannerParseToleranceTestCase(SimpleTestCase):
+    """Small planner models emit Python-style literals and wrapped payloads;
+    _parse_plan must salvage them without ever executing code."""
+
+    def parse(self, text):
+        from pwanimate.orchestrator.agent import StudyAgent
+        return StudyAgent._parse_plan(text)
+
+    def test_strict_json_still_parses(self):
+        self.assertEqual(self.parse('{"calls": [], "checklist": []}'),
+                         {'calls': [], 'checklist': []})
+
+    def test_single_quoted_python_dict_parses(self):
+        # Observed failure: qwen emitted {'key': ...} — strict JSON rejects it.
+        value = self.parse("{\n 'calls': [],\n 'checklist': [{'label': 'Plan', 'status': 'pending'}],\n 'ok': True, 'nothing': None\n}")
+        self.assertEqual(value['checklist'][0]['label'], 'Plan')
+        self.assertIs(value['ok'], True)
+        self.assertIsNone(value['nothing'])
+
+    def test_prose_and_fenced_wrappers_parse(self):
+        self.assertEqual(self.parse('Here you go:\n```json\n{"calls":[],"checklist":[]}\n```\nDone.')['calls'], [])
+        self.parse('Plan follows.\n{"calls":[],"checklist":[]}\nThanks!')
+
+    def test_literal_eval_cannot_execute_code(self):
+        with self.assertRaises(Exception):
+            self.parse('{"calls": __import__("os").system("id"), "checklist": []}')
+
+    def test_unusable_output_still_fails_cleanly(self):
+        with self.assertRaises(ValueError):
+            self.parse('no json object here at all')

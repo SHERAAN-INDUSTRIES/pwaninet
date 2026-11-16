@@ -17,7 +17,7 @@ from pwanimate.ai.gateway.types import LLMRequest
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare", "ollama", "mock"}
+SUPPORTED_PROVIDERS = {"gemini", "groq", "openrouter", "cloudflare", "ollama", "mock", "zai", "alibaba", "tencent", "deepseek"}
 
 
 class LLMRouter:
@@ -48,7 +48,10 @@ class LLMRouter:
         if normalized_name in self._providers:
             return self._providers[normalized_name]
 
-        if normalized_name == "gemini":
+        if normalized_name in {"zai", "alibaba", "tencent", "deepseek"}:
+            from pwanimate.ai.providers.compatible import CompatibleLLMProvider
+            provider = CompatibleLLMProvider(normalized_name)
+        elif normalized_name == "gemini":
             from pwanimate.ai.providers.gemini import GeminiLLMProvider
             provider = GeminiLLMProvider()
         elif normalized_name == "groq":
@@ -155,6 +158,16 @@ class LLMRouter:
                 else:
                     configured_chain.append({"provider": p, "model": None})
 
+        task_chain = (None if required_capability == "image" or (request.metadata or {}).get("fallback_chain")
+                      else getattr(settings, "PWANIMATE_TASK_FALLBACK_CHAINS", {}).get(request.task))
+        if task_chain is not None and not (request.metadata or {}).get("fallback_chain"):
+            configured_chain = task_chain
+
+        if (task_chain is None and required_capability != 'image'
+                and not (request.metadata or {}).get('fallback_chain')):
+            from pwanimate.ai.providers.compatible import with_zai_fallbacks
+            configured_chain = with_zai_fallbacks(configured_chain)
+
         primary_provider = (request.provider or self.default_provider_name).strip().lower()
         primary_model = request.model
         if not primary_model and primary_provider in SUPPORTED_PROVIDERS:
@@ -164,7 +177,8 @@ class LLMRouter:
             except Exception:
                 primary_model = None
 
-        raw_candidates = [{"provider": primary_provider, "model": primary_model}]
+        raw_candidates = ([{"provider": primary_provider, "model": primary_model}]
+                          if task_chain is None or request.provider or request.model else [])
         for item in configured_chain:
             if isinstance(item, dict):
                 p_name = item.get("provider", "").strip().lower()
@@ -221,7 +235,7 @@ class LLMRouter:
 
             try:
                 prov = self.get_provider(p_name)
-                if prov.is_available():
+                if prov.is_available() and (not hasattr(prov, "eligible") or prov.eligible(request, m_name or prov.model_name)):
                     available.append({
                         "provider": p_name,
                         "model": m_name or getattr(prov, "model_name", None),
@@ -270,6 +284,10 @@ class LLMRouter:
                 if healthy:
                     available = healthy + throttled
 
+        available = [c for c in available if not hasattr(self.get_provider(c["provider"]), "eligible")
+                     or self.get_provider(c["provider"]).eligible(request, c["model"])]
+        if not available:
+            raise AIProviderConfigurationError("No eligible models for this request.", provider="none")
         return available
 
     # ------------------------------------------------------------------ tier

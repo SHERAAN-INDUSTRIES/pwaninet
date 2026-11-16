@@ -62,6 +62,33 @@ class ContractsTestCase(SimpleTestCase):
         self.assertIsNone(req.context)
         self.assertIsNone(req.system_instruction)
 
+    def test_llm_request_rejects_non_text_system_instruction(self):
+        for value in (("first", "second"), ["instruction"], {"text": "instruction"}, 1):
+            with self.subTest(value=value), self.assertRaisesRegex(TypeError, "system_instruction"):
+                LLMRequest(system_instruction=value)
+
+    def test_planner_instruction_serializes_as_text_for_both_providers(self):
+        # Evaluate the real prompt assignment without running tools, ORM, or an LLM.
+        import ast
+        from pathlib import Path
+        planner_path = Path(__file__).resolve().parents[1] / "orchestrator" / "agent.py"
+        tree = ast.parse(planner_path.read_text())
+        agent = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "StudyAgent")
+        run = next(node for node in agent.body if isinstance(node, ast.FunctionDef) and node.name == "run")
+        assignment = next(node for node in run.body if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == "prompt" for target in node.targets))
+        import json
+        prompt = eval(compile(ast.Expression(assignment.value), str(planner_path), "eval"),
+                      {"json": json, "schemas": []})
+        self.assertIsInstance(prompt, str)
+        self.assertIn('"calls"', prompt)
+        request = LLMRequest(task="tool", system_instruction=prompt,
+                             messages=[ChatMessage(role="user", content="Find my study materials")])
+        gemini = GeminiLLMProvider(api_key="test", model_name="test")
+        groq = GroqLLMProvider(api_key="test", model_name="test")
+        self.assertEqual(gemini._build_payload(request)["systemInstruction"]["parts"][0]["text"], prompt)
+        self.assertEqual(groq._build_payload(request, "test")["messages"][0]["content"], prompt)
+
     def test_llm_request_invalid_temperature(self):
         with self.assertRaises(ValueError):
             LLMRequest(temperature=2.5)
@@ -616,7 +643,7 @@ class OpenRouterLLMProviderTestCase(SimpleTestCase):
         self.assertEqual(resp.finish_reason, "stop")
         self.assertEqual(resp.metadata["thoughts_tokens"], 900)
         self.assertEqual(resp.metadata["total_output_tokens"], 1200)
-        self.assertEqual(resp.metadata["reasoning"], "Step 1: Analyzed query. Step 2: Formulated answer.")
+        self.assertNotIn("reasoning", resp.metadata)
 
     @patch("requests.Session.post")
     def test_openrouter_empty_content_length_raises_api_error(self, mock_post):
@@ -657,7 +684,7 @@ class OpenRouterLLMProviderTestCase(SimpleTestCase):
         self.assertIn("reached maximum token limit", str(cm.exception))
 
     @patch("requests.Session.post")
-    def test_openrouter_fallback_to_reasoning_on_stop(self, mock_post):
+    def test_openrouter_reasoning_only_stop_fails_closed(self, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -685,8 +712,8 @@ class OpenRouterLLMProviderTestCase(SimpleTestCase):
             task="chat",
             messages=[ChatMessage(role="user", content="Hello")],
         )
-        resp = provider.generate(req)
-        self.assertEqual(resp.content, "This model put its final answer inside the reasoning field.")
+        with self.assertRaises(AIProviderAPIError):
+            provider.generate(req)
 
     @patch("requests.Session.post")
     def test_openrouter_empty_content_raises_api_error(self, mock_post):

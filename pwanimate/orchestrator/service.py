@@ -33,6 +33,7 @@ from pwanimate.orchestrator.prompts import (
     get_system_instruction,
 )
 from pwanimate.orchestrator.types import OrchestrationRequest, OrchestrationResponse
+from pwanimate.orchestrator.timing import measure_orchestration
 from pwanimate.retrieval import (
     RetrievalMode,
     RetrievalRequest,
@@ -42,6 +43,7 @@ from pwanimate.retrieval import (
     UnifiedRetrievalService,
 )
 from pwanimate.tools import (
+    ToolResult,
     ToolRoute,
     ToolRouter,
     ToolRegistry,
@@ -98,6 +100,84 @@ CONVERSATIONAL_PATTERNS = [
     r"^(bye|goodbye|see\s+ya|see\s+you(\s+later)?|cya|take\s+care)[\s\.\!\?]*$",
     r"^(test|testing|ping)[\s\.\!\?]*$",
 ]
+
+# ---------------------------------------------------------------------------
+# SALS WP3: deterministic routine-tutoring fast path.
+#
+# Routine tutoring turns (follow-ups like "explain again" / "another example"
+# and standard academic questions like "what is a matrix") do not need the
+# bounded agent's planner rounds: they are answered by a single generation
+# call, either grounded in conversation history ('direct') or in the standard
+# retrieval pipeline ('rag'). The deny-list keeps every tool-requiring intent
+# (search, reminders, schedules, personal data, social writes, documents the
+# student selected) on the full planner path so permissions and required
+# retrieval are never bypassed.
+# ---------------------------------------------------------------------------
+
+_ROUTINE_DENY_RE = re.compile(
+    r"\b(?:search|google|look\s?up|latest|news|headlines?|weather|forecast|"
+    r"remind(?:er)?|alarm|schedul\w+|calendar|meetings?|deadlines?|assignments?|"
+    r"homework|essays?|e-?mails?|translate|translat\w+|stocks?|crypto\w*|bitcoin|"
+    r"forex|jokes?|stories|poems?|haiku|lyrics?|recipes?|directions?|near me|"
+    r"restaurants?|flights?|hotels?|movies?|netflix|songs?|playlists?|"
+    r"passwords?|usernames?|phone\s+numbers?|addresses?|downloads?|installs?|"
+    r"wallets?|timetables?|class\s+schedules?|study\s+blocks?|revision\s+plans?|"
+    r"study\s+plans?|grades?|transcripts?|results?|scores?|marks?|gpa|attendance|"
+    r"my\s+(?:notes?|documents?|files?|pdfs?|slides?|lectures?|recordings?|transcripts?)|"
+    r"course\s+(?:notes?|materials?|packs?)|lecture\s+notes?|"
+    r"(?:when|what\s+time|time|schedule[sd]?|timetable|calendar|rota)\b[^.?!]{0,50}"
+    r"\b(?:class|lecture|seminar|tutorial|lab|period|meeting|event|shift|duty)\b|"
+    r"\b(?:class|lecture|seminar|tutorial|lab|period|meeting|event|shift|duty)\b"
+    r"[^.?!]{0,30}\b(?:today|tomorrow|tonight|this\s+week|next\s+week)\b|"
+    r"sends?|messages?|dms?|texts?|follows?|posts?|tweets?|likes?|comments?|"
+    r"shares?|friends?|notifications?|emails?\s+me)\b",
+    re.IGNORECASE,
+)
+
+# Follow-up cues that only make sense against the current conversation, plus
+# self-contained math/operations requests that need no retrieval at all.
+_ROUTINE_DIRECT_RE = re.compile(
+    r"\b(?:again|simpler|easier|another\s+examples?|more\s+examples?|"
+    r"one\s+more\s+example|a\s+few\s+more\s+examples?|"
+    r"break\s+(?:it|that|this|them)\s+down|step[-\s]by[-\s]step|walk\s+me\s+through|"
+    r"what\s+do\s+you\s+mean|what\s+does\s+(?:that|this|it)\s+mean|"
+    r"i\s+don'?t\s+(?:get\s+it|understand)|i'?m\s+(?:confused|lost|stuck)|"
+    r"help\s+me\s+understand|explain\s+(?:more|further|again)|tell\s+me\s+more|"
+    r"elaborate|expand\s+on|recap|sum(?:marize)?\s+(?:that|this|it)|tl;?dr|"
+    r"show\s+me\s+again|like\s+i'?m\s+five|eli5|"
+    r"real[-\s]life\s+examples?|real[-\s]world\s+examples?|worked\s+examples?|"
+    r"practice\s+problems?|quiz\s+me|test\s+me|give\s+me\s+a\s+hint|"
+    r"continue|go\s+on|keep\s+going|what'?s\s+next|carry\s+on|"
+    r"in\s+other\s+words|so\s+basically|from\s+scratch|first\s+principles|"
+    r"show\s+(?:me\s+)?(?:your|the)\s+work|how\s+does\s+that\s+work|why\s+does\s+that|"
+    r"why\s+is\s+that|how\s+come|say\s+that\s+again|repeat\s+that|"
+    r"say\s+it\s+again|more\s+slowly|slower|another\s+way|different\s+approach|"
+    r"alternative\s+(?:way|method|approach)|easier\s+way|simplest\s+way|"
+    r"quick\s+recap|key\s+points|main\s+points|take\s?aways?|bottom\s+line|"
+    r"solve|simplif\w+|factor(?:ize|isation|ization)?|expand|"
+    r"differentiat\w+|integrat\w+|evaluat\w+|prove|proofs?|derive|derivations?|"
+    r"derivatives?|integrals?|calculat\w+|comput\w+|"
+    r"equations?|inequalit\w+|matrices|matrix|vectors?|determinants?|"
+    r"eigen\w+|limits?|series|summations?|probabilit\w+|permutations?|"
+    r"combinations?|quadratics?|polynomials?|logarithms?|trigonometr\w+|"
+    r"geometry|pythagor\w+|algebra|calculus|arithmetic|numerical|"
+    r"prime\s+numbers?|square\s+roots?|cube\s+roots?)\b",
+    re.IGNORECASE,
+)
+
+# Standard academic questions: answered through the normal retrieval pipeline
+# (notes, units, public sources) with a single generation call — no planner.
+_ROUTINE_ACADEMIC_RE = re.compile(
+    r"\b(?:what\s+(?:is|are|was|were|does|do|did)|what'?s|whats|"
+    r"define|definition\s+of|explain|describe|how\s+(?:does|do|did|is|are)|"
+    r"why\s+(?:does|do|is|are|did)|difference\s+between|compare|contrast|"
+    r"distinguish|teach\s+me|help\s+me\s+understand|meaning\s+of|"
+    r"tell\s+me\s+about|give\s+me\s+examples?\s+of|examples?\s+of|"
+    r"properties\s+of|causes?\s+of|effects?\s+of|types?\s+of|kinds?\s+of|"
+    r"ways?\s+to|importance\s+of|role\s+of|introduction\s+to|"
+    r"overview\s+of|basics?\s+of|fundamentals?\s+of|summary\s+of)\b",
+    re.IGNORECASE,
+)
 
 
 def sanitize_llm_response(text: str) -> str:
@@ -764,6 +844,9 @@ class PwanimateOrchestrator:
         Check if query is purely conversational chitchat that does not
         require knowledge base retrieval or domain tools.
         """
+        from pwanimate.services.casual_context import is_greeting
+        if is_greeting(query):
+            return True
         cleaned = query.strip().lower()
         if len(cleaned) > 60:
             # Substantive queries are longer
@@ -773,6 +856,27 @@ class PwanimateOrchestrator:
             if re.match(pattern, cleaned, re.IGNORECASE):
                 return True
         return False
+
+    @staticmethod
+    def _routine_tutoring_route(query: str) -> Optional[str]:
+        """Classify a query for the SALS WP3 routine-tutoring fast path.
+
+        Returns 'direct' for history-grounded follow-ups and self-contained
+        math/operations requests, 'rag' for standard academic questions that
+        still need retrieval, or None when the query may require tools,
+        personal data, selected documents, or anything outside the bounded
+        tutoring vocabulary. Deterministic only — no model call.
+        """
+        text = " ".join((query or "").split())
+        if not text or len(text) > 200:
+            return None
+        if _ROUTINE_DENY_RE.search(text):
+            return None
+        if _ROUTINE_DIRECT_RE.search(text):
+            return 'direct'
+        if _ROUTINE_ACADEMIC_RE.search(text):
+            return 'rag'
+        return None
 
     def _resolve_effective_budget(self, request: OrchestrationRequest, task_category: str) -> int:
         """
@@ -789,6 +893,11 @@ class PwanimateOrchestrator:
     @staticmethod
     def _with_local_time(instruction: str, request: OrchestrationRequest) -> str:
         """Give Pwanimate the browser's current clock and IANA timezone when available."""
+        instruction += ("\nGive only the user-facing answer, never private reasoning, raw prompts or internal instructions. "
+                        "Personal memory is handled by a separate authenticated approval card. "
+                        "Acknowledging a preference is not approval: never claim to have saved it, "
+                        "and do not narrate an intended memory tool call. Never ask memory consent in ordinary answer text: only the persisted approval cards collect it. The card provides the real status. "
+                        "Academic study-tracking consent is also collected only by its persisted Approve/Decline card: never ask for tracking permission in ordinary answer text.")
         if not request.local_time:
             return instruction
         try:
@@ -884,6 +993,24 @@ class PwanimateOrchestrator:
         into the ContextPackage and system instruction.
         """
         blocks: List[str] = []
+        if request.teaching_context:
+            import json
+            from pwanimate.services.teaching import TEACHING_POLICY
+            system_instruction += '\n\n' + TEACHING_POLICY
+            blocks.append('Server educational state (context only): ' + json.dumps(request.teaching_context))
+        if request.tracking_state:
+            import json
+            blocks.append(
+                'Academic tracking state (server-verified; describe only what is listed): '
+                + json.dumps(request.tracking_state))
+            system_instruction += (
+                "\n\nAcademic tracking state is server-verified in the context block. "
+                "Claim unit tracking is active only for units listed under active_unit_tracking. "
+                "Mention a consent approval card only when pending_consents is non-empty — "
+                "those cards are rendered with this reply. If Study Mode is on but no unit "
+                "tracking is authorized, simply tutor normally; never promise a card that "
+                "is not pending, and never re-ask for units listed under declined_units "
+                "or when tracking_disabled is true.")
         if request.study_mode:
             system_instruction = (
                 f"{system_instruction}\n\n"
@@ -919,6 +1046,7 @@ class PwanimateOrchestrator:
 
         return context_pkg, system_instruction
 
+    @measure_orchestration
     def run(
         self,
         request: OrchestrationRequest,
@@ -939,7 +1067,38 @@ class PwanimateOrchestrator:
         4. Packages citations, sources, timing, and response.
         """
         t_start = time.perf_counter()
+        timing = getattr(request, "timing", None)
+        if timing is not None:
+            timing.mark("orchestrator_start")
         query = request.query.strip()
+        from pwanimate.orchestrator.routing import select_strategy
+        classified_at = time.perf_counter()
+        strategy = select_strategy(request)
+        if timing is not None:
+            timing.strategy = strategy.intent
+            timing.observe('classification_ms', (time.perf_counter() - classified_at) * 1000)
+        from pwanimate.services.casual_context import is_greeting, greeting_context
+        if strategy.intent == 'casual':
+            from dataclasses import replace
+            preferences, recent = greeting_context(request.user)
+            casual = replace(request, study_mode=False, study_context=None,
+                context_resources=[], attachments=[], document_context=None, user_context=None,
+                tracking_state=None, teaching_context={}, conversation_memory=preferences,
+                academic_unit_context=recent, max_tokens=min(request.max_tokens or 240, 240))
+            response = self._run_conversational(casual, query, t_start, on_token=on_token)
+            self._record_usage(casual, response)
+            return response
+        if strategy.intent == 'recall' and not request.sources:
+            # API/durable reconstruction already load authorized persisted facts
+            # and academic summaries. A history read never starts teaching or
+            # researches an incidental open document.
+            from dataclasses import replace
+            recall = replace(request, study_mode=False, study_context=None,
+                teaching_context={}, context_resources=[], attachments=[], document_context=None)
+            response = self._run_conversational(recall, query, t_start, on_token=on_token)
+            response.metadata['intent'] = 'recall'
+            self._record_usage(recall, response)
+            return response
         from pwanimate.services.social_updates import (
             get_pending_friend_post_updates,
         )
@@ -971,19 +1130,84 @@ class PwanimateOrchestrator:
                 document_context = None
         request.document_context = document_context
 
+        from pwanimate.services.teaching import TeachingService
+        if timing is not None:
+            timing.mark("teaching_check")
+        if strategy.intent not in {'action', 'platform'} and TeachingService.applies(request):
+            if timing is not None:
+                timing.strategy = 'teaching'
+                timing.mark("teaching_path")
+            prepared = TeachingService.prepare(request, on_progress=on_progress)
+            return self.finish_agent(request, prepared, t_start, on_progress, on_token)
+
         # 1. Use exact deterministic routes for clear requests.
         tool_route = self.tool_router.route(
             query, user=request.user, user_context=request.user_context,
             local_time=request.local_time, timezone_name=request.timezone_name,
         )
-        # The bounded agent combines evidence before one streamed answer. Keep existing
-        # multimodal/study paths intact; ordinary text reaches model planning.
+
+        # SALS WP3 fast path: routine tutoring turns skip the planner entirely.
+        # 'direct' answers follow-ups/math from conversation context with one
+        # generation call; 'rag' answers standard academic questions through the
+        # normal retrieval pipeline, still with a single generation call. Both
+        # preserve document-context evidence, academic unit context, consent
+        # gating and usage recording — only planner rounds and tool selection
+        # are bypassed, and only for queries the deterministic classifier
+        # proves cannot require a tool.
+        fast_path = None
         if (getattr(settings, 'SPARK_AGENT_ENABLED', True)
             and not has_attachments_or_context and not request.study_mode
             and not self.is_conversational_intent(query)
-            and (not tool_route or tool_route.tool_name != 'send_notification')):
+            and not tool_route):
+            if not self.tool_selector.required_web_query(query, request.history):
+                if strategy.intent == 'recall':
+                    fast_path = 'direct'
+                elif (strategy.direct and not _ROUTINE_DENY_RE.search(query)
+                        and not LLMToolSelector.might_need_tool(query)):
+                    fast_path = 'direct'
+                elif (strategy.intent not in {'complex', 'continuation', 'mixed'}
+                        and not LLMToolSelector.might_need_tool(query)):
+                    fast_path = self._routine_tutoring_route(query)
+        if fast_path == 'direct':
+            if timing is not None:
+                timing.mark('fast_path_direct')
+            prepared = {
+                'provider': '', 'model': '', 'items': [], 'pending_actions': [],
+                'tokens': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0},
+                'result': ToolResult.ok({'route': 'routine_tutoring_direct'}),
+            }
+            response = self.finish_agent(request, prepared, t_start, on_progress, on_token)
+            response.metadata['fast_path'] = 'routine_tutoring_direct'
+            response.metadata['intent'] = 'routine_tutoring'
+            return self._append_friend_post_updates(response, request.user, friend_post_updates)
+        if fast_path == 'rag':
+            if timing is not None:
+                timing.mark('fast_path_rag')
+            response = self._run_rag(
+                request, query, t_start,
+                on_progress=on_progress, on_token=on_token,
+            )
+            response.metadata = response.metadata or {}
+            response.metadata['fast_path'] = 'routine_tutoring_rag'
+            response.metadata['intent'] = 'routine_tutoring'
+            self._record_usage(request, response)
+            return self._append_friend_post_updates(response, request.user, friend_post_updates)
+
+        # The bounded agent combines evidence before one streamed answer. Keep existing
+        # multimodal/study paths intact; ordinary text reaches model planning.
+        if (getattr(settings, 'SPARK_AGENT_ENABLED', True)
+            and (not has_attachments_or_context or strategy.intent in {'action', 'platform'} and not request.attachments or (
+                strategy.intent == 'complex' and not request.attachments
+                and document_context is not None and document_context.filter_document_ids))
+            and (not request.study_mode or strategy.intent in {'action', 'platform'})
+            and not self.is_conversational_intent(query)
+            and not tool_route):
             from pwanimate.orchestrator.agent import StudyAgent
+            if timing is not None:
+                timing.mark('agent_planning_start')
             prepared = StudyAgent(self.gateway, self.tool_registry).run(request, self._request_metadata(request), on_progress)
+            if timing is not None:
+                timing.mark('agent_planning_done')
             if prepared:
                 response = self.finish_agent(request,prepared,t_start,on_progress,on_token)
                 return self._append_friend_post_updates(response, request.user, friend_post_updates)
@@ -1006,6 +1230,8 @@ class PwanimateOrchestrator:
             and not self.is_conversational_intent(query)
             and self.tool_selector.might_need_tool(query)
         ):
+            if timing is not None:
+                timing.mark('tool_selection_start')
             selection = self.tool_selector.select(
                 query=query,
                 history=request.history,
@@ -1014,9 +1240,13 @@ class PwanimateOrchestrator:
                 selected_resources=request.context_resources,
                 attachments=request.attachments,
             )
+            if timing is not None:
+                timing.mark('tool_selection_done')
             tool_route = selection.route
             retrieval_sources = selection.sources
         if tool_route:
+            if timing is not None:
+                timing.mark('tool_exec')
             if tool_route.tool_name == "web_search" and on_progress:
                 on_progress("searching_web")
             elif tool_route.tool_name == "content_search" and on_progress:
@@ -1036,11 +1266,15 @@ class PwanimateOrchestrator:
             request.task == "general" or self.is_conversational_intent(query)
         )
         if is_conversational:
+            if timing is not None:
+                timing.mark('conversational_path')
             response = self._run_conversational(request, query, t_start, on_token=on_token)
             self._record_usage(request, response)
             return self._append_friend_post_updates(response, request.user, friend_post_updates)
 
         # 5. Standard / Attachment / Context RAG
+        if timing is not None:
+            timing.mark('rag_path')
         response = self._run_rag(
             request,
             query,
@@ -1054,7 +1288,10 @@ class PwanimateOrchestrator:
 
     def finish_agent(self, request, prepared, t_start, on_progress=None, on_token=None):
         """Present a bounded run outcome, pausing before any unapproved social write."""
-        if prepared.get('run_id') or prepared.get('clarification'):
+        if prepared.get('teaching_turn_id'):
+            from pwanimate.services.teaching import TeachingService
+            response = TeachingService.finish(request, prepared, self, t_start, on_progress, on_token)
+        elif prepared.get('run_id') or prepared.get('clarification'):
             pending = prepared.get('pending_actions')
             if pending is None and prepared.get('run_id'):
                 from pwanimate.models import SparkAgentRun
@@ -1071,16 +1308,21 @@ class PwanimateOrchestrator:
                           'awaiting_input':True,
                           'awaiting_approval':has_actions and bool(prepared.get('run_id')),
                           'awaiting_clarification':bool(prepared.get('clarification'))})
+            if prepared.get('run_id'):
+                from pwanimate.models import SparkAgentRun
+                from pwanimate.services.agent_runs import AgentRunService
+                current = SparkAgentRun.objects.filter(pk=prepared['run_id'],user=request.user).first()
+                if current is not None:
+                    response.metadata['run'] = AgentRunService.serialize(current)
         else:
-            if on_progress:
-                on_progress('writing_answer')
             response = self._run_tool(request, request.query,
                 ToolRoute(tool_name='study_agent',parameters={},confidence=1.0,matched_intent='multi_tool'),
                 t_start,on_progress=on_progress,on_token=on_token,prepared=prepared)
-        response.metadata['agent_trace'] = prepared['trace']
+        # Raw tool arguments/results stay inside the executor, never response metadata.
         for field,value in prepared['tokens'].items():
             setattr(response,field,(getattr(response,field) or 0)+value)
-        self._record_usage(request,response)
+        if not prepared.get('teaching_turn_id') or response.metadata.get('teaching_baseline',{}).get('answer_generation_calls'):
+            self._record_usage(request,response)
         return response
 
     @staticmethod
@@ -1201,11 +1443,107 @@ class PwanimateOrchestrator:
         response.metadata["friend_post_updates_count"] = len(updates)
         return response
 
-    def _generate(self, llm_request: LLMRequest, on_token: Optional[Callable[[str], None]] = None):
-        """Single LLM call site: streams tokens when a callback is provided."""
+    # SALS WP3: a truncated or interrupted answer gets exactly one bounded
+    # continuation within the same logical turn — never a loop.
+    _MAX_ANSWER_CONTINUATIONS = 1
+
+    @staticmethod
+    def _needs_continuation(response: LLMResponse) -> bool:
+        """Truncated ('length') or mid-stream interrupted ('interrupted')
+        responses with usable partial output are worth one continuation."""
+        from pwanimate.ai.completion import needs_continuation
+        return needs_continuation(response.finish_reason, response.content)
+
+    @staticmethod
+    def _continuation_request(llm_request: LLMRequest, partial: str) -> LLMRequest:
+        """Ask the same model to resume exactly where the partial answer stopped."""
+        messages = list(llm_request.messages) + [
+            ChatMessage(role="assistant", content=partial),
+            ChatMessage(
+                role="user",
+                content=(
+                    "Your previous answer was cut off. Continue it exactly where it "
+                    "stopped — do not repeat any text already written, do not add a "
+                    "preamble, and finish the answer cleanly."
+                ),
+            ),
+        ]
+        return LLMRequest(
+            task=llm_request.task,
+            messages=messages,
+            context=llm_request.context,
+            system_instruction=llm_request.system_instruction,
+            provider=llm_request.provider,
+            model=llm_request.model,
+            temperature=llm_request.temperature,
+            max_tokens=llm_request.max_tokens,
+            metadata=llm_request.metadata,
+            attachments=llm_request.attachments,
+        )
+
+    def _generate(
+        self,
+        llm_request: LLMRequest,
+        on_token: Optional[Callable[[str], None]] = None,
+        timing=None,
+        _continued: bool = False,
+    ) -> LLMResponse:
+        """Single LLM call site: streams tokens when a callback is provided.
+
+        Stamps pipeline timing (model call count, duration, first token) and,
+        for answer generation only, performs one bounded continuation when the
+        provider truncates or interrupts — preserving the partial output the
+        student already saw instead of discarding or duplicating it.
+        """
+        if timing is not None:
+            timing.count("model_calls")
+            timing.count("answer_calls")
+        started = time.perf_counter()
         if on_token is not None:
-            return self.gateway.generate_stream(llm_request, on_token)
-        return self.gateway.generate(llm_request)
+            first_token = {"seen": False}
+
+            def _timed_token(text: str) -> None:
+                if not first_token["seen"]:
+                    first_token["seen"] = True
+                    if timing is not None:
+                        timing.mark("first_token")
+                on_token(text)
+
+            response = self.gateway.generate_stream(llm_request, _timed_token)
+        else:
+            response = self.gateway.generate(llm_request)
+        if timing is not None:
+            timing.observe("llm_call_ms", (time.perf_counter() - started) * 1000.0)
+            timing.record_response(response)
+
+        if (not _continued and self._needs_continuation(response)):
+            original_reason = response.finish_reason
+            try:
+                more = self._generate(
+                    self._continuation_request(llm_request, response.content or ""),
+                    on_token,
+                    timing=timing,
+                    _continued=True,
+                )
+            except Exception:
+                logger.warning(
+                    "Answer continuation failed; keeping partial output", exc_info=True
+                )
+                more = None
+            if more is not None and (more.content or "").strip():
+                response.content = (response.content or "") + more.content
+                for name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                    base = getattr(response, name, None)
+                    extra = getattr(more, name, None)
+                    if base is not None or extra is not None:
+                        setattr(response, name, (base or 0) + (extra or 0))
+                response.finish_reason = more.finish_reason or response.finish_reason
+                response.metadata = response.metadata or {}
+                response.metadata["continued"] = True
+                response.metadata["recovered_from"] = original_reason
+                if timing is not None:
+                    timing.count("answer_continuations")
+        return response
 
     def _run_conversational(
         self,
@@ -1224,11 +1562,20 @@ class PwanimateOrchestrator:
                 user_context=request.user_context,
                 conversation_memory=request.conversation_memory,
             )
-        elif request.conversation_memory:
+        elif request.conversation_memory or request.academic_unit_context:
             context_pkg = ContextPackage(query=query, conversation_memory=request.conversation_memory)
 
-        source_warnings = self._collect_source_warnings(request)
+        if context_pkg is not None:
+            context_pkg.academic_unit_context = list(request.academic_unit_context)
+
+        from pwanimate.services.casual_context import is_greeting
+        casual = is_greeting(query)
+        source_warnings = [] if casual else self._collect_source_warnings(request)
         base_instruction = self._with_local_time(get_system_instruction("conversational"), request)
+        if casual:
+            base_instruction += ('\nReply briefly and naturally. You may offer to continue only the supplied '
+                'real recent_session; never invent prior work or imply exposure is mastery. '
+                'A greeting neither resumes a session nor grants tracking authorization.')
         context_pkg, system_instruction = self._apply_study_and_warning_context(
             request=request,
             query=query,
@@ -1252,7 +1599,7 @@ class PwanimateOrchestrator:
         )
 
         t_gen = time.perf_counter()
-        llm_response = self._generate(llm_request, on_token)
+        llm_response = self._generate(llm_request, on_token, timing=getattr(request, "timing", None), _continued=casual)
         gen_time_ms = round((time.perf_counter() - t_gen) * 1000.0, 2)
         total_time_ms = round((time.perf_counter() - t_start) * 1000.0, 2)
 
@@ -1330,9 +1677,14 @@ class PwanimateOrchestrator:
             tool_route.tool_name,
             user=request.user,
             user_context=request.user_context,
-            **tool_route.parameters,
+            **{**tool_route.parameters, **({'source_message_id': request.user_message_id}
+                if tool_route.tool_name == 'send_notification' else {})},
         )
         tool_time_ms = round((time.perf_counter() - t_tool) * 1000.0, 2)
+        timing = getattr(request, 'timing', None)
+        if timing is not None and not prepared:
+            timing.count('tool_executions')
+            timing.observe('tool_ms', tool_time_ms)
 
         # Convert tool result to grounded ContextPackage
         context_items = prepared["items"] if prepared else tool_result_to_context_items(tool_route.tool_name, tool_result)
@@ -1374,6 +1726,7 @@ class PwanimateOrchestrator:
         if document_context is not None:
             context_pkg.metadata["document_context"] = document_context.to_metadata()["document_context"]
         context_pkg.conversation_memory = list(request.conversation_memory)
+        context_pkg.academic_unit_context = list(request.academic_unit_context)
         # Extract people data if people_discovery or user_profile tool ran
         people_results: List[Dict[str, Any]] = []
         if (
@@ -1438,7 +1791,10 @@ class PwanimateOrchestrator:
             request=request, document_context=document_context, page_chunks=doc_page_chunks,
         )
         base_instruction = self._with_local_time(
-            get_system_instruction("optional" if tool_route.tool_name == "web_search" else "required"),
+            get_system_instruction("optional" if (
+                tool_route.tool_name == "web_search" or (
+                    prepared and isinstance(tool_result.data, dict)
+                    and tool_result.data.get('route') == 'routine_tutoring_direct')) else "required"),
             request,
         )
         context_pkg, system_instruction = self._apply_study_and_warning_context(
@@ -1449,8 +1805,12 @@ class PwanimateOrchestrator:
             source_warnings=source_warnings,
         )
 
-        system_instruction += "\nTool outcomes are authoritative. Never claim an action succeeded if its result failed. A saved reminder is not a confirmed phone alert unless phone_scheduled is true. Ask for clarification for missing times."
-        effective_max_tokens = self._resolve_effective_budget(request, "tool")
+        system_instruction += "\nPersonal memory proposals are pending review, never saved/approved memories. Only explicit authenticated approval can save a fact for recall. Do not narrate memory tool calls or claim a proposal was saved. Tool outcomes are authoritative. Never claim an action succeeded if its result failed. A saved reminder is not a confirmed phone alert unless phone_scheduled is true. Ask for clarification for missing times."
+        direct_academic = bool(prepared and isinstance(tool_result.data, dict)
+            and tool_result.data.get('route') == 'routine_tutoring_direct')
+        # Removing research/planning must not shrink an explanation or code
+        # answer to the shorter tool-summary ceiling. Explicit overrides win.
+        effective_max_tokens = self._resolve_effective_budget(request, "rag" if direct_academic else "tool")
 
         llm_request = LLMRequest(
             task="tool",
@@ -1484,7 +1844,7 @@ class PwanimateOrchestrator:
             for attachment in (getattr(request, "attachments", None) or [])
         )
         try:
-            llm_response = self._generate(llm_request, on_token)
+            llm_response = self._generate(llm_request, on_token, timing=getattr(request, "timing", None))
         except AIGatewayError as vision_error:
             if not has_image_attachments:
                 raise
@@ -1510,7 +1870,7 @@ class PwanimateOrchestrator:
                 attachments=[],
                 metadata=llm_request.metadata,
             )
-            llm_response = self._generate(text_request, on_token)
+            llm_response = self._generate(text_request, on_token, timing=getattr(request, "timing", None))
             llm_response.metadata.update({
                 "vision_route": "text_fallback",
                 "vision_text_fallback": True,
@@ -1597,6 +1957,7 @@ class PwanimateOrchestrator:
         on_token: Optional[Callable[[str], None]] = None,
     ) -> OrchestrationResponse:
         """Handle knowledge/retrieval-augmented dialogue turns."""
+        from pwanimate.orchestrator.routing import select_strategy
         # 0. Resolve any attachments active in the Right Context Rail (including open page numbers)
         rail_attachments, attachment_pages = self._resolve_context_attachments(
             request.user, request.context_resources
@@ -1636,12 +1997,20 @@ class PwanimateOrchestrator:
                 request.user, request.context_resources, query=query
             )
 
+        if page_chunks and on_progress:
+            on_progress('reading_document_page')
+
         # 2. Upstream Authorized Retrieval
         t_ret = time.perf_counter()
         # Keep searching the requested sources even when a selected document page
         # is present. Previously page chunks replaced retrieval entirely, which
         # made unrelated post searches appear to find nothing.
         requested_sources = request.sources or source_override
+        # A selected-document question has a trusted identity and needs no
+        # unrelated posts/people/groups. Explicit source requests still win.
+        if not requested_sources:
+            if select_strategy(request).intent == 'document':
+                requested_sources = [SourceType.DOCUMENT]
         sources = (
             [source if isinstance(source, SourceType) else SourceType(str(source).lower())
              for source in requested_sources]
@@ -1660,7 +2029,19 @@ class PwanimateOrchestrator:
             mode=RetrievalMode.HYBRID,
             filters=filters,
         )
-        if on_progress:
+        timing = getattr(request, 'timing', None)
+        reuse_page = bool(page_chunks and source_set == {SourceType.DOCUMENT}
+            and select_strategy(request).intent == 'document')
+        if reuse_page:
+            # The authorized resolver has already fetched the requested scope.
+            # Keep its original citations/version metadata; do not search the
+            # rest of the library merely to reproduce the same page evidence.
+            retrieval_resp = RetrievalResponse(query=query)
+            if timing is not None:
+                timing.count('page_evidence_reused')
+        elif on_progress:
+            if timing is not None:
+                timing.count('retrieval_queries')
             def report_retrieval_source(source):
                 if source == SourceType.DOCUMENT:
                     on_progress("searching_documents")
@@ -1672,6 +2053,8 @@ class PwanimateOrchestrator:
                 on_source_start=report_retrieval_source,
             )
         else:
+            if timing is not None:
+                timing.count('retrieval_queries')
             retrieval_resp = self.retrieval_service.retrieve(retrieval_req)
         if selected_post_results and include_posts:
             retrieval_resp.results.extend(selected_post_results)
@@ -1680,6 +2063,8 @@ class PwanimateOrchestrator:
             retrieval_resp.results.extend(selected_user_results)
             retrieval_resp.total_count += len(selected_user_results)
         ret_time_ms = round((time.perf_counter() - t_ret) * 1000.0, 2)
+        if timing is not None:
+            timing.observe('retrieval_ms', ret_time_ms)
 
         # 3. Context Engine Bounding
         # Mark selected document chunks explicitly so they remain available even
@@ -1751,8 +2136,12 @@ class PwanimateOrchestrator:
                 else GroundingMode.OPTIONAL
             ),
         )
+        context_started = time.perf_counter()
         context_pkg: ContextPackage = self.context_engine.build_context(context_req)
+        if timing is not None:
+            timing.observe('context_assembly_ms', (time.perf_counter() - context_started) * 1000)
         context_pkg.conversation_memory = list(request.conversation_memory)
+        context_pkg.academic_unit_context = list(request.academic_unit_context)
         if attachment_context:
             context_pkg.attachment_context = attachment_context
         if document_context is not None:
@@ -1855,7 +2244,7 @@ class PwanimateOrchestrator:
             # Text turns stream when the caller supplied a token callback.
             # Multimodal turns stay non-streaming in v1 (vision→text fallback
             # correctness first; the client degrades to final-render UX).
-            llm_response = self._generate(llm_request, on_token)
+            llm_response = self._generate(llm_request, on_token, timing=getattr(request, "timing", None))
         if is_multimodal_turn:
             if not vision_text_fallback:
                 llm_response.metadata["vision_route"] = "fallback" if llm_response.provider != "gemini" else "primary"

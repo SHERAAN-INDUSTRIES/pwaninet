@@ -58,6 +58,10 @@ class ToolRegistry:
         tool = self.get(name)
         try:
             validated = tool.validate_parameters(**kwargs)
+            if name == 'send_notification' and 'source_message_id' in kwargs:
+                # Server provenance is deliberately absent from model schemas.
+                # The tool rechecks role/owner and explicit request under lock.
+                validated['source_message_id'] = kwargs['source_message_id']
             if user_context is not None:
                 validated["user_context"] = user_context
             return tool.execute(user=user, **validated)
@@ -123,5 +127,8 @@ def get_default_tool_registry() -> ToolRegistry:
         for tool in [PersonalScheduleTool(), CreateStudyPlanTool(), CreateReminderTool(), UnreadChatsTool(),
                      AddStudyBlockTool(), UpdateStudyBlockTool(), RemoveStudyBlockTool(), CompleteStudyBlockTool()]:
             registry.register(tool)
+        from pwanimate.tools.domain.memory import ProposePersonalMemoryTool, RecallMemoryTool
+        registry.register(ProposePersonalMemoryTool())
+        registry.register(RecallMemoryTool())
         _default_registry = registry
     return _default_registry

@@ -5,7 +5,7 @@ from .embeddings import embed_document_version, embed_document
 from .reconciliation import reconcile_document_ingestion
 from .attachments import process_pwanimate_attachment
 from .study import generate_study_checkpoint_task
-from .conversation_memory import embed_message
+from .conversation_memory import embed_message, extract_memories, process_memory_dispatch, recover_memory_dispatch
 from .study_memory import refresh_study_memory
 from .agent_runs import execute_agent_run
 
@@ -18,6 +18,9 @@ __all__ = [
     'process_pwanimate_attachment',
     'generate_study_checkpoint_task',
     'embed_message',
+    'extract_memories',
+    'process_memory_dispatch',
+    'recover_memory_dispatch',
     'refresh_study_memory',
     'execute_agent_run',
 ]

@@ -31,6 +31,8 @@ class OrchestrationRequest:
         max_tokens: Maximum tokens in generated response.
     """
     query: str
+    snapshot_version: int = 2
+    execution_boundary_id: Optional[int] = None
     user: Optional[Any] = None
     history: List[ChatMessage] = field(default_factory=list)
     task: str = "rag"
@@ -47,14 +49,23 @@ class OrchestrationRequest:
     context_resources: List[Dict[str, Any]] = field(default_factory=list)
     local_time: Optional[str] = None
     timezone_name: Optional[str] = None
+    teaching_context: Dict[str, Any] = field(default_factory=dict)
     study_mode: bool = False
     study_context: Optional[Any] = None
     conversation_memory: List[Dict[str, Any]] = field(default_factory=list)
+    academic_unit_context: List[Dict[str, Any]] = field(default_factory=list)
+    # Server-verified academic-tracking posture (UnitLearningService.tracking_state):
+    # active authorized unit sessions, persisted pending consent cards, declined
+    # or disabled tracking. Lets the model describe reality instead of guessing.
+    tracking_state: Optional[Dict[str, Any]] = None
     request_id: Optional[str] = None
     user_message_id: Optional[int] = None
     # Populated by the orchestrator before routing: the shared, authorized
     # document-context resolution for this turn (DocumentTurnContext or None).
     document_context: Optional[Any] = None
+    # Optional TimingRecorder shared across the request lifecycle so every
+    # layer can stamp marks without changing method signatures (SALS WP3).
+    timing: Optional[Any] = None
 
     def __post_init__(self):
         if not isinstance(self.query, str) or not self.query.strip():
@@ -166,16 +177,24 @@ class OrchestrationResponse:
     finish_reason: Optional[str] = None
     warnings: List[Dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self):
+        from pwanimate.ai.completion import normalize_finish_reason
+        self.finish_reason = normalize_finish_reason(self.finish_reason)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert response to clean JSON-serializable dictionary."""
+        from pwanimate.ai.completion import is_complete
         d = {
-            "answer": self.answer,
+            "answer": "" if ((self.metadata.get("awaiting_clarification") or self.metadata.get("awaiting_approval"))
+                and not (self.metadata.get('teaching_turn_id') and self.metadata.get('teaching_complete') is True
+                    and is_complete(self.finish_reason, self.answer))) else self.answer,
             "citations": list(self.citations),
             "sources": list(self.sources),
             "people": list(self.people),
             "provider": self.provider,
             "model": self.model,
             "finish_reason": self.finish_reason,
+            "response_complete": is_complete(self.finish_reason, self.answer),
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
@@ -184,7 +203,7 @@ class OrchestrationResponse:
                 "generation_ms": self.generation_time_ms,
                 "total_ms": self.total_time_ms,
             },
-            "metadata": dict(self.metadata),
+            "metadata": {k:v for k,v in self.metadata.items() if k not in {"agent_trace", "memory_trace", "retrieval_trace", "reasoning", "reasoning_content", "prompt", "system_instruction"}},
             "quota_info": dict(self.quota_info) if self.quota_info else None,
             "warnings": list(self.warnings),
         }

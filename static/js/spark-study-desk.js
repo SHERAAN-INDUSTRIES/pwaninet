@@ -30,9 +30,24 @@
     if (memory) {
       const enabled=root.querySelector('[data-study="enabled"]');
       if (enabled) enabled.checked = memory.enabled;
+      const automatic=root.querySelector('[data-study="automatic"]');
+      if (automatic) { automatic.checked = !!memory.automatic_extraction; automatic.disabled = !memory.enabled; }
       const memories=root.querySelector('[data-study="memories"]'); memories.replaceChildren();
-      memory.memories.forEach(m=>{const row=entry(memories,m.topic,m.summary); const a=document.createElement('a');a.href='/pwanimate/'+encodeURIComponent(m.conversation_id)+'/';a.textContent='Continue this chat →';a.className='btn btn-link btn-sm px-0 pb-0';row.appendChild(a);});
-      if (!memory.memories.length) entry(memories,'A fresh start','After a meaningful study chat, Spark will save a short summary here.');
+      for (const fact of memory.facts || []) {
+        const row=entry(memories, `${fact.scope === 'academic' ? 'Academic' : 'Personal'} memory · ${fact.category || 'semantic'} · ${fact.status}`, fact.text || 'Rejected fact');
+        const act=async(action,text)=>{try{await api('memory/',{method:'PATCH',body:JSON.stringify({fact_id:fact.id,version:fact.version,action,...(text!==undefined?{text}:{})})});await load();}catch(e){status.textContent=e.message;}};
+        const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn btn-outline-secondary btn-sm me-2 mt-2';b.textContent=label;b.onclick=async()=>{b.disabled=true;try{await fn();}finally{b.disabled=false;}};row.appendChild(b);};
+        if(fact.status==='proposed' && memory.enabled){button('Approve this fact',()=>act('approve'));button('Reject',()=>act('reject'));}
+        if(fact.status==='approved')button('Revoke',()=>act('revoke'));
+        button('Edit',()=>{const text=window.prompt('Edit fact (requires approval again)',fact.text);if(text!==null)return act('edit',text);});
+        button('Delete',()=>act('delete'));
+      }
+      if (!(memory.facts || []).length) entry(memories,'No saved memories','Personal facts need individual approval. Automatic academic memory requires separate permission; chats are never searched as a fallback.');
+      const form=document.createElement('form');
+      const input=document.createElement('input');input.className='form-control mb-2';input.maxLength=1000;input.required=true;input.placeholder='Propose a personal fact for Spark to remember';input.setAttribute('aria-label','Proposed personal fact');
+      const propose=document.createElement('button');propose.className='btn btn-outline-secondary btn-sm';propose.textContent='Propose fact';propose.type='submit';propose.disabled=!memory.enabled;
+      form.append(input,propose);memories.appendChild(form);
+      form.onsubmit=async e=>{e.preventDefault();propose.disabled=true;try{await api('memory/',{method:'POST',body:JSON.stringify({text:input.value})});await load();}catch(err){status.textContent=err.message;propose.disabled=false;}};
     }
     if (reminders) {
       const list=root.querySelector('[data-study="reminders"]');list.replaceChildren();
@@ -46,7 +61,16 @@
    } catch(e){status.textContent=e.message;}
  }
  const enabledEl=root.querySelector('[data-study="enabled"]');
- if (enabledEl) enabledEl.onchange=async e=>{try{await api('memory/',{method:'PATCH',body:JSON.stringify({enabled:e.target.checked})});status.textContent=e.target.checked?'Memory enabled.':'Memory paused.';}catch(error){e.target.checked=!e.target.checked;status.textContent=error.message;}};
+ if (enabledEl) enabledEl.onchange=async e=>{try{await api('memory/',{method:'PATCH',body:JSON.stringify({enabled:e.target.checked})});status.textContent=e.target.checked?'Personal memory enabled; each fact still needs approval.':'Personal memory paused.';await load();}catch(error){e.target.checked=!e.target.checked;status.textContent=error.message;}};
+ const automaticEl=root.querySelector('[data-study="automatic"]');
+ if (automaticEl) automaticEl.onchange=async e=>{
+   const value=e.target.checked; automaticEl.disabled=true;
+   try { await api('memory/',{method:'PATCH',body:JSON.stringify({automatic_extraction:value})});
+     status.textContent=value?'Automatic academic memory enabled for new study statements. Personal facts still need approval.':'Automatic academic memory paused.';
+     await load();
+   } catch(error) { automaticEl.checked=!value; status.textContent=error.message; }
+   finally { automaticEl.disabled=!enabledEl?.checked; }
+ };
  const forgetEl=root.querySelector('[data-study="forget"]');
  if (forgetEl) forgetEl.onclick=async()=>{if(!confirm('Forget saved study memory? Your chat history will stay.'))return;try{await api('memory/',{method:'DELETE'});status.textContent='Saved memory forgotten.';await load();}catch(e){status.textContent=e.message;}};
  const reminderForm=root.querySelector('[data-study="reminder-form"]');

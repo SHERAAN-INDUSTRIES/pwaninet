@@ -1,0 +1,83 @@
+{
+  "greeting": {
+    "elapsed_ms": 5.034,
+    "ttft_ms": 11.385,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 0,
+    "gateway_calls": 1,
+    "tokens": 25
+  },
+  "emoji_greeting": {
+    "elapsed_ms": 28.516,
+    "ttft_ms": 37.185,
+    "planning": 1,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 2,
+    "tokens": 25
+  },
+  "thanks": {
+    "elapsed_ms": 29.358,
+    "ttft_ms": 37.120000000000005,
+    "planning": 1,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 2,
+    "tokens": 25
+  },
+  "explanation": {
+    "elapsed_ms": 6.483,
+    "ttft_ms": 14.594999999999999,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 1,
+    "tokens": 25
+  },
+  "mixed": {
+    "elapsed_ms": 6.747,
+    "ttft_ms": 15.115,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 1,
+    "tokens": 25
+  },
+  "recall": {
+    "elapsed_ms": 7.77,
+    "ttft_ms": 14.255,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 1,
+    "tokens": 25
+  },
+  "math": {
+    "elapsed_ms": 8.581,
+    "ttft_ms": 17.255000000000003,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 0,
+    "gateway_calls": 1,
+    "tokens": 25
+  },
+  "code": {
+    "elapsed_ms": 50.105,
+    "ttft_ms": 68.975,
+    "planning": 1,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 2,
+    "tokens": 25
+  },
+  "complex": {
+    "elapsed_ms": 12.782,
+    "ttft_ms": 23.015,
+    "planning": 0,
+    "answers": 1,
+    "retrieval": 1,
+    "gateway_calls": 1,
+    "tokens": 25
+  }
+}

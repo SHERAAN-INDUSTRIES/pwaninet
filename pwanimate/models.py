@@ -216,6 +216,9 @@ class PwanimateConversation(models.Model):
         default=uuid.uuid4,
         editable=False,
     )
+    canonical_study_session = models.ForeignKey('PwanimateStudySession', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    study_binding_generation = models.PositiveIntegerField(default=0)
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -798,6 +801,10 @@ class PwanimateStudySession(models.Model):
     STATUS_PAUSED = "paused"
     STATUS_COMPLETED = "completed"
 
+    academic_conversation = models.ForeignKey('PwanimateConversation', null=True, blank=True, on_delete=models.SET_NULL, related_name='academic_sessions')
+    learning_record = models.ForeignKey('SparkUnitLearningRecord', null=True, blank=True,
+        on_delete=models.RESTRICT, related_name='sessions')
+
     STATUS_CHOICES = [
         (STATUS_ACTIVE, "Active"),
         (STATUS_PAUSED, "Paused"),
@@ -938,6 +945,24 @@ class PwanimateStudySession(models.Model):
         title = getattr(self.conversation, "title", "") or self.current_topic or "Study Session"
         return f"{title} ({self.status}, {self.id})"
 
+    def save(self, *args, **kwargs):
+        if self.academic_conversation_id and self.academic_conversation.user_id != self.user_id:
+            raise ValidationError('Academic binding must belong to the session owner.')
+        old_record = None
+        if not self._state.adding:
+            old_record = type(self).objects.filter(pk=self.pk).values_list('learning_record_id', flat=True).first()
+        if old_record and old_record != self.learning_record_id:
+            raise ValidationError('A linked session cannot change its learning record.')
+        if self.learning_record_id:
+            from pwanimate.services.unit_learning import UnitLearningService
+            if self.user_id != self.learning_record.user_id or self.unit_id != self.learning_record.academic_unit_id:
+                raise ValidationError('Session owner/unit must match its academic record.')
+            try:
+                UnitLearningService.require_writable(self.learning_record, self.user)
+            except (ValueError, LookupError) as exc:
+                raise ValidationError(str(exc)) from exc
+        return super().save(*args, **kwargs)
+
 
 class PwanimateStudyCheckpoint(models.Model):
     """
@@ -1059,9 +1084,11 @@ class PendingAction(models.Model):
 
     ACTION_SEND_MESSAGE = "send_message"
     ACTION_FOLLOW_USER = "follow_user"
+    ACTION_TRACK_UNIT = "track_academic_unit"
     ACTION_CHOICES = [
         (ACTION_SEND_MESSAGE, "Send a message"),
         (ACTION_FOLLOW_USER, "Follow a user"),
+        (ACTION_TRACK_UNIT, "Track an enrolled academic unit"),
     ]
 
     STATUS_PENDING = "pending"
@@ -1127,8 +1154,13 @@ class PendingAction(models.Model):
 
 class SparkMemoryPreference(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    enabled = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=False)
+    consent_version = models.PositiveIntegerField(default=0)
+    revision = models.PositiveIntegerField(default=0)
     reset_at = models.DateTimeField(null=True, blank=True)
+    automatic_extraction = models.BooleanField(default=False)
+    automatic_enabled_at = models.DateTimeField(null=True, blank=True)
+    extraction_cutoffs = models.JSONField(default=dict, blank=True)
 
 
 class SparkConversationDigest(models.Model):
@@ -1458,3 +1490,139 @@ class SparkAgentPlanStep(models.Model):
 
     def __str__(self):
         return f"step {self.seq} '{self.title}' ({self.status})"
+
+
+class SparkPersonalMemory(models.Model):
+    """Owner-authorized durable fact, independent of transcript retention."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    text = models.TextField(max_length=1000)
+    purpose = models.CharField(max_length=40, default='personalization')
+    status = models.CharField(max_length=16, default='proposed', choices=[
+        ('proposed', 'Proposed'), ('approved', 'Approved'), ('rejected', 'Rejected'),
+        ('revoked', 'Revoked'), ('superseded', 'Superseded')])
+    category = models.CharField(max_length=16, default='semantic', choices=[
+        ('semantic', 'Semantic'), ('episodic', 'Episodic'), ('learning', 'Learning')])
+    memory_key = models.CharField(max_length=100, blank=True, default='')
+    fingerprint = models.CharField(max_length=64, blank=True, default='')
+    importance = models.FloatField(default=0.6)
+    confidence = models.FloatField(default=1.0)
+    automatic = models.BooleanField(default=False)
+    last_accessed_at = models.DateTimeField(null=True, blank=True)
+    source_conversation = models.ForeignKey(PwanimateConversation, null=True, blank=True, on_delete=models.SET_NULL)
+    superseded_by = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL)
+    embedding = VectorField(dimensions=768, null=True, blank=True)
+    embedding_model = models.CharField(max_length=100, blank=True, default='')
+    version = models.PositiveIntegerField(default=1)
+    consent_revision = models.PositiveIntegerField(default=0)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    source_message = models.ForeignKey(PwanimateMessage, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['user', 'status', '-updated_at'], name='spark_memory_owner_state')]
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'fingerprint'],
+                condition=models.Q(status='approved') & ~models.Q(fingerprint=''), name='spark_memory_active_fact'),
+            models.CheckConstraint(condition=models.Q(confidence__gte=0, confidence__lte=1), name='spark_memory_confidence'),
+            models.CheckConstraint(condition=models.Q(importance__gte=0, importance__lte=1), name='spark_memory_importance'),
+        ]
+
+
+class SparkMemoryExtraction(models.Model):
+    """Durable receipt prevents retries (including after deletion) replaying a turn."""
+    source_message = models.OneToOneField(PwanimateMessage, on_delete=models.CASCADE)
+    completed_message = models.ForeignKey(PwanimateMessage, on_delete=models.CASCADE, related_name='+')
+    consent_revision = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SparkAcademicTrackingPreference(models.Model):
+    """Independent of personal-memory consent. Automatic still needs unit authorization."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    mode = models.CharField(max_length=16, default='ask', choices=[
+        ('ask', 'Ask for each study session/conversation'),
+        ('automatic', 'Continue authorized enrolled units'), ('disabled', 'Disabled')])
+    revision = models.PositiveIntegerField(default=0)
+    changed_at = models.DateTimeField(default=timezone.now)
+
+
+class SparkUnitLearningRecord(models.Model):
+    """Immutable unit/term snapshot of a real student enrollment, not a new enrollment."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='unit_learning_records')
+    enrollment = models.ForeignKey('documents.StudentUnitEnrollment', on_delete=models.RESTRICT, related_name='learning_records')
+    academic_unit = models.ForeignKey('documents.AcademicUnit', on_delete=models.PROTECT, related_name='+')
+    semester = models.ForeignKey('documents.Semester', on_delete=models.PROTECT, related_name='+')
+    authorized_at = models.DateTimeField(null=True, blank=True)
+    consent_revision = models.PositiveIntegerField(default=0)
+    authorized_conversation = models.ForeignKey(PwanimateConversation, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['enrollment', 'semester'], name='spark_unit_enrollment_term'),
+            models.UniqueConstraint(fields=['user', 'academic_unit', 'semester'], name='spark_unit_student_unit_term'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.enrollment_id and (self.enrollment.user_id != self.user_id or
+                self.enrollment.academic_unit_id != self.academic_unit_id):
+            raise ValidationError('Learning record must match the enrollment owner and unit.')
+        if not self._state.adding:
+            old = type(self).objects.get(pk=self.pk)
+            if any(getattr(old, field) != getattr(self, field) for field in
+                    ['user_id', 'enrollment_id', 'academic_unit_id', 'semester_id']):
+                raise ValidationError('Learning record identity is immutable.')
+        elif self.enrollment_id and self.enrollment.semester_id != self.semester_id:
+            raise ValidationError('Learning record term must match the enrollment.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
+
+class SparkUnitActivity(models.Model):
+    """Only a consented, attributed span; never an entire unfiltered conversation."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    record = models.ForeignKey(SparkUnitLearningRecord, on_delete=models.CASCADE, related_name='activities')
+    session = models.ForeignKey(PwanimateStudySession, on_delete=models.RESTRICT, related_name='unit_activities')
+    source_message = models.ForeignKey(PwanimateMessage, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    source_conversation = models.ForeignKey(PwanimateConversation, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    topic = models.CharField(max_length=255)
+    excerpt = models.CharField(max_length=1000)
+    kind = models.CharField(max_length=24, default='study', choices=[
+        ('study', 'Study request'), ('difficulty', 'Self-reported difficulty'),
+        ('self_report', 'Self-reported understanding')])
+    consent_revision = models.PositiveIntegerField()
+    occurred_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['occurred_at', 'id']
+        constraints = [models.UniqueConstraint(fields=['record', 'source_message', 'topic'], name='spark_unit_activity_once')]
+
+    def clean(self):
+        super().clean()
+        if self.session_id and (self.session.learning_record_id != self.record_id or
+                self.session.user_id != self.record.user_id):
+            raise ValidationError('Activity session must belong to its learning record.')
+        if self.source_message_id and (self.source_message.role != 'user' or
+                self.source_message.conversation.user_id != self.record.user_id or
+                self.source_message.conversation_id != self.source_conversation_id):
+            raise ValidationError('Activity source must belong to the student.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
+
+
+# Models split by responsibility; re-export through the existing model entry point.
+from .mastery_models import (SparkUnitConcept, SparkConceptPrerequisite, SparkConceptQuestion,
+    SparkConceptEvidence, SparkConceptTransition)
+from .teaching_models import SparkTeachingState, SparkTeachingTurn
+from .followup_models import SparkFollowUp
+from .memory_dispatch_models import SparkMemoryDispatch

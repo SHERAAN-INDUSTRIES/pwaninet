@@ -149,6 +149,10 @@ class ActionService:
     def confirm(cls, user, action_id):
         failure = None
         with transaction.atomic():
+            from pwanimate.models import PendingAction,PwanimateConversation
+            candidate=PendingAction.objects.filter(pk=action_id,user=user).first()
+            if candidate and candidate.action_type==PendingAction.ACTION_TRACK_UNIT:
+                PwanimateConversation.objects.select_for_update().get(pk=candidate.conversation_id,user=user)
             try:
                 result = cls._confirm_locked(user, action_id)
             except ActionError as exc:
@@ -188,6 +192,10 @@ class ActionService:
                 result = cls._execute_send_message(action)
             elif action.action_type == PendingAction.ACTION_FOLLOW_USER:
                 result = cls._execute_follow_user(action)
+            elif action.action_type == PendingAction.ACTION_TRACK_UNIT:
+                from pwanimate.services.unit_learning import UnitLearningService
+                with transaction.atomic():
+                    result = UnitLearningService.approve_action(action)
             else:
                 raise ActionError("That action is not supported.")
         except ActionError as exc:
@@ -217,15 +225,16 @@ class ActionService:
         """Decline a proposal."""
         from pwanimate.models import PendingAction
 
-        action = PendingAction.objects.filter(id=action_id).first()
-        if action is None:
-            raise ActionError("That action is no longer available.")
-        if action.user_id != getattr(user, "id", None):
-            raise ActionError("That action belongs to someone else.")
-        if action.status != PendingAction.STATUS_PENDING:
-            raise ActionError(f"That action is already {action.status}.")
-        action.status = PendingAction.STATUS_CANCELLED
-        action.save(update_fields=["status"])
+        with transaction.atomic():
+            action = PendingAction.objects.select_for_update().filter(id=action_id).first()
+            if action is None:
+                raise ActionError("That action is no longer available.")
+            if action.user_id != getattr(user, "id", None):
+                raise ActionError("That action belongs to someone else.")
+            if action.status != PendingAction.STATUS_PENDING:
+                raise ActionError(f"That action is already {action.status}.")
+            action.status = PendingAction.STATUS_CANCELLED
+            action.save(update_fields=["status"])
         return action
 
     @classmethod
@@ -244,6 +253,8 @@ class ActionService:
             raise ActionError("That action is no longer available.")
         if action.user_id != getattr(user, "id", None):
             raise ActionError("That action belongs to someone else.")
+        if action.action_type == PendingAction.ACTION_TRACK_UNIT:
+            raise ActionError('Revoke academic tracking in tracking preferences.')
         if action.status != PendingAction.STATUS_CONFIRMED:
             raise ActionError("Only a completed action can be undone.")
 
@@ -418,7 +429,15 @@ class ActionService:
         """The payload the client renders as a confirm/cancel card."""
         from pwanimate.models import PendingAction
 
+        run_id=None
+        if action.action_type==PendingAction.ACTION_TRACK_UNIT and action.conversation_id:
+            from pwanimate.models import SparkAgentRun
+            for run in SparkAgentRun.objects.filter(user=action.user,user_message__conversation_id=action.conversation_id,status='waiting').order_by('-created_at')[:10]:
+                if str(action.pk) in run.action_ids:
+                    run_id=str(run.pk)
+                    break
         return {
+            'run_id':run_id,
             "id": str(action.id),
             "action_type": action.action_type,
             "status": action.status,
@@ -431,7 +450,7 @@ class ActionService:
             "confirmed_at": action.confirmed_at.isoformat() if action.confirmed_at else None,
             "can_confirm": action.status == PendingAction.STATUS_PENDING
             and action.expires_at > timezone.now(),
-            "can_undo": action.status == PendingAction.STATUS_CONFIRMED
+            "can_undo": action.action_type != PendingAction.ACTION_TRACK_UNIT and action.status == PendingAction.STATUS_CONFIRMED
             and (action.confirmed_at or timezone.now())
             + timedelta(minutes=UNDO_WINDOW_MINUTES) > timezone.now(),
         }

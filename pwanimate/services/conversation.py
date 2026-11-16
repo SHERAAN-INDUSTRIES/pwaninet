@@ -136,7 +136,7 @@ class ConversationService:
         4. Converts to ChatMessage contracts.
         """
         # Fetch newest messages first with prefetched attachments
-        messages_qs = conversation.messages.filter(role__in=["user", "assistant"])
+        messages_qs = conversation.messages.filter(role__in=["user", "assistant"]).exclude(task__in=['agent_interim','academic_execution','academic_authorization'])
         if exclude_message_id is not None:
             messages_qs = messages_qs.exclude(id=exclude_message_id)
         recent_records = list(
@@ -229,6 +229,8 @@ class ConversationService:
 
             conversation.save(update_fields=update_fields)
             transaction.on_commit(lambda: ConversationService.schedule_embedding(msg.id))
+            from pwanimate.services.unit_learning import UnitLearningService
+            UnitLearningService.process_message(msg.id)
             return msg
 
     @staticmethod
@@ -244,6 +246,10 @@ class ConversationService:
         completion_tokens: int = 0,
         total_tokens: int = 0,
         activity: Optional[list] = None,
+        teaching_turn_id=None,
+        teaching_complete=False,
+        academic_source_id=None,
+        academic_complete=False,
     ) -> PwanimateMessage:
         """
         Persist an assistant turn with grounding citations and source provenance.
@@ -255,6 +261,27 @@ class ConversationService:
         Touches conversation updated_at in a short atomic transaction.
         """
         with transaction.atomic():
+            PwanimateConversation.objects.select_for_update().get(pk=conversation.pk, user_id=conversation.user_id)
+            if teaching_turn_id:
+                from pwanimate.models import SparkTeachingTurn, PwanimateStudySession
+                identity = SparkTeachingTurn.objects.select_related('state__session').get(pk=teaching_turn_id)
+                session = identity.state.session
+                if session.user_id != conversation.user_id or conversation.pk not in {session.conversation_id,session.academic_conversation_id}:
+                    raise ValueError('Teaching turn does not own this conversation')
+                if session.learning_record_id:
+                    from pwanimate.services.concept_mastery import ConceptMasteryService
+                    try:
+                        ConceptMasteryService.lock_record(conversation.user,session.learning_record_id)
+                    except (ValueError,LookupError):
+                        pass  # Persist the answer untracked; finalize revalidates consent.
+                locked_session=PwanimateStudySession.objects.select_for_update(of=('self',)).get(pk=session.pk,user_id=conversation.user_id)
+                if locked_session.learning_record_id != session.learning_record_id:
+                    raise ValueError('Teaching completion binding changed; retry the request')
+                completed = SparkTeachingTurn.objects.select_for_update(of=('self',)).select_related('completed_message').get(pk=teaching_turn_id)
+                if completed.state.session.user_id != conversation.user_id or (completed.state.session.conversation_id != conversation.pk and completed.state.session.academic_conversation_id != conversation.pk):
+                    raise ValueError('Teaching turn does not own this conversation')
+                if completed.completed_message_id:
+                    return completed.completed_message
             msg = PwanimateMessage.objects.create(
                 conversation=conversation,
                 role="assistant",
@@ -269,9 +296,17 @@ class ConversationService:
                 completion_tokens=int(completion_tokens or 0),
                 total_tokens=int(total_tokens or 0),
             )
+            if teaching_turn_id:
+                from pwanimate.services.academic_progress import finalize
+                finalize(teaching_turn_id, msg, complete=teaching_complete)
+            elif academic_source_id:
+                from pwanimate.services.academic_progress import finalize_ordinary
+                finalize_ordinary(academic_source_id, msg, complete=academic_complete)
             conversation.save(update_fields=["updated_at"])
             transaction.on_commit(lambda: ConversationService.schedule_embedding(msg.id))
             transaction.on_commit(lambda: ConversationService.schedule_digest(str(conversation.id)))
+            from pwanimate.services.persistent_memory import queue_extraction
+            queue_extraction(msg)
             return msg
 
     @staticmethod

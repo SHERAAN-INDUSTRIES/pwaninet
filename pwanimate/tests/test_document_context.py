@@ -15,6 +15,8 @@ Covers the audit scenarios in SPARK_DOCUMENT_CONTEXT_AUDIT.md:
 
 import uuid
 from unittest.mock import MagicMock
+from unittest import skipUnless
+from django.db import connection
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, SimpleTestCase
@@ -296,16 +298,21 @@ class DocumentContextResolutionTests(TestCase):
         self.assertEqual(ctx_owner.resolutions[0].status, "resolved")
 
     def test_unavailable_document_diagnosed(self):
-        ctx = DocumentTurnContext.resolve(self.student, [self._res(
+        ctx = DocumentTurnContext.resolve(self.owner, [self._res(
             documentShareId=str(self.doc_unavailable.share_id),
         )], "hi")
         self.assertEqual(ctx.resolutions[0].status, "unavailable")
 
     def test_draft_document_awaiting_processing(self):
-        ctx = DocumentTurnContext.resolve(self.student, [self._res(
+        ctx = DocumentTurnContext.resolve(self.owner, [self._res(
             documentShareId=str(self.doc_draft.share_id),
         )], "hi")
         self.assertEqual(ctx.resolutions[0].status, "awaiting_processing")
+
+    def test_unready_document_lifecycle_is_hidden_from_nonowner(self):
+        for document in [self.doc_draft,self.doc_unavailable]:
+            ctx=DocumentTurnContext.resolve(self.student,[self._res(documentShareId=str(document.share_id))],'hi')
+            self.assertEqual(ctx.resolutions[0].status,'inaccessible')
 
     def test_unindexed_document_diagnosed(self):
         ctx = DocumentTurnContext.resolve(self.student, [self._res(
@@ -356,6 +363,8 @@ class DocumentContextResolutionTests(TestCase):
         chunks = ctx.collect_page_evidence(self.student, "what is on this page?")
         self.assertTrue(chunks)
         self.assertTrue(all(c.metadata.get("text_only") for c in chunks))
+    @skipUnless(connection.vendor=='postgresql','Owner-run pgvector semantic query')
+    def test_semantic_search_excludes_unembedded_chunks(self):
         # Semantic search still excludes the inactive chunk.
         results = self.doc_service.retrieve(RetrievalRequest(
             query="extracted but not yet embedded", user=self.student,
@@ -413,9 +422,10 @@ class DocumentContextResolutionTests(TestCase):
         resp = orchestrator.run(req)
         self.assertIsNotNone(req.document_context)
         self.assertTrue(req.document_context.has_documents)
-        # Semantic retrieval was scoped to the authorized document.
-        call_req = mock_retrieval.retrieve.call_args[0][0]
-        self.assertEqual(call_req.filters.get("document_ids"), [self.doc_public.id])
+        # R4 reuses the authorized current-page evidence rather than issuing
+        # a second semantic search for the same document.
+        self.assertEqual(req.document_context.filter_document_ids, [self.doc_public.id])
+        mock_retrieval.retrieve.assert_not_called()
         self.assertIn("document_context", resp.metadata)
 
     def test_tool_route_receives_document_evidence(self):

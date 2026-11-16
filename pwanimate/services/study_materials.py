@@ -80,6 +80,7 @@ def saved_document_inventory(user: Any, max_docs: int = 15) -> List[Dict[str, An
     try:
         from documents.collections.models import CollectionItem
         from documents.models import Document
+        from documents.access_policy import DocumentAccessPolicy
 
         doc_ids = (
             CollectionItem.objects
@@ -88,8 +89,8 @@ def saved_document_inventory(user: Any, max_docs: int = 15) -> List[Dict[str, An
             .distinct()[:200]
         )
         documents = (
-            Document.objects
-            .filter(id__in=list(doc_ids), status='ready', is_available=True)
+            DocumentAccessPolicy.authorized_documents(user)
+            .filter(id__in=list(doc_ids))
             .prefetch_related('academic_units__academic_unit')
             .order_by('-updated_at')[:max_docs]
         )

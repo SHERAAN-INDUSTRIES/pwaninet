@@ -1,3 +1,4 @@
+from pwanimate.services.study_session import StudySessionService
 """
 Pwanimate UI Views.
 
@@ -188,7 +189,10 @@ class PwanimateUIView(View):
                     id=conversation_id,
                     user=request.user,
                 )
-                messages = list(active_conversation.messages.all().order_by("created_at"))
+                messages = list(active_conversation.messages.exclude(task__in=['agent_interim','academic_execution','academic_authorization']).order_by("created_at"))
+                from pwanimate.orchestrator.activity import public_events
+                for message in messages:
+                    message.activity = public_events(message.activity)
             except PwanimateConversation.DoesNotExist:
                 raise Http404("Conversation not found.")
 
@@ -352,7 +356,7 @@ class PwanimateUIView(View):
         settings_ctx = _get_settings_context(request)
         context = {
             **settings_ctx,
-            "conversations": page_obj.object_list,
+            "conversations": StudySessionService.decorate_conversations(request.user,page_obj.object_list),
             "has_next": page_obj.has_next(),
             "next_page": 2 if page_obj.has_next() else None,
             "active_conversation": active_conversation,
@@ -408,7 +412,7 @@ class PwanimateConversationHistoryView(View):
             page_obj = paginator.get_page(1)
 
         context = {
-            "conversations": page_obj.object_list,
+            "conversations": StudySessionService.decorate_conversations(request.user,page_obj.object_list),
             "has_next": page_obj.has_next(),
             "next_page": page_obj.next_page_number() if page_obj.has_next() else None,
             "active_conversation_id": active_id,
@@ -436,7 +440,11 @@ class PwanimateConversationDeleteView(View):
         if conversation is None:
             raise Http404("Conversation not found.")
 
-        conversation.delete()
+        from django.db.models.deletion import ProtectedError, RestrictedError
+        try:
+            conversation.delete()
+        except (ProtectedError, RestrictedError):
+            return HttpResponse('This study conversation is linked to retained academic history.', status=409)
         return HttpResponse(status=204)
 
     @method_decorator(login_required)

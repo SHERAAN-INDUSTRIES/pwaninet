@@ -82,12 +82,34 @@ class SendNotificationTool(BaseDomainTool):
         if not summary:
             raise ToolValidationError("Reminder text is required.", tool_name=self.name)
         from notifications.models import NotificationObject
-        notification = NotificationObject.objects.create(
-            recipient=user, notification_type="AI", category="AI", priority="NORMAL",
-            title="Pwanimate reminder", summary=summary,
-            context_type="PWANIMATE", context_id="reminder", status="DELIVERED",
-            delivery_policy="IMMEDIATE", metadata={"source": "pwanimate"},
-        )
+        import hashlib
+        import re
+        from django.db import transaction
+        from pwanimate.models import PwanimateMessage
+        source_id = kwargs.get('source_message_id')
+        with transaction.atomic():
+            # Serialize duplicates on the durable owned request, not an
+            # in-memory tool cache. No migration or historical rewrite.
+            source = PwanimateMessage.objects.select_for_update(of=('self',)).filter(
+                pk=source_id, role='user', conversation__user=user).first()
+            if source is None:
+                raise ToolPermissionError('A persisted owned request is required.', tool_name=self.name)
+            text = source.content
+            if (not re.search(r'\b(?:notify me|send me (?:a |an )?(?:in-app )?notification|create (?:a |an )?(?:in-app )?notification)\b', text, re.I)
+                    or re.search(r"\b(?:don't|do not|how to|how do|tomorrow|later|next|in\s+\d+)\b", text, re.I)):
+                raise ToolPermissionError('An explicit immediate notification request is required.', tool_name=self.name)
+            key = hashlib.sha256(f'{source.pk}:{summary}'.encode()).hexdigest()
+            notification = NotificationObject.objects.filter(recipient=user,
+                metadata__spark_execution_key=key).first()
+            if notification is not None:
+                return ToolResult.ok({'title': notification.title, 'summary': notification.summary,
+                    'notification_id': str(notification.notification_id), 'replayed': True})
+            notification = NotificationObject.objects.create(
+                recipient=user, notification_type="AI", category="AI", priority="NORMAL",
+                title="Pwanimate reminder", summary=summary,
+                context_type="PWANIMATE", context_id="reminder", status="DELIVERED",
+                delivery_policy="IMMEDIATE", metadata={"source": "pwanimate", "spark_execution_key": key},
+            )
         from notifications.services.notification_service import invalidate_unread_count_cache, broadcast_unread_count
         invalidate_unread_count_cache(user.id)
         unread_count = None

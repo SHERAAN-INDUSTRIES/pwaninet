@@ -147,6 +147,12 @@ def _load_engines() -> List[Dict[str, Any]]:
         },
     ]
 
+    from pwanimate.ai.providers.compatible import with_zai_fallbacks
+
+    for engine in engines:
+        if engine['slug'] != 'vision':
+            engine['fallback_chain'] = with_zai_fallbacks(engine['fallback_chain'])
+
     overrides = getattr(settings, "PWANIMATE_ENGINE_OVERRIDES", None) or {}
     for engine in engines:
         engine_override = overrides.get(engine["slug"])
@@ -180,6 +186,9 @@ def get_engine(slug: Optional[str]) -> Dict[str, Any]:
 
 
 def _provider_configured(provider: str) -> bool:
+    if provider == 'zai':
+        from pwanimate.ai.providers.compatible import with_zai_fallbacks
+        return bool(with_zai_fallbacks([]))
     key_settings = {
         "gemini": "PWANIMATE_GEMINI_API_KEY",
         "groq": "PWANIMATE_GROQ_API_KEY",

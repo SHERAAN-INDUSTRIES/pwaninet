@@ -117,6 +117,8 @@ class LLMRequest:
     attachments: List[AttachmentData] = field(default_factory=list)
 
     def __post_init__(self):
+        if self.system_instruction is not None and not isinstance(self.system_instruction, str):
+            raise TypeError("system_instruction must be a string or None.")
         if self.temperature < 0.0 or self.temperature > 2.0:
             raise ValueError(f"Temperature must be between 0.0 and 2.0, got {self.temperature}")
         if self.max_tokens is None:
@@ -153,6 +155,10 @@ class LLMResponse:
     total_tokens: Optional[int] = None
     citations: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        from pwanimate.ai.completion import normalize_finish_reason
+        self.finish_reason = normalize_finish_reason(self.finish_reason)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert response to clean JSON-serializable dictionary."""

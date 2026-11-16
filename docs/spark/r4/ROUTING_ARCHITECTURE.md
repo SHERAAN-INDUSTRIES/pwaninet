@@ -1,0 +1,31 @@
+# R4 routing architecture
+
+R4 adds a deterministic strategy hint to the existing PwanimateOrchestrator, not another executor. It performs no model classification, DB lookup, session mutation or permission grant. Unknown requests retain existing deterministic tools, bounded planner and selector fallback. No raw-message intent cache is needed for these inexpensive patterns. Anonymous planning skips personal inventory queries. Planner academic records use the existing structural JSON bounder, and final assembly supplies academic context once through its dedicated field rather than duplicate tool evidence.
+
+## Decisions and precedence
+
+Pure greetings/thanks, including trailing emoji, use the SRI-01 conversational path before teaching/document/tool work. A greeting mixed with substantive text cannot match the whole-message greeting recognizer. One ordinary answer call, no planner or retrieval; its existing bounded context helper supplies authorized preferences and at most one unambiguous finalized recent session.
+
+Recall uses already assembled approved facts and academic summaries with one conversational answer. It parks teaching and incidental document context for that answer. It cannot resume/create sessions. Mixed recall plus a new operation escalates instead of discarding either goal. Academic-history detection now recognizes completed-topic and remembered-session questions. The existing history service selects a named record or one unambiguous current eligible record and reports ambiguity; it retains ownership, opt-out, historical read posture and consent boundaries. General yesterday transcript recall has no authorized broad transcript source; Spark must disclose absence rather than invent it.
+
+Complex research, multi-paper/document comparison and combined analysis/planning bypass routine heuristics. Existing StudyAgent handles ordinary text and selected authorized documents, with document identity metadata in the planner context. Document retrieval intersects selected authorized IDs and any academic-unit scope. Multimodal attachment and Study Mode routes retain their existing handlers.
+
+Continuation hints never create/resume a session through this router. API/WP4 canonical selection, exact interaction ownership, paused state and consent remain authoritative. Eligible teaching runs before the ordinary direct route; its DIAGNOSE/PRACTICE/EVALUATE and independent mastery policy are unchanged. Ambiguous follow-ups keep existing bounded conversation/history handling and planner clarification where required.
+
+Focused explanations and math/code requests without selected resources, explicit source requests, required web lookup or deterministic tools use the existing direct answer preparation/finish path. The existing deny rules conservatively protect personal data, schedules, actions and research. Direct academic answers retain the existing academic output ceiling (4096 by current policy) rather than the shorter tool-summary ceiling; explicit max-token overrides still win. This is a ceiling, not a requested verbosity. General explanations use optional grounding; document/tool-dependent answers retain required grounding. No new model/provider/capability policy is introduced. Missing operands/code must be requested rather than invented. Existing model capability and billing/tier routing still apply.
+
+Document questions with selected resources use existing DocumentTurnContext/access policy, page evidence, citations and version metadata. RAG defaults to DOCUMENT only for this strategy; explicit source choices override it. Other resource types and ambiguous unit attribution remain on existing context paths. Requests for documents without a selected identity retain existing discovery/planner behavior.
+
+## Budgets and recovery
+
+Casual: zero planner, normally one answer, no continuation. Recall: zero planner, one answer plus existing bounded partial recovery if needed. Focused ordinary explanation/math/code: zero planner, one answer plus existing single continuation. Active teaching may legitimately use controller-required feedback. Document Q&A: authorized page resolution/retrieval plus answer; no planner for a simple selected-page question. Complex: existing MAX_ROUNDS/MAX_CALLS/deadline, checkpointing and conditional checklist reconciliation; no new hard cap that could skip teaching.
+
+Within-run tool signatures deduplicate calls, including writes. A repeated plan with no new executable call ends the loop. Durable resume preserves existing seen signatures and receipts; it never blindly replays a write. New runs no longer seed unversioned cross-turn cache entries. Legacy cache helper APIs remain for compatibility but are not invoked by the runtime; no saved memory is deleted. Source/access-version attestation would be necessary before enabling future cross-turn reuse.
+
+Gateway configuration/authentication failures without observations propagate for controlled durable failure. An aggregate all-provider exhaustion error, or an all-cooldown error with zero attempted candidates, stops immediate answer-path recovery. Other gateway errors never retry the planner; existing fallback can still answer with a different task capability when appropriate. The existing parser salvages malformed JSON locally; a parse failure does not repeat the same planner request without new observations. No gateway replacement, provider expansion or pricing change occurs.
+
+## Public behavior and diagnostics
+
+Explicit tone/depth instructions precede approved preferences. Prompts distinguish saved history from inference, exposure from mastery and read permission from writes. The existing activity projection adds `reading_document_page` only after actual page evidence resolves; it uses the existing document-read icon/category. Canonical event IDs, replay deduplication, expand/collapse, composer, markdown and mathematical rendering are unchanged.
+
+TimingRecorder exposes numeric strategy/classification, planner/answer/model calls, token totals, provider attempts, tool and retrieval counts/durations, duplicate suppression and terminal marks. Existing API perf metadata includes it; durable continuation response metadata also receives a snapshot. Missing metrics are unknown, never inferred zeros. No private message/document/tool payload is added to perf metadata.

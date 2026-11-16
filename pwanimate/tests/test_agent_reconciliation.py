@@ -166,7 +166,7 @@ class ActivityTaxonomyTests(SimpleTestCase):
         e = event('tool', 'Looking up a profile', event_id='t3', tool='user_profile')
         self.assertEqual(e['activity_type'], 'tool_call')
         e = event('thinking', 'Weighing options', event_id='th1')
-        self.assertEqual(e['activity_type'], 'thinking')
+        self.assertIsNone(e)
         e = event('checklist', 'Working checklist', event_id='checklist', items=[])
         self.assertEqual(e['activity_type'], 'checklist')
         e = event('checklist_review', 'Plan reconciled', event_id='verify', status='completed')
@@ -189,7 +189,7 @@ class ActivityTaxonomyTests(SimpleTestCase):
     def test_unrecognized_events_get_no_semantic_type(self):
         from pwanimate.orchestrator.activity import event
         e = event('plan', 'Making progress', event_id='p1')
-        self.assertIsNone(e['activity_type'])
+        self.assertIsNone(e)
 
 
 class MandatoryReconciliationTests(TestCase):
@@ -251,8 +251,8 @@ class MandatoryReconciliationTests(TestCase):
                  if e.get('kind') == 'checklist' and e.get('status') == 'completed']
         self.assertTrue(final)
         statuses = {i['label']: i['status'] for i in final[-1]['items']}
-        self.assertEqual(statuses['Search web'], 'done')
-        self.assertEqual(statuses['Summarize findings'], 'pending')
+        self.assertEqual(statuses['Step 1'], 'done')
+        self.assertEqual(statuses['Step 2'], 'pending')
         self.assertNotIn('doing', statuses.values())
         self.assertGreaterEqual(final[-1].get('unresolved', 0), 1)
 

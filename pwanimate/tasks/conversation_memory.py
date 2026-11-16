@@ -1,14 +1,9 @@
-"""Celery tasks for indexing persisted conversation messages."""
+"""Durable fact extraction; legacy raw-transcript indexing stays disabled."""
 
 import logging
 from typing import Any, Dict
 
 from celery import shared_task
-from django.db import transaction
-
-from pwanimate.ai.embeddings.factory import get_embedding_provider
-from pwanimate.models import PwanimateMessage, PwanimateMessageEmbedding
-
 logger = logging.getLogger(__name__)
 
 
@@ -19,42 +14,36 @@ logger = logging.getLogger(__name__)
     name="pwanimate.tasks.conversation_memory.embed_message",
 )
 def embed_message(self, message_id: int) -> Dict[str, Any]:
-    try:
-        message = PwanimateMessage.objects.select_related("conversation").get(id=message_id)
-    except PwanimateMessage.DoesNotExist:
-        return {"status": "not_found", "message_id": message_id}
+    # No raw transcript indexing, even if a legacy switch remains enabled.
+    return {'status': 'personal_fact_approval_required', 'message_id': message_id}
 
-    from pwanimate.services.study_memory import StudyMemoryService
-    pref = StudyMemoryService.preference(message.conversation.user)
-    if not pref.enabled or (pref.reset_at and message.created_at <= pref.reset_at):
-        return {'status': 'memory_disabled'}
 
-    record, _ = PwanimateMessageEmbedding.objects.get_or_create(
-        message=message,
-        defaults={"user_id": message.conversation.user_id},
-    )
+@shared_task(bind=True, max_retries=3, default_retry_delay=30,
+    acks_late=True, reject_on_worker_lost=True, queue='docs_queue',
+    name='pwanimate.tasks.conversation_memory.extract_memories')
+def extract_memories(self, assistant_id, revision):
+    # Backward-compatible old broker deliveries enter the durable pipeline.
+    from pwanimate.models import PwanimateMessage
+    from pwanimate.services.memory_dispatch import schedule
+    message = PwanimateMessage.objects.filter(pk=assistant_id).first()
+    job = schedule(message, revision=revision) if message else None
+    return {'status': 'scheduled' if job else 'ineligible'}
+
+
+@shared_task(name='pwanimate.tasks.conversation_memory.process_memory_dispatch',
+    acks_late=True, reject_on_worker_lost=True, max_retries=0, queue='docs_queue')
+def process_memory_dispatch(job_id, token):
+    from pwanimate.services.memory_dispatch import process
+    return process(job_id, token)
+
+
+@shared_task(name='pwanimate.tasks.conversation_memory.recover_memory_dispatch', max_retries=0)
+def recover_memory_dispatch():
+    from pwanimate.services.memory_dispatch import recover
+    from django.db import DatabaseError
     try:
-        provider = get_embedding_provider()
-        model_name = provider.get_model_name()
-        vector = provider.embed_texts([message.content], task_type="RETRIEVAL_DOCUMENT")[0]
-        if len(vector) != provider.get_dimensions():
-            raise ValueError(
-                f"Embedding dimension mismatch: expected {provider.get_dimensions()}, got {len(vector)}"
-            )
-        with transaction.atomic():
-            from pwanimate.models import SparkMemoryPreference
-            pref = SparkMemoryPreference.objects.select_for_update().get(pk=pref.pk)
-            if not pref.enabled or (pref.reset_at and message.created_at <= pref.reset_at):
-                return {'status': 'memory_disabled'}
-            record.embedding = vector
-            record.embedding_model = model_name
-            record.status = "completed"
-            record.error = ""
-            record.save(update_fields=["embedding", "embedding_model", "status", "error", "updated_at"])
-        return {"status": "completed", "message_id": message_id, "model": model_name}
-    except Exception as exc:
-        record.status = "failed"
-        record.error = str(exc)[:255]
-        record.save(update_fields=["status", "error", "updated_at"])
-        logger.warning("Failed to embed conversation message %s", message_id, exc_info=True)
-        raise self.retry(exc=exc)
+        return recover()
+    except DatabaseError:
+        # Pre-migration/DB outage: no extraction is attempted; next beat retries.
+        logger.exception('memory_dispatch recovery_database_unavailable')
+        return {'database_unavailable': True}

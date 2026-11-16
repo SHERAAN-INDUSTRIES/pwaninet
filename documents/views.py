@@ -248,6 +248,7 @@ def search_suggestions_view(request):
 
 
 def document_detail(request, share_id):
+    from django.http import Http404
     """
     Individual document detail page with preview and metadata.
     """
@@ -256,11 +257,10 @@ def document_detail(request, share_id):
     if not document:
         from django.http import Http404
         raise Http404("Document not found")
-    if (document.is_ai_generated or document.visibility == 'private') and (
-        not request.user.is_authenticated or document.uploaded_by_id != request.user.id
-    ):
-        raise Http404("Document not found")
-    
+    from documents.access_policy import DocumentAccessPolicy
+    if not DocumentAccessPolicy.can_read(request.user, document, require_ready=False):
+        raise Http404('Document not found')
+
     # Record view asynchronously with caching
     cache_key = f'doc_view_{share_id}_{request.session.session_key or request.META.get("REMOTE_ADDR")}'
     if not cache.get(cache_key):
@@ -369,6 +369,9 @@ def private_resource_asset(request, file_id, asset):
         storage_private=True,
     )
     document = document_file.document_version.document
+    from documents.access_policy import DocumentAccessPolicy
+    if not DocumentAccessPolicy.can_read(request.user, document):
+        raise Http404('Resource not found')
     if document.uploaded_by_id != request.user.id or not document.is_ai_generated:
         raise Http404("Resource not found")
 
@@ -400,7 +403,7 @@ def user_can_manage_document(user, document) -> bool:
     """Check if the user has permission to edit, delete, or manage the document."""
     if not user or not user.is_authenticated:
         return False
-    if document.is_ai_generated:
+    if document.is_ai_generated or document.visibility == 'private':
         return document.uploaded_by_id == user.id
     if document.uploaded_by_id == user.id:
         return True
@@ -1225,11 +1228,10 @@ def serve_download(request, share_id):
         # the owner session; a forwarded link does not grant access.
         if data != str(document.share_id):
             return HttpResponseForbidden("Download token does not match this document.")
-        if (document.is_ai_generated or document.visibility == 'private') and (
-            not request.user.is_authenticated or document.uploaded_by_id != request.user.id
-        ):
-            return HttpResponseNotFound("Document not found.")
-        
+        from documents.access_policy import DocumentAccessPolicy
+        if not DocumentAccessPolicy.can_read(request.user, document):
+            return HttpResponseNotFound('Document not found')
+
         from .engagement.models import DocumentDownload
         from .models import DocumentFile
         
@@ -1263,12 +1265,13 @@ def serve_download(request, share_id):
         response = FileResponse(document_file.file.open('rb'), content_type=content_type or 'application/octet-stream')
         filename = f"{document.title}.{document_file.extension}"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Cache-Control'] = 'private, no-store'
         return response
         
     except Document.DoesNotExist:
         return HttpResponseNotFound("Document not found")
     except Exception as e:
-        return HttpResponseForbidden(f"Download failed: {str(e)}")
+        return HttpResponseNotFound("Document file not found")
 
 
 @csrf_exempt

@@ -2,6 +2,7 @@
 Pwanimate API URL Configuration.
 """
 
+from pwanimate.api.study_context import StudyContextView
 from django.urls import path
 from pwanimate.api.views import (
     PwanimateAttachmentDownloadView,
@@ -42,22 +43,43 @@ from pwanimate.billing.api import (
     PwanimateBillingUsageView,
 )
 
+from pwanimate.api.teaching import TeachingStateView
+
 app_name = "pwanimate_api"
 
-from pwanimate.api.study_assistant import (AssessmentView, MemoryView, StudyReportView,
+from pwanimate.api.unit_learning import AcademicUnitsView, AcademicDetectionView, UnitLearningRecordView
+from pwanimate.api.concept_mastery import (UnitConceptListView, UnitMasterySummaryView,
+    ConceptDetailView, ConceptRecalculateView, ConceptEvidenceView, ConceptAssessmentView)
+
+from pwanimate.api.study_assistant import (AssessmentView, MemoryView, MemoryDetailView, StudyReportView,
                                            WelcomeView, ReminderView, ReminderDeviceView, StudyPlansView)
 
 from pwanimate.api.agent_runs import (
-    AgentRunCancelView, AgentRunEventsView, AgentRunRetryView, AgentRunView,
+    AgentRunCancelView, AgentRunEventsView, AgentRunRetryView, AgentRunView, AgentRunStreamView,
 )
+from pwanimate.api.followups import FollowUpExecuteView
 
 urlpatterns = [
+    path('study-context/<uuid:conversation_id>/', StudyContextView.as_view(), name='study-context'),
+    path("study-sessions/<uuid:session_id>/teaching/", TeachingStateView.as_view(), name="teaching-state"),
+    path('academic/records/<uuid:record_id>/concepts/', UnitConceptListView.as_view(), name='unit_concepts'),
+    path('academic/records/<uuid:record_id>/mastery/', UnitMasterySummaryView.as_view(), name='unit_mastery'),
+    path('academic/concepts/<uuid:concept_id>/', ConceptDetailView.as_view(), name='concept_detail'),
+    path('academic/concepts/<uuid:concept_id>/evidence/', ConceptEvidenceView.as_view(), name='concept_evidence'),
+    path('academic/concepts/<uuid:concept_id>/recalculate/', ConceptRecalculateView.as_view(), name='concept_recalculate'),
+    path('academic/concepts/<uuid:concept_id>/assessments/', ConceptAssessmentView.as_view(), name='concept_assessments'),
+    path('academic/', AcademicUnitsView.as_view(), name='academic_units'),
+    path('academic/detect/', AcademicDetectionView.as_view(), name='academic_detect'),
+    path('academic/records/<uuid:record_id>/', UnitLearningRecordView.as_view(), name='unit_learning_record'),
     path('agent-runs/<uuid:run_id>/', AgentRunView.as_view(), name='agent_run'),
+    path('agent-runs/<uuid:run_id>/stream/', AgentRunStreamView.as_view(), name='agent_run_stream'),
     path('agent-runs/<uuid:run_id>/events/', AgentRunEventsView.as_view(), name='agent_run_events'),
     path('agent-runs/<uuid:run_id>/cancel/', AgentRunCancelView.as_view(), name='agent_run_cancel'),
     path('agent-runs/<uuid:run_id>/retry/', AgentRunRetryView.as_view(), name='agent_run_retry'),
+    path('follow-ups/<uuid:follow_up_id>/execute/', FollowUpExecuteView.as_view(), name='follow_up_execute'),
     path('memory/', MemoryView.as_view(), name='memory'),
     path('memory/welcome/', WelcomeView.as_view(), name='memory_welcome'),
+    path('memory/<uuid:memory_id>/', MemoryDetailView.as_view(), name='memory_detail'),
     path('reminders/', ReminderView.as_view(), name='reminders'),
     path('reminders/<uuid:reminder_id>/', ReminderView.as_view(), name='reminder_detail'),
     path('reminders/<uuid:reminder_id>/device/', ReminderDeviceView.as_view(), name='reminder_device'),

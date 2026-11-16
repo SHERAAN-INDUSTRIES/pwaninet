@@ -7,8 +7,8 @@ from django.utils import timezone
 from pwanimate.models import SparkAgentRun, PendingAction, SparkAgentInteraction
 from pwanimate.services.actions import ActionService, ActionError
 
-SNAPSHOT_FIELDS = ['query','history','task','provider','model','engine','fallback_chain','offering',
- 'temperature','max_tokens','local_time','timezone_name','conversation_memory','request_id','user_message_id']
+SNAPSHOT_FIELDS = ['snapshot_version','study_mode','execution_boundary_id','query','history','task','provider','model','engine','fallback_chain','offering',
+ 'temperature','max_tokens','context_resources','local_time','timezone_name','conversation_memory','request_id','user_message_id']
 
 # Server-authoritative lifecycle. 'waiting' is the single paused status;
 # wait_reason ('clarification' | 'approval') says what it is waiting for, so
@@ -66,18 +66,35 @@ class AgentRunService:
         return run.status in TERMINAL_STATUSES
 
     @staticmethod
-    def pause(request, state, actions):
+    def pause(request, state, actions, *, run=None):
         if not request.user or not request.user.is_authenticated or not request.user_message_id:
             raise RunError('A saved, signed-in request is required for approval.')
         snapshot = {k:getattr(request,k) for k in SNAPSHOT_FIELDS}
+        from pwanimate.services.run_snapshots import CURRENT_SNAPSHOT_VERSION
+        snapshot['snapshot_version'] = CURRENT_SNAPSHOT_VERSION
         snapshot['history'] = [m.to_dict() for m in request.history[-10:]]
         snapshot = json.loads(json.dumps(snapshot, cls=DjangoJSONEncoder))
         wait_reason = SparkAgentRun.WAIT_APPROVAL if actions else SparkAgentRun.WAIT_CLARIFICATION
-        run, created = SparkAgentRun.objects.update_or_create(user=request.user,user_message_id=request.user_message_id,
-            defaults={'snapshot':snapshot,'state':json.loads(json.dumps(state,cls=DjangoJSONEncoder)),
+        from pwanimate.models import PwanimateMessage
+        with transaction.atomic():
+            source = PwanimateMessage.objects.select_for_update().filter(
+                pk=request.user_message_id, conversation__user=request.user, role='user').first()
+            if source is None: raise RunError('This task is unavailable.')
+            existing = SparkAgentRun.objects.select_for_update().filter(user_message=source,user=request.user).first()
+            if existing is not None:
+                if existing.status == SparkAgentRun.STATUS_WAITING: return existing
+                if run is None or run.pk != existing.pk or existing.status != SparkAgentRun.STATUS_RUNNING:
+                    raise RunError('This task has already continued.')
+            values = {'snapshot':snapshot,'state':json.loads(json.dumps(state,cls=DjangoJSONEncoder)),
                 'action_ids':[str(a['id']) for a in actions], 'status':'waiting','wait_reason':wait_reason,
-                'cancel_requested':False,'continuation':{},
-                'expires_at':timezone.now()+timedelta(minutes=15)})
+                'cancel_requested':False,'continuation':{}, 'result_message':None,
+                'expires_at':timezone.now()+timedelta(minutes=15)}
+            if existing is None:
+                run = SparkAgentRun.objects.create(user=request.user,user_message=source,**values)
+            else:
+                for key,value in values.items(): setattr(existing,key,value)
+                existing.save(update_fields=[*values,'updated_at'])
+                run = existing
         return run
 
     @staticmethod
@@ -90,6 +107,8 @@ class AgentRunService:
                 'actions':[ActionService.serialize(a) for a in actions]}
         if pending_interaction is not None:
             payload['interaction'] = pending_interaction.serialize()
+        payload['resolved_interaction_ids'] = [str(i) for i in SparkAgentInteraction.objects.filter(
+            run=run, user=run.user, status=SparkAgentInteraction.STATUS_ANSWERED).values_list('id',flat=True)]
         if run.result_message_id:
             payload['result_message_id'] = run.result_message_id
         return payload
@@ -101,9 +120,20 @@ class AgentRunService:
         if not isinstance(action_ids,list) or not action_ids or len(action_ids)>6 or not all(isinstance(x,str) for x in action_ids):
             raise RunError('Choose the exact actions shown for this task.')
         with transaction.atomic():
+            from pwanimate.models import PwanimateConversation
+            candidate=SparkAgentRun.objects.filter(pk=run_id,user=user).first()
+            if candidate:
+                PwanimateConversation.objects.select_for_update().get(pk=candidate.user_message.conversation_id,user=user)
             run = SparkAgentRun.objects.select_for_update().filter(pk=run_id,user=user).first()
             if not run:
                 raise RunError('This task is unavailable.')
+            if run.state.get('wp4_consent'):
+                from pwanimate.services.study_context import resolve
+                context=resolve(user,run.user_message.conversation)
+                if context.generation!=run.state.get('wp4_binding_generation',context.generation):
+                    raise RunError('The session selection changed. Review this lesson again.')
+                if context.session and context.session.status!='active':
+                    raise RunError('Resume the study session before deciding this lesson.')
             if run.status != 'waiting':
                 raise RunError('This task has already continued. Refresh the conversation to see its status.')
             if run.expires_at <= timezone.now():

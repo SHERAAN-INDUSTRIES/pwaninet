@@ -51,7 +51,8 @@ class DocumentDetailTool(BaseDomainTool):
             )
 
         # Base query with active/available status
-        qs = Document.objects.filter(is_available=True, status="ready").select_related("category", "uploaded_by")
+        from documents.access_policy import DocumentAccessPolicy
+        qs = DocumentAccessPolicy.authorized_documents(user).select_related("category", "uploaded_by")
 
         doc = None
         if share_id:
@@ -66,24 +67,6 @@ class DocumentDetailTool(BaseDomainTool):
         if not doc:
             raise ToolNotFoundError(
                 f"Document not found or is currently unavailable (share_id={share_id}, slug={slug}).",
-                tool_name=self.name,
-            )
-
-        # Authorization check
-        is_owner = (
-            user is not None
-            and getattr(user, "is_authenticated", False)
-            and doc.uploaded_by_id == user.id
-        )
-        is_staff = (
-            user is not None
-            and getattr(user, "is_authenticated", False)
-            and getattr(user, "is_staff", False)
-        )
-
-        if doc.visibility != "public" and not is_owner and not is_staff:
-            raise ToolPermissionError(
-                "You do not have permission to view this restricted or private document.",
                 tool_name=self.name,
             )
 

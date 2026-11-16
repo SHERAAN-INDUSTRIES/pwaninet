@@ -502,56 +502,8 @@ class UnifiedSearchService:
             document__is_available=True,
         )
 
-        # Keep lexical document search aligned with Pwanimate's semantic
-        # retrieval permissions. Restricting this index to public documents
-        # made authorized private/restricted documents disappear whenever they
-        # had no eligible embedding chunks.
-        visibility_q = Q(document__visibility='public', document__is_ai_generated=False)
-        if user and getattr(user, 'is_authenticated', False):
-            global_role = getattr(user, 'global_role', None)
-            is_admin_or_leader = (
-                user.is_staff
-                or user.is_superuser
-                or global_role in ['PRESIDENT', 'DELEGATE']
-            )
-            if is_admin_or_leader:
-                visibility_q = Q(document__is_ai_generated=False) | Q(document__uploaded_by=user, document__is_ai_generated=True)
-            else:
-                visibility_q |= Q(document__uploaded_by=user)
-                restricted_q = Q(document__visibility='restricted', document__is_ai_generated=False)
-                programme = getattr(user, 'programme', None)
-                has_restricted_match = bool(programme)
-                if programme:
-                    visibility_q |= (
-                        restricted_q
-                        & Q(document__academic_units__academic_unit__programme_units__programme=programme)
-                    )
-                course = getattr(user, 'course', None)
-                if course and not has_restricted_match:
-                    visibility_q |= (
-                        restricted_q
-                        & Q(document__academic_units__academic_unit__code__icontains=course.name)
-                    )
-        base_qs = base_qs.filter(visibility_q).distinct()
-
-        # Academic, category, and metadata filters
-        category = filters.get('category')
-        if category:
-            category_q = Q(category_code=category) | Q(document__category__code=category)
-            if str(category).isdigit():
-                category_q |= Q(document__category__id=category)
-            base_qs = base_qs.filter(category_q)
-
-        unit = filters.get('academic_unit') or filters.get('unit')
-        if unit:
-            unit_q = Q(academic_unit_codes__contains=unit) | Q(document__academic_units__academic_unit__code=unit)
-            if str(unit).isdigit():
-                unit_q |= Q(document__academic_units__academic_unit__id=unit)
-            base_qs = base_qs.filter(unit_q)
-
-        academic_units = filters.get('academic_units')
-        if academic_units:
-            base_qs = base_qs.filter(document__academic_units__academic_unit_id__in=academic_units)
+        from documents.access_policy import DocumentAccessPolicy
+        base_qs = base_qs.filter(document_id__in=DocumentAccessPolicy.authorized_documents(user, filters=filters).values('pk'))
 
         level = filters.get('academic_level')
         if level:
@@ -811,8 +763,8 @@ class UnifiedSearchService:
             logger.warning("get_document_did_you_mean error: %s", exc)
         return None
 
-    def _search_documents(self, query: str, user, limit: int, offset: int) -> Tuple[List[Dict[str, Any]], int]:
-        ordered_qs, total = self._build_document_queryset(query=query, user=user)
+    def _search_documents(self, query: str, user, limit: int, offset: int, filters=None) -> Tuple[List[Dict[str, Any]], int]:
+        ordered_qs, total = self._build_document_queryset(query=query, user=user, filters=filters)
         records = list(ordered_qs[offset:offset + limit])
 
         doc_ids = [idx.document_id for idx in records]

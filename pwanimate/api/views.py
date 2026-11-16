@@ -4,6 +4,7 @@ Pwanimate API Views.
 Exposes authenticated HTTP endpoints for persistent conversations,
 RAG interactions, conversation listings, and detail/deletion.
 """
+from pwanimate.ai.completion import is_complete
 
 import asyncio
 from io import BytesIO
@@ -187,7 +188,24 @@ class PwanimateAttachmentVisionPolicyView(APIView):
 _SSE_EXECUTION_MARKER = lambda text: None  # noqa: E731
 
 
-class PwanimateChatView(APIView):
+from pwanimate.api.academic_guard import AcademicSessionWriteGuard
+
+
+class PwanimateChatView(AcademicSessionWriteGuard, APIView):
+    @staticmethod
+    def get_academic_context(user, query):
+        from pwanimate.services.unit_learning import UnitLearningService
+        return UnitLearningService.safe_context(user, query)
+
+    @staticmethod
+    def get_tracking_state(user, conversation=None):
+        from pwanimate.services.unit_learning import UnitLearningService
+        try:
+            return UnitLearningService.tracking_state(user, conversation=conversation)
+        except Exception:
+            logger.exception("Could not resolve academic tracking state")
+            return None
+
     """
     Primary conversational endpoint for Pwanimate.
 
@@ -223,11 +241,21 @@ class PwanimateChatView(APIView):
 
     def _stream_chat_response(self, request):
         """Stream truthful orchestration status updates, followed by the usual JSON payload."""
+        from pwanimate.orchestrator.timing import TimingRecorder
+
+        timing = TimingRecorder()
+        timing.mark("request_accepted")
         events = queue.Queue()
 
         def report_progress(stage):
+            if isinstance(stage, dict) and stage.get('type') == 'academic_consent':
+                events.put(('academic_consent', stage))
+                return
             if isinstance(stage,dict) and stage.get('type') == 'activity':
-                events.put(('activity',stage))
+                from pwanimate.orchestrator.activity import public_event
+                safe = public_event(stage)
+                if safe is not None:
+                    events.put(('activity',safe))
             elif isinstance(stage,str):
                 events.put(('status',{'stage':stage}))
 
@@ -243,6 +271,7 @@ class PwanimateChatView(APIView):
                     request,
                     progress_callback=report_progress,
                     token_callback=report_tokens,
+                    timing=timing,
                 )
                 events.put(("response", (result.status_code, result.data)))
             except Exception:
@@ -266,15 +295,17 @@ class PwanimateChatView(APIView):
                     yield ": keep-alive\n\n"
                     continue
 
-                if event_type in {"status", "activity"}:
+                if event_type in {"status", "activity", "academic_consent"}:
                     yield f"event: {event_type}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
                     continue
 
                 if event_type == "chunk":
+                    timing.mark("first_chunk_published")
                     yield f"event: chunk\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
                     continue
 
                 response_status, response_data = payload
+                timing.mark("final_event_published")
                 encoded = JSONRenderer().render({
                     "status_code": response_status,
                     "data": response_data,
@@ -288,7 +319,7 @@ class PwanimateChatView(APIView):
         response["X-Content-Type-Options"] = "nosniff"
         return response
 
-    def _post_chat(self, request, progress_callback=None, token_callback=None):
+    def _post_chat(self, request, progress_callback=None, token_callback=None, timing=None):
         """
         Process a chat or RAG query.
 
@@ -308,15 +339,24 @@ class PwanimateChatView(APIView):
             study_mode (bool): Optional flag to enter/continue Study Mode.
             study_session_id (str): Optional UUID of an owned Study Mode session.
         """
-        from pwanimate.orchestrator.activity import event, STAGES
+        from pwanimate.orchestrator.activity import event, STAGES, public_event
+        from pwanimate.orchestrator.timing import TimingRecorder
+
+        timing = timing or TimingRecorder()
+        timing.mark("request_received")
         activity = []
         downstream_progress = progress_callback
         def record_progress(value):
+            if isinstance(value, dict) and value.get('type') == 'academic_consent':
+                if downstream_progress:
+                    downstream_progress(value)
+                return
             if isinstance(value,str):
                 if value not in STAGES:
                     return
                 value = event('stage',STAGES[value],event_id='stage-'+value)
-            if not isinstance(value,dict) or value.get('type') != 'activity':
+            value = public_event(value)
+            if value is None or any({k:v for k,v in e.items() if k != 'at'} == {k:v for k,v in value.items() if k != 'at'} for e in activity):
                 return
             if len(activity) < 100:
                 activity.append(value)
@@ -406,12 +446,12 @@ class PwanimateChatView(APIView):
                     {"error": "Study session not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            if conversation_id and str(requested_study_session.conversation_id) != str(conversation_id):
+            if conversation_id and str(conversation_id) not in {str(requested_study_session.conversation_id),str(requested_study_session.academic_conversation_id)}:
                 return Response(
                     {"error": "Conversation does not match study session."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            conversation = requested_study_session.conversation
+            conversation = requested_study_session.academic_conversation or requested_study_session.conversation
             conversation_id = str(conversation.id)
 
         if conversation is None:
@@ -446,6 +486,25 @@ class PwanimateChatView(APIView):
             else:
                 conversation = ConversationService.create_conversation(user=request.user)
 
+        from pwanimate.services.study_context import resolve,StudyConflict
+        from pwanimate.services.casual_context import is_greeting
+        casual_greeting = is_greeting(message)
+        canonical_context=resolve(request.user,conversation)
+        if not casual_greeting and canonical_context.session is None and canonical_context.candidates:
+            return Response({'error':'Choose a study session before continuing.', 'study_context':canonical_context.payload()},status=409)
+        if not casual_greeting and canonical_context.session and canonical_context.session.status!='active' and (is_study_cmd or data.get('study_mode') is True or requested_study_session):
+            return Response({'error':'Explicitly resume the selected session before studying.', 'study_context':canonical_context.payload()},status=409)
+        from pwanimate.services.unit_learning import UnitLearningService
+        from pwanimate.models import SparkAgentRun, SparkTeachingState
+        pending_query=SparkAgentRun.objects.filter(user=request.user,user_message__conversation=conversation,status__in=['waiting','running','queued'])
+        # Parked controllers retain their questions without blocking selection.
+        parked_runs=SparkTeachingState.objects.filter(active_run__in=pending_query).exclude(session=canonical_context.session).values_list('active_run_id',flat=True)
+        pending_tasks=list(pending_query.exclude(pk__in=parked_runs)[:2])
+        if pending_tasks and not casual_greeting and not UnitLearningService.detect(request.user,study_remainder if is_study_cmd else message)['history_query']:
+            return Response({'error':'Finish or cancel the current task before starting another.', 'study_context':canonical_context.payload()},status=409)
+        requested_units={m['unit_id'] for m in UnitLearningService.detect(request.user,study_remainder if is_study_cmd else message)['matches']}
+        if len(requested_units)>1 or (requested_units and canonical_context.session and canonical_context.session.learning_record_id and canonical_context.session.unit_id not in requested_units):
+            return Response({'error':'Choose one academic unit and its session, or open a new study conversation.', 'study_context':canonical_context.payload()},status=409)
         # Validate attachments if provided
         raw_attachment_ids = data.get("attachments") or data.get("attachment_ids") or []
         attachment_objs = []
@@ -554,6 +613,9 @@ class PwanimateChatView(APIView):
             )
         )
 
+        if casual_greeting:
+            study_mode_active = False  # Reading continuity must never start/update a session.
+
         # Bare `@study` command activates Study Mode without making an empty AI request
         if is_study_cmd and not study_remainder:
             study_session = StudySessionService.start_or_continue_session(
@@ -592,6 +654,21 @@ class PwanimateChatView(APIView):
             )
 
         clean_query = study_remainder.strip() if (is_study_cmd and study_remainder.strip()) else message.strip()
+
+        # Check for short-reply follow-up resolution before proceeding with full orchestration
+        if conversation and clean_query:
+            from pwanimate.services.followups import resolve_short_reply
+            resolved_follow_up = resolve_short_reply(clean_query, conversation, request.user)
+            if resolved_follow_up and resolved_follow_up.status != 'cancelled':
+                from pwanimate.services.followups import execute_follow_up_action, FollowUpError
+                try:
+                    result = execute_follow_up_action(resolved_follow_up, request.user)
+                    return Response(result, status=200 if result.get('executed') else 202)
+                except FollowUpError as exc:
+                    return Response({'error': str(exc)}, status=exc.code)
+                except Exception:
+                    return Response({'error': 'Follow-up failed; retry the suggestion.'}, status=503)
+
         retry_requested = data.get("retry") is True
         retry_message_id = data.get("retry_user_message_id")
         if retry_message_id is not None:
@@ -620,8 +697,42 @@ class PwanimateChatView(APIView):
                     {"error": "Retry content must match the original message."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+        timing.mark('academic_preflight_start')
         if user_msg is None:
             user_msg = ConversationService.persist_user_message(conversation, clean_query)
+        timing.mark("user_message_persisted")
+        # Early optional consent: persisted card before visible lesson tokens.
+        # This turn remains untracked if its source predates approval.
+        from pwanimate.models import PendingAction
+        from pwanimate.services.actions import ActionService
+        from django.utils import timezone
+        from pwanimate.services.unit_learning import UnitLearningService
+        if context_resources and not casual_greeting:
+            from pwanimate.orchestrator.document_context import DocumentTurnContext
+            document_context=DocumentTurnContext.resolve(request.user,context_resources,clean_query)
+            documents=[r for r in document_context.resolutions if r.resolved]
+            if len(documents)==1:
+                assigned=set(documents[0].document.academic_units.values_list('academic_unit_id',flat=True))
+                named={m['unit_id'] for m in UnitLearningService.detect(request.user,clean_query)['matches']}
+                eligible_documents=[e for e in UnitLearningService.enrollments(request.user).filter(academic_unit_id__in=assigned) if UnitLearningService.eligible(e)]
+                if not named and len(eligible_documents)>1 and canonical_context.tracking!='authorized':
+                    return Response({'error':'This document belongs to multiple enrolled units. Choose the unit for this lesson.'},status=409)
+                if named and assigned and not named.issubset(assigned):
+                    return Response({'error':'The selected document belongs to another unit. Choose the correct document or session.'},status=409)
+                UnitLearningService.process_message(user_msg.pk,document_id=documents[0].document_id)
+        tracking_pref = UnitLearningService.preference(request.user)
+        pending = list(PendingAction.objects.filter(params__tracking_revision=tracking_pref.revision, user=request.user, conversation=conversation,
+            action_type=PendingAction.ACTION_TRACK_UNIT, status='pending', expires_at__gt=timezone.now()).order_by('created_at')[:5])
+        timing.mark('academic_preflight_done')
+
+        # Explicit, allowlisted preferences must not depend on LLM tool selection.
+        # This creates only a WP3 pending proposal and never approves a fact.
+        from pwanimate.tools.domain.memory import propose_from_message
+        memory_proposal_status = {'status':'unavailable'}
+        try:
+            memory_proposal_status = propose_from_message(request.user, user_msg)
+        except Exception as exc:
+            logger.warning('Optional memory proposal unavailable (%s)', type(exc).__name__)
 
         # Atomically link attachments to conversation and user message
         if attachment_objs:
@@ -686,7 +797,7 @@ class PwanimateChatView(APIView):
             if not server_history and not conversation_id and data.get("history"):
                 history = data.get("history", [])
 
-        conversation_memory = ConversationMemoryService.search(
+        conversation_memory = [] if casual_greeting else ConversationMemoryService.search(
             request.user,
             clean_query,
             exclude_conversation_id=conversation.id,
@@ -705,6 +816,13 @@ class PwanimateChatView(APIView):
             model = primary_candidate["model"]
 
         try:
+            timing.mark('academic_history_start')
+            academic_context = self.get_academic_context(request.user, clean_query)
+            timing.mark('academic_history_done')
+            if not academic_context and not history:
+                import re
+                if re.search(r'previous lesson|where did we stop|mistakes.*last time|^continue[.!? ]*$', clean_query, re.I):
+                    academic_context = [{'clarification_required':True, 'units':[]}]
             orchestration_req = OrchestrationRequest(
                 query=clean_query,
                 user=request.user,
@@ -723,41 +841,44 @@ class PwanimateChatView(APIView):
                 study_mode=study_mode_active,
                 study_context=study_context,
                 conversation_memory=conversation_memory,
+                academic_unit_context=academic_context,
+                tracking_state=self.get_tracking_state(request.user, conversation),
                 user_message_id=user_msg.id,
                 request_id=request.headers.get("X-Request-ID") or str(uuid.uuid4()),
+                timing=timing,
             )
+            timing.mark("context_ready")
             orchestrator = self.get_orchestrator()
             # External LLM generation occurs outside database transactions.
             # token_callback (when provided) receives visible text deltas as
             # the LLM streams — the SSE layer turns them into chunk events.
-            response = orchestrator.run(
+            if pending and not casual_greeting:
+                from pwanimate.services.agent_runs import AgentRunService
+                from pwanimate.orchestrator.types import OrchestrationResponse
+                run=AgentRunService.pause(orchestration_req,{'wp4_consent':True,'wp4_binding_generation':canonical_context.generation,'wp4_document_id':documents[0].document_id if context_resources and len(documents)==1 else None},[ActionService.serialize(a) for a in pending])
+                progress_callback({'type':'academic_consent','conversation_id':str(conversation.pk),'run_id':str(run.pk),
+                    'actions':[{**ActionService.serialize(a),'run_id':str(run.pk)} for a in pending]})
+                progress_callback(event('plan','Waiting for your tracking choice before starting this lesson.',event_id='tracking-consent',status='waiting',run_id=str(run.pk)))
+                timing.mark('academic_consent_published')
+                response=OrchestrationResponse(answer='Start Tracking to begin this lesson with progress recording, or Not Now to study without recording.',
+                    metadata={'awaiting_approval':True,'awaiting_input':True,'agent_run_id':str(run.pk),'run':AgentRunService.serialize(run)})
+            elif academic_context and academic_context[0].get('clarification_required'):
+                from pwanimate.orchestrator.types import OrchestrationResponse
+                response = OrchestrationResponse(answer='Which unit and semester do you mean? ' + '; '.join(academic_context[0]['units']))
+            else:
+                response = orchestrator.run(
                 orchestration_req,
                 on_progress=progress_callback,
                 on_token=token_callback,
             )
+            timing.mark("orchestrator_done")
             response.metadata = response.metadata or {}
+            response.metadata["perf"] = timing.snapshot()
             response.metadata.setdefault("prompt_version", "2026-10-26.1")
             response.metadata.setdefault("context_version", "2.1")
             response.metadata.setdefault("memory_count", len(conversation_memory))
             response.metadata.setdefault("memory_trace", conversation_memory)
             response.metadata.setdefault("retrieval_trace", response.sources or [])
-
-            # Interim Spark updates ("say" events) are real assistant turns,
-            # persisted in order before the final compiled answer.
-            for evt in activity:
-                if isinstance(evt, dict) and evt.get('kind') == 'say':
-                    say_text = str(evt.get('text') or '').strip()
-                    if say_text:
-                        try:
-                            ConversationService.persist_assistant_message(
-                                conversation=conversation,
-                                content=say_text,
-                                provider=response.provider,
-                                model_id=response.model,
-                                task='agent_interim',
-                            )
-                        except Exception:
-                            logger.exception("Could not persist interim Spark message")
 
             # Persist assistant response turn with defensive fallback
             answer_text = (response.answer or "").strip()
@@ -771,6 +892,9 @@ class PwanimateChatView(APIView):
                 response.metadata.get('awaiting_approval')
                 or response.metadata.get('awaiting_clarification')
             )
+            if not awaiting_input and not is_complete(response.finish_reason, response.answer):
+                progress_callback(event('plan', 'This response is incomplete; saved partial text is not completed learning.',
+                    event_id='response-incomplete', status='failed'))
             asst_msg = ConversationService.persist_assistant_message(
                 conversation=conversation,
                 content=answer_text,
@@ -778,7 +902,7 @@ class PwanimateChatView(APIView):
                 sources=response.sources,
                 provider=response.provider,
                 model_id=response.model,
-                task=('agent_pause' if awaiting_input else str(
+                task=('teaching_pause' if awaiting_input and response.metadata.get('teaching') else 'agent_pause' if awaiting_input else str(
                     response.metadata.get("task", "")
                     or response.metadata.get("intent", "")
                     or ""
@@ -787,7 +911,26 @@ class PwanimateChatView(APIView):
                 completion_tokens=int(response.completion_tokens or 0),
                 total_tokens=int(response.total_tokens or 0),
                 activity=activity,
+                teaching_turn_id=response.metadata.get('teaching_turn_id'),
+                teaching_complete=bool(is_complete(response.finish_reason, response.answer) and response.metadata.get('teaching_complete', False)),
+                academic_source_id=user_msg.pk,
+                academic_complete=bool(not awaiting_input and is_complete(response.finish_reason, response.answer)),
             )
+
+            # Create follow-up actions from response metadata (if present)
+            follow_up_suggestions = response.metadata.get('follow_up_suggestions') or []
+            created_follow_ups = []
+            if follow_up_suggestions and not awaiting_input:
+                from pwanimate.services.followups import create_follow_ups
+                run_id = response.metadata.get('agent_run_id')
+                run = None
+                if run_id:
+                    from pwanimate.models import SparkAgentRun
+                    try:
+                        run = SparkAgentRun.objects.get(pk=run_id, user=request.user)
+                    except SparkAgentRun.DoesNotExist:
+                        pass
+                created_follow_ups = create_follow_ups(asst_msg, suggestions=follow_up_suggestions, run=run)
             try:
                 from pwanimate.models import PwanimateTurnTrace
 
@@ -804,11 +947,14 @@ class PwanimateChatView(APIView):
                     memory_trace=trace_metadata.get("memory_trace") or conversation_memory,
                     metadata={
                         "intent": trace_metadata.get("intent"),
+                        "finish_reason": response.finish_reason,
+                        "response_complete": is_complete(response.finish_reason, response.answer),
                         "retrieved_count": trace_metadata.get("retrieved_count", 0),
                         "context_items_count": trace_metadata.get("context_items_count", 0),
                         "total_time_ms": response.total_time_ms,
                         "retrieval_time_ms": response.retrieval_time_ms,
                         "generation_time_ms": response.generation_time_ms,
+                        "perf": trace_metadata.get("perf"),
                     },
                 )
             except Exception:
@@ -829,11 +975,36 @@ class PwanimateChatView(APIView):
             )
             res_data["conversation_id"] = str(conversation.id)
             res_data["message_id"] = asst_msg.id
+            res_data["memory_proposal_status"] = memory_proposal_status
             res_data['activity'] = activity
+            # Include follow-up suggestions for the frontend
+            if created_follow_ups:
+                res_data['follow_ups'] = [fu.serialize() for fu in created_follow_ups]
+            # Surface pending academic-tracking consent proposals with the turn
+            # they belong to, so the student gets explicit Approve/Decline
+            # controls instead of relying on generated prose or a detached poll.
+            try:
+                from django.utils import timezone
+                from pwanimate.models import PendingAction
+                from pwanimate.services.actions import ActionService
+                pending_academic = PendingAction.objects.filter(
+                    user=request.user,
+                    conversation=conversation,
+                    action_type=PendingAction.ACTION_TRACK_UNIT,
+                    params__tracking_revision=tracking_pref.revision,
+                    status=PendingAction.STATUS_PENDING,
+                    expires_at__gt=timezone.now(),
+                ).order_by('created_at')[:5]
+                if pending_academic:
+                    res_data['academic_actions'] = [
+                        ActionService.serialize(a) for a in pending_academic
+                    ]
+            except Exception:
+                logger.exception("Could not serialize pending academic actions")
             run_id = response.metadata.get('agent_run_id')
             if run_id:
                 from pwanimate.models import SparkAgentRun
-                SparkAgentRun.objects.filter(pk=run_id,user=request.user).update(activity=activity)
+                SparkAgentRun.objects.filter(pk=run_id,user=request.user).update(activity=activity,result_message=asst_msg)
             res_data["user_message_id"] = user_msg.id
             if attachment_objs:
                 res_data["attachments"] = PwanimateAttachmentSerializer(attachment_objs, many=True).data
@@ -919,6 +1090,8 @@ class PwanimateChatView(APIView):
 
             return Response(res_data, status=status.HTTP_200_OK)
 
+        except StudyConflict as exc:
+            return Response({'error':str(exc),'study_context':resolve(request.user,conversation).payload()},status=409)
         except OrchestratorValidationError as exc:
             return Response(
                 {"error": str(exc), "conversation_id": str(conversation.id), "user_message_id": user_msg.id},
@@ -1054,6 +1227,12 @@ class PwanimateActionView(APIView):
 
     def post(self, request, action_id):
         from pwanimate.services.actions import ActionError, ActionService
+        from pwanimate.models import PendingAction
+        academic_decision = request.data.get('decision')
+        if PendingAction.objects.filter(pk=action_id, user=request.user,
+                action_type=PendingAction.ACTION_TRACK_UNIT).exists() and (
+                not isinstance(academic_decision, str) or academic_decision not in {'confirm', 'cancel'}):
+            return Response({'error': 'An explicit confirm or cancel decision is required.'}, status=400)
 
         decision = str((request.data or {}).get("decision") or "confirm").strip().lower()
         try:
@@ -1676,11 +1855,15 @@ class PwanimateConversationDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        conversation.delete()
+        from django.db.models.deletion import ProtectedError, RestrictedError
+        try:
+            conversation.delete()
+        except (ProtectedError, RestrictedError):
+            return Response({'error': 'This study conversation is linked to retained academic history.'}, status=409)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class PwanimateStudySessionListView(APIView):
+class PwanimateStudySessionListView(AcademicSessionWriteGuard, APIView):
     """
     List all Study Mode sessions owned by the current user, or start/continue a session.
     """
@@ -1776,7 +1959,7 @@ class PwanimateStudySessionListView(APIView):
         )
 
 
-class PwanimateStudySessionDetailView(APIView):
+class PwanimateStudySessionDetailView(AcademicSessionWriteGuard, APIView):
     """
     Retrieve or update metadata/context state for an owned Study Mode session.
     """
@@ -1837,7 +2020,7 @@ class PwanimateStudySessionDetailView(APIView):
         )
 
 
-class PwanimateStudySessionStatusView(APIView):
+class PwanimateStudySessionStatusView(AcademicSessionWriteGuard, APIView):
     """
     Transition an owned Study Mode session between active, paused, completed,
     or dismiss its home-screen resume banner.
@@ -1862,6 +2045,8 @@ class PwanimateStudySessionStatusView(APIView):
         restored_context = []
         unavailable_resources = []
 
+        if action == 'resume' and session.status == 'completed':
+            return Response({'error':'Start a new session; this session is completed.'},status=409)
         if action == "pause":
             session = StudySessionService.pause_session(session)
         elif action == "resume":
@@ -1889,7 +2074,7 @@ class PwanimateStudySessionStatusView(APIView):
         )
 
 
-class PwanimateStudyCheckpointView(APIView):
+class PwanimateStudyCheckpointView(AcademicSessionWriteGuard, APIView):
     """
     List checkpoints or generate a fresh learning checkpoint on explicit user request.
     """
@@ -1938,7 +2123,7 @@ class PwanimateStudyCheckpointView(APIView):
         )
 
 
-class PwanimateStudySummaryView(APIView):
+class PwanimateStudySummaryView(AcademicSessionWriteGuard, APIView):
     """
     Generate a structured Study Mode session summary for review, or export a reviewed
     summary as a PDF or Word document using the existing generated-documents pipeline.
@@ -2054,7 +2239,7 @@ class PwanimateStudySummaryView(APIView):
         )
 
 
-class PwanimateStudySummarySaveCollectionView(APIView):
+class PwanimateStudySummarySaveCollectionView(AcademicSessionWriteGuard, APIView):
     """
     Save a reviewed Study Mode session summary into an existing or newly created
     Collection owned or editable by the student.

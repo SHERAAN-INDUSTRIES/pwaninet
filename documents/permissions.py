@@ -19,36 +19,11 @@ class IsDocumentUploaderOrAdmin(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
     def has_object_permission(self, request, view, obj):
-        # Safe methods (GET, HEAD, OPTIONS)
+        from documents.access_policy import DocumentAccessPolicy
         if request.method in permissions.SAFE_METHODS:
-            if obj.status == 'ready' and obj.visibility == 'public':
-                return True
-
-            if not request.user or not request.user.is_authenticated:
-                return False
-
-            if obj.uploaded_by == request.user:
-                return True
-
-            if request.user.is_staff or request.user.is_superuser:
-                return True
-
-            if getattr(request.user, 'global_role', None) in [GlobalRole.PRESIDENT, GlobalRole.DELEGATE]:
-                return True
-
-            return False
-
-        # Mutating methods (PUT, PATCH, DELETE)
-        if not request.user or not request.user.is_authenticated:
-            return False
-
-        if obj.uploaded_by == request.user:
-            return True
-
-        if request.user.is_staff or request.user.is_superuser:
-            return True
-
-        if getattr(request.user, 'global_role', None) in [GlobalRole.PRESIDENT, GlobalRole.DELEGATE]:
-            return True
-
-        return False
+            return DocumentAccessPolicy.can_read(request.user,obj,require_ready=False)
+        if obj.visibility == 'private' or obj.is_ai_generated:
+            return bool(request.user.is_authenticated and obj.uploaded_by_id == request.user.pk)
+        return bool(request.user.is_authenticated and (
+            obj.uploaded_by_id == request.user.pk or request.user.is_staff or request.user.is_superuser
+            or getattr(request.user,'global_role',None) in [GlobalRole.PRESIDENT,GlobalRole.DELEGATE]))

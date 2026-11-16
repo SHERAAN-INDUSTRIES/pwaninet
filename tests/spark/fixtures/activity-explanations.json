@@ -1,0 +1,98 @@
+[
+  {
+    "input": {
+      "type": "activity",
+      "kind": "stage",
+      "id": "stage-thinking"
+    },
+    "summary": "I’m identifying what your request needs and whether it calls for sources, account information, or a direct explanation."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "stage",
+      "id": "stage-writing_answer"
+    },
+    "summary": "I’m putting the available evidence into a direct answer and noting any checks that could not complete."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "tool",
+      "tool": "web_search",
+      "id": "tool-1",
+      "status": "running"
+    },
+    "summary": "I’m checking external sources for information that can support your answer."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "tool",
+      "tool": "web_search",
+      "id": "tool-1",
+      "status": "completed",
+      "result_count": 3
+    },
+    "summary": "This check returned 3 result(s). I’ll assess their relevance before using them."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "tool",
+      "tool": "retrieve_documents",
+      "id": "tool-2",
+      "status": "completed",
+      "result_count": 0
+    },
+    "summary": "This check returned no matching results. It does not provide evidence for the answer."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "tool",
+      "tool": "web_search",
+      "id": "tool-3",
+      "status": "failed"
+    },
+    "summary": "This check could not complete. Its missing result cannot be treated as verified evidence."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "tool",
+      "tool": "send_message",
+      "id": "tool-4",
+      "status": "completed",
+      "awaiting_review": true
+    },
+    "summary": "A proposal is ready for your review. The proposed action has not been executed."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "checklist",
+      "id": "checklist",
+      "items": [
+        {
+          "status": "done"
+        },
+        {
+          "status": "blocked"
+        }
+      ]
+    },
+    "summary": "1 of 2 planned step(s) completed; 1 remain pending, blocked, or failed."
+  },
+  {
+    "input": {
+      "type": "activity",
+      "kind": "checklist_review",
+      "id": "verify",
+      "status": "completed",
+      "completed_checks": 2,
+      "failed_checks": 1
+    },
+    "summary": "I’m checking the plan against 2 successful tool check(s) and 1 failed check(s), so unfinished work stays visible."
+  }
+]

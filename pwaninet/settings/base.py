@@ -1,6 +1,7 @@
 """
 Base settings for pwaninet project.
 """
+import json
 from pathlib import Path
 import os
 from datetime import timedelta
@@ -513,6 +514,11 @@ USE_RESUMABLE_UPLOADS = os.environ.get('USE_RESUMABLE_UPLOADS', '1') == '1'
 
 # Celery Beat periodic task schedules
 CELERY_BEAT_SCHEDULE = {
+    'spark-memory-dispatch-recovery': {
+        'task': 'pwanimate.tasks.conversation_memory.recover_memory_dispatch',
+        'schedule': 60.0,
+        'options': {'queue': 'docs_queue'},
+    },
     'pwanimate-reconcile-document-ingestion': {
         'task': 'pwanimate.tasks.reconciliation.reconcile_document_ingestion',
         'schedule': float(os.environ.get('PWANIMATE_RECONCILE_INTERVAL_SECONDS', 600.0)),  # every 10 minutes
@@ -999,3 +1005,13 @@ CALLING_RING_SECONDS = 45
 LIVEKIT_URL = os.environ.get('LIVEKIT_URL', '')
 LIVEKIT_API_KEY = os.environ.get('LIVEKIT_API_KEY', '')
 LIVEKIT_API_SECRET = os.environ.get('LIVEKIT_API_SECRET', '')
+
+# Spark independent providers: credentials remain server-side. No paid activation.
+ZAI_API_KEY = os.environ.get('ZAI_API_KEY', '')
+ALIBABA_DASHSCOPE_API_KEY = os.environ.get('ALIBABA_DASHSCOPE_API_KEY', '')
+TENCENT_TOKENHUB_API_KEY = os.environ.get('TENCENT_TOKENHUB_API_KEY', '')
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
+PWANIMATE_EXPANSION_ENABLED = json.loads(os.environ.get('PWANIMATE_EXPANSION_ENABLED', '{}'))
+PWANIMATE_EXPANSION_MODELS = json.loads(os.environ.get('PWANIMATE_EXPANSION_MODELS', '{}'))
+PWANIMATE_EXPANSION_ENTITLEMENTS = json.loads(os.environ.get('PWANIMATE_EXPANSION_ENTITLEMENTS', '{}'))
+PWANIMATE_TASK_FALLBACK_CHAINS = json.loads(os.environ.get('PWANIMATE_TASK_FALLBACK_CHAINS', '{}'))

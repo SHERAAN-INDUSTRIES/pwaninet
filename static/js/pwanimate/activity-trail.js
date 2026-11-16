@@ -1,4 +1,4 @@
-/* Public task progress, scoped approval cards, and the planner's stated thinking.
+/* Safe public task progress and scoped approval cards.
  *
  * Activity lifecycle (deterministic, backend-event driven):
  *  - Live trails open while the agent works and collapse when the final
@@ -27,11 +27,10 @@
     // are not loaded on the page.
     const md = (el, text) => {
         if (!text) return;
-        if (window.marked && window.DOMPurify) {
-            try {
-                el.innerHTML = window.DOMPurify.sanitize(window.marked.parse(String(text)));
-                return;
-            } catch (_) {}
+        const chat = window._activeSparkChat;
+        if (chat && typeof chat.renderMarkdownWithMathAndCode === 'function') {
+            el.innerHTML = chat.renderMarkdownWithMathAndCode(String(text));
+            return;
         }
         el.textContent = String(text);
     };
@@ -79,13 +78,13 @@
     const LEGACY_TOOL_TYPES = {
         web_search: 'web_search', retrieve_documents: 'document_read',
         academic_lookup: 'document_read', document_detail: 'document_read',
-        student_timetable: 'document_read', content_search: 'content_search',
+        student_timetable: 'document_read', content_search: 'content_search', recall_memory: 'document_read',
     };
     const LEGACY_STAGE_TYPES = {
         thinking: 'thinking', searching_web: 'web_search',
         reading_sources: 'document_read', devouring_context: 'document_read',
         searching_documents: 'document_read', searching_posts: 'content_search',
-        writing_answer: 'response_draft',
+        writing_answer: 'response_draft', reading_document_page: 'document_read',
     };
     const STATUS_ICONS = {
         completed: 'check-circle-2', blocked: 'circle-alert', failed: 'circle-x',
@@ -110,6 +109,103 @@
         return ACTIVITY_ICONS[activityType] || 'circle-dot';
     }
 
+    // Legacy events are also untrusted. Rebuild explanations from known execution facts.
+    const TOOL_LABELS = {
+        academic_lookup:'Looking up academic information', student_timetable:'Checking your class timetable',
+        document_detail:'Opening document information', retrieve_documents:'Searching document content',
+        group_announcements:'Checking group updates', user_profile:'Reading the available profile',
+        notification_summary:'Checking your notifications', people_discovery:'Finding suitable study peers',
+        local_time:'Checking the current time', content_search:'Searching campus content',
+        web_search:'Searching the web', site_info:'Reading official platform information',
+        personal_schedule:'Checking your plans and reminders', create_study_plan:'Saving your study plan',
+        create_reminder:'Saving your reminder', unread_chats:'Checking unread chat counts',
+        send_message:'Preparing a message for your approval', follow_user:'Preparing a follow request',
+        propose_personal_memory:'Preparing a preference for your review',
+        recall_memory:'Reviewing your saved study history', send_notification:'Creating your notification',
+        add_study_block:'Adding your study session', update_study_block:'Updating your study session',
+        remove_study_block:'Removing your study session', complete_study_block:'Recording your completed session',
+    };
+    const STAGE_LABELS = {thinking:'Looking at your request', searching_web:'Searching the web',
+        reading_sources:'Reading the sources', devouring_context:'Reading the selected material',
+        searching_posts:'Searching campus posts', searching_documents:'Searching document content',
+        teaching_check:'Preparing your lesson', reading_document_page:"Checking the page you're reading",
+        writing_answer:'Putting the answer together'};
+    const TOOL_PURPOSES = {"recall_memory":"I’m checking your approved memories and recorded academic activity across conversations.", "send_notification":"I’m creating the immediate in-app notification you requested; this does not schedule a phone alert.", "web_search": "I’m checking external sources for information that can support your answer.", "retrieve_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "content_search": "I’m checking campus content for material relevant to your request.", "academic_lookup": "I’m checking academic records rather than guessing course or programme details.", "student_timetable": "I’m checking your class timetable so any scheduling advice can account for your classes.", "document_detail": "I’m checking the document’s available information before using it as a source.", "personal_schedule": "I’m checking your existing plans and reminders before suggesting changes.", "send_message": "I’m preparing a draft for you to review before a message can be sent.", "follow_user": "I’m preparing a follow request for your approval before it can be applied.", "propose_personal_memory": "I’m preparing the stated preference for your review; it is not approved memory yet.", "create_reminder": "I’m using the requested reminder details; creating it does not establish delivery on your phone.", "create_study_plan": "I’m saving the study plan you requested so it can be available later.", "add_study_block": "I’m adding the study session you requested to your personal schedule.", "update_study_block": "I’m applying your requested change to the existing study session.", "remove_study_block": "I’m removing the study session you asked to cancel.", "complete_study_block": "I’m recording the study session as completed at your request."};
+    const STAGE_SUMMARIES = {"reading_document_page":"I’m reviewing the authorized page evidence for your document question.", "thinking": "I’m identifying what your request needs and whether it calls for sources, account information, or a direct explanation.", "searching_web": "I’m checking external sources for information that can support your answer.", "reading_sources": "I’m reviewing the available sources for relevance before using them in the answer.", "devouring_context": "I’m reading the supplied material and connecting the relevant parts to your question.", "searching_posts": "I’m checking campus content for material relevant to your request.", "searching_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "writing_answer": "I’m putting the available evidence into a direct answer and noting any checks that could not complete.", "teaching_check": "I’m checking your study session and lesson state so the next step continues from where you left off."};
+    const publicCount = value => Number.isInteger(value) && value >= 0 ? Math.min(value,10000) : null;
+    function executionSummary(event) {
+        const kind = event.kind, status = event.status;
+        if (kind === 'stage') {
+            const stage = event.id === 'request' ? 'thinking' : String(event.id || '').replace(/^stage-/, '');
+            return STAGE_SUMMARIES[stage] || '';
+        }
+        if (kind === 'tool') {
+            if (status === 'failed') return 'This check could not complete. Its missing result cannot be treated as verified evidence.';
+            if (status === 'completed') {
+                if (event.awaiting_review === true) return 'A proposal is ready for your review. The proposed action has not been executed.';
+                const count = publicCount(event.result_count);
+                if (count !== null) return count ? `This check returned ${count} result(s). I’ll assess their relevance before using them.` : 'This check returned no matching results. It does not provide evidence for the answer.';
+                return 'The tool returned a result. I’ll use the available information where it addresses your request.';
+            }
+            return TOOL_PURPOSES[event.tool] || 'I’m checking the information needed for your request.';
+        }
+        if (kind === 'checklist') {
+            const items = event.items || [];
+            const done = items.filter(item => item.status === 'done').length;
+            const unresolved = items.filter(item => ['pending','blocked','failed'].includes(item.status)).length;
+            return `${done} of ${items.length} planned step(s) completed; ${unresolved} remain pending, blocked, or failed.`;
+        }
+        if (['verify','checklist_review'].includes(kind)) {
+            if (status === 'failed') return 'The final plan review did not complete. I cannot mark unresolved work as finished.';
+            const completed = publicCount(event.completed_checks), failed = publicCount(event.failed_checks);
+            if (completed !== null && failed !== null) return `I’m checking the plan against ${completed} successful tool check(s) and ${failed} failed check(s), so unfinished work stays visible.`;
+            return 'I’m comparing the planned steps with the recorded outcomes, so unfinished work is not reported as complete.';
+        }
+        return '';
+    }
+    function publicEvent(event) {
+        if (!event || !['stage','tool','checklist','verify','checklist_review','clarification','approval','status'].includes(event.kind)) return null;
+        const clean = {kind:event.kind, detail:'', summary:''};
+        for (const key of ['type','id','at','run_id','activity_type']) {
+            if (typeof event[key] === 'string') clean[key] = event[key];
+        }
+        clean.status = ['running','completed','failed','waiting','answered','cancelled','blocked','retrying'].includes(event.status) ? event.status : 'running';
+        if (event.kind === 'tool') {
+            clean.tool = Object.prototype.hasOwnProperty.call(TOOL_LABELS,event.tool) ? event.tool : 'other';
+            const count = publicCount(event.result_count);
+            if (clean.status === 'completed' && count !== null) clean.result_count = count;
+            if (clean.status === 'completed' && event.awaiting_review === true) clean.awaiting_review = true;
+        }
+        if (['verify','checklist_review'].includes(event.kind)) {
+            for (const key of ['completed_checks','failed_checks']) {
+                const count = publicCount(event[key]);
+                if (count !== null) clean[key] = count;
+            }
+        }
+        if (['clarification','approval'].includes(event.kind)) {
+            clean.text = String(event.text || '').slice(0,600);
+            for (const key of ['interaction_id','input_type','allow_custom_answer','questions','options','actions']) {
+                if (Object.prototype.hasOwnProperty.call(event,key)) clean[key] = event[key];
+            }
+        }
+        if (event.kind === 'stage') {
+            const stage = event.id === 'request' ? 'thinking' : String(event.id || '').replace(/^stage-/, '');
+            if (!Object.prototype.hasOwnProperty.call(STAGE_LABELS,stage)) return null;
+            clean.id = event.id === 'request' ? 'request' : 'stage-' + stage;
+            clean.text = STAGE_LABELS[stage];
+        } else if (event.kind === 'tool') {
+            clean.text = (TOOL_LABELS[clean.tool] || 'Checking the requested information') +
+                (event.status === 'completed' ? ' — complete' : event.status === 'failed' ? ' — could not complete' : '');
+        } else if (event.kind === 'checklist') {
+            clean.text = 'Execution checklist';
+            clean.items = (Array.isArray(event.items) ? event.items : []).slice(0,8).map((item,i) => ({label:'Step ' + (i+1),status:item && item.status}));
+        } else if (['verify','checklist_review'].includes(event.kind)) {
+            clean.id = 'verify'; clean.text = 'Checking execution results';
+        } else if (event.kind === 'status') clean.text = ({failed:'This task could not complete.',cancelled:'Task cancelled.',waiting:'Waiting for your answer.'})[clean.status] || 'Task updated.';
+        clean.summary = executionSummary(clean);
+        return clean;
+    }
+
     class Trail {
         constructor(live = true) {
             this.element = make('details', 'spark-activity');
@@ -132,9 +228,6 @@
             this.live.setAttribute('aria-live', 'polite');
             this.element.append(this.summary, this.checklistBox, this.list, this.live);
             this.entries = new Map();
-            this.thinkingIds = new Set();
-            this.lastThinking = '';
-            this.thinkingBox = null;
             this.lastCheckpoint = '';
             this.createdAt = Date.now();
             this.startedAt = null;
@@ -179,7 +272,9 @@
             if (this.userOpen === null) this.element.open = true;
         }
         add(event) {
+            event = publicEvent(event);
             if (!event || typeof event.text !== 'string' || !event.id) return;
+            if (['clarification','approval'].includes(event.kind) && event.run_id) event.id = event.kind + '-' + event.run_id;
             const stamp = event.at ? Date.parse(event.at) : NaN;
             if (!isNaN(stamp)) {
                 if (this.startedAt === null || stamp < this.startedAt) this.startedAt = stamp;
@@ -191,7 +286,6 @@
             }
             if (event.kind === 'checklist') { this.renderChecklist(event); return; }
             if (event.kind === 'say') return; // spoken updates render as chat bubbles, not trail steps
-            if (event.kind === 'thinking') { this.addThinking(event); return; }
             if (event.kind === 'plan' && event.text.trim()) this.lastCheckpoint = event.text.trim();
             this.checkpoint.textContent = this.lastCheckpoint;
             this.checkpoint.title = this.lastCheckpoint;
@@ -207,7 +301,7 @@
                 row.dataset.eid = event.id;
                 row.dataset.activityType = event.activity_type || '';
                 const body = row.querySelector('.spark-activity-body');
-                body.append(make('p', 'spark-activity-text'));
+                body.append(make('div', 'spark-activity-text'));
                 this.entries.set(event.id, row);
                 this.list.appendChild(row);
                 if (window.sparkRenderIcons) window.sparkRenderIcons(row);
@@ -227,7 +321,8 @@
                 }
             }
             const textEl = row.querySelector('.spark-activity-text');
-            if (event.kind === 'plan' || event.kind === 'verify') md(textEl, event.text); else textEl.textContent = event.text;
+            if (event.kind === 'clarification') textEl.textContent = event.status === 'answered' ? 'Answer recorded' : 'Clarification requested';
+            else if (event.kind === 'plan' || event.kind === 'verify') md(textEl, event.text); else textEl.textContent = event.text;
             let detailEl = row.querySelector('.spark-activity-detail');
             const detail = typeof event.detail === 'string' ? event.detail.trim() : '';
             const summary = typeof event.summary === 'string' ? event.summary.trim() : '';
@@ -236,7 +331,7 @@
                     detailEl = make('p', 'spark-activity-detail spark-activity-md');
                     textEl.after(detailEl);
                 }
-                md(detailEl, summary || detail);
+                detailEl.textContent = summary || detail;
             } else if (detailEl) {
                 detailEl.remove();
             }
@@ -253,32 +348,6 @@
                 this.element.open = true;
             }
         }
-        addThinking(event) {
-            if (this.thinkingIds.has(event.id)) return;
-            this.thinkingIds.add(event.id);
-            const text = String(event.text || '').trim();
-            // Skip near-identical consecutive updates; the planner can repeat
-            // itself across rounds and the section should stay readable.
-            if (text && text === this.lastThinking) return;
-            if (text) this.lastThinking = text;
-            if (!this.thinkingBox) {
-                const box = make('details', 'spark-thinking');
-                const summary = make('summary', 'spark-thinking-summary');
-                const brain = make('i', 'spark-thinking-icon');
-                brain.setAttribute('data-lucide', 'brain');
-                summary.append(brain, document.createTextNode('Spark’s thinking'));
-                box.appendChild(summary);
-                const body = make('div', 'spark-thinking-body');
-                box.appendChild(body);
-                this.element.insertBefore(box, this.list);
-                this.thinkingBox = box;
-                if (window.sparkRenderIcons) window.sparkRenderIcons(box);
-                if (this.mode === 'live' && this.userOpen === null) this.thinkingBox.open = true;
-            }
-            const line = make('p', 'spark-thinking-line');
-            md(line, event.text);
-            this.thinkingBox.querySelector('.spark-thinking-body').appendChild(line);
-        }
         renderChecklist(event) {
             const items = Array.isArray(event.items) ? event.items : [];
             if (!items.length) { this.checklistBox.hidden = true; return; }
@@ -290,6 +359,7 @@
             listIcon.setAttribute('data-lucide', 'list-checks');
             title.append(listIcon, document.createTextNode('Checklist'));
             this.checklistBox.appendChild(title);
+            if (event.summary) this.checklistBox.appendChild(make('p', 'spark-activity-detail', event.summary));
             const list = make('ul', 'spark-checklist-list');
             for (const item of items) {
                 const status = CHECKLIST_STATUS[item && item.status] || 'pending';
@@ -320,7 +390,7 @@
             const waiting = event.status === 'waiting' && !resolved;
             const box = make('div', 'spark-clarification' + (resolved || !waiting ? ' spark-clarification-resolved' : ''));
             box.dataset.runId = event.run_id;
-            box.appendChild(make('p', 'spark-clarification-text', event.text || 'Spark has a question.'));
+            // The question lives in the active block; retain one concise record here.
             const note = make('p', 'spark-clarification-note',
                 resolved ? 'Answered.'
                     : waiting ? 'Waiting for your answer — reply in the box above the composer.'
@@ -508,7 +578,7 @@
         const timer = setInterval(tick, 2500);
         tick();
     }
-    window.SparkActivity = {create:(live = true) => new Trail(live), hydrate};
+    window.SparkActivity = {publicEvent, create:(live = true) => new Trail(live), hydrate};
     document.addEventListener('htmx:afterSwap', () => hydrate());
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => hydrate());
     else hydrate();

@@ -37,6 +37,14 @@ class AIGateway:
             from pwanimate.ai.gateway.quota_tracker import get_quota_tracker
             self.quota_tracker = get_quota_tracker()
 
+    def _record_failure(self, provider_name, model_name, exc):
+        """Retain compatibility with existing injected quota trackers."""
+        record = getattr(self.quota_tracker, "record_failure", None)
+        if callable(record):
+            record(provider_name, model_name, exc)
+        elif isinstance(exc, AIProviderRateLimitError):
+            self.quota_tracker.record_rate_limit(provider_name, model_name)
+
     def generate(self, request: LLMRequest) -> LLMResponse:
         """
         Validate request, resolve provider chain, and execute LLM generation
@@ -124,7 +132,7 @@ class AIGateway:
                     candidate_label,
                     duration_ms,
                 )
-                self.quota_tracker.record_rate_limit(provider_name, model_name)
+                self._record_failure(provider_name, model_name, exc)
                 last_rate_limit_exc = exc
                 last_error_exc = exc
                 skipped_candidates.append({
@@ -134,6 +142,7 @@ class AIGateway:
                 })
                 continue
             except AIProviderAuthenticationError as exc:
+                self._record_failure(provider_name, model_name, exc)
                 logger.warning(
                     "AI Gateway authentication failed: candidate=%s error=%s, trying eligible fallback",
                     candidate_label,
@@ -158,7 +167,7 @@ class AIGateway:
                 # requests can retry it immediately (connection errors are
                 # transient and should not trigger rate-limit cooldown)
                 if self.quota_tracker is not None:
-                    self.quota_tracker.clear_candidate(provider_name, model_name)
+                    self._record_failure(provider_name, model_name, exc)
                 last_error_exc = exc
                 skipped_candidates.append({
                     "provider": provider_name,
@@ -208,6 +217,7 @@ class AIGateway:
             }
             response.metadata["quota_info"] = quota_info
             response.metadata["fallback_used"] = is_switched
+            response.metadata['provider_attempt_count'] = len(attempted_candidates)
 
             if is_switched:
                 response.metadata["original_provider"] = original_provider
@@ -395,6 +405,7 @@ class AIGateway:
                     "cooldown_remaining": self.quota_tracker.get_cooldown_remaining(original_provider, original_model),
                 }
                 interrupted.metadata["fallback_used"] = is_switched
+                interrupted.metadata['provider_attempt_count'] = len(attempted_candidates)
                 return interrupted
 
             try:
@@ -438,7 +449,7 @@ class AIGateway:
                     candidate_label,
                     duration_ms,
                 )
-                self.quota_tracker.record_rate_limit(provider_name, model_name)
+                self._record_failure(provider_name, model_name, exc)
                 last_rate_limit_exc = exc
                 last_error_exc = exc
                 skipped_candidates.append({
@@ -448,6 +459,7 @@ class AIGateway:
                 })
                 continue
             except AIProviderAuthenticationError as exc:
+                self._record_failure(provider_name, model_name, exc)
                 if emitted_any:
                     return build_interrupted(exc)
                 logger.warning(
@@ -473,7 +485,7 @@ class AIGateway:
                     duration_ms,
                 )
                 if self.quota_tracker is not None:
-                    self.quota_tracker.clear_candidate(provider_name, model_name)
+                    self._record_failure(provider_name, model_name, exc)
                 last_error_exc = exc
                 skipped_candidates.append({
                     "provider": provider_name,
@@ -523,6 +535,7 @@ class AIGateway:
             }
             response.metadata["quota_info"] = quota_info
             response.metadata["fallback_used"] = is_switched
+            response.metadata['provider_attempt_count'] = len(attempted_candidates)
 
             if is_switched:
                 response.metadata["original_provider"] = original_provider

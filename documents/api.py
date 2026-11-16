@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 """Django REST Framework API viewsets for the Document Repository."""
 
 from rest_framework import viewsets, status, filters
@@ -151,22 +152,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
             'document_tags__tag',
         )
         
-        user = self.request.user
-        if not user.is_authenticated:
-            return queryset.filter(
-                status='ready',
-                visibility='public'
-            )
-        
-        # Staff, superusers, and executive student leaders can view all documents
-        if user.is_staff or user.is_superuser or getattr(user, 'global_role', None) in [GlobalRole.PRESIDENT, GlobalRole.DELEGATE]:
-            return queryset.filter(Q(is_ai_generated=False) | Q(uploaded_by=user))
-        
-        # Authenticated users can see ready public documents or their own uploads
-        return queryset.filter(
-            Q(status='ready', visibility='public', is_ai_generated=False) | Q(uploaded_by=user)
-        )
-    
+        from documents.access_policy import DocumentAccessPolicy
+        return queryset.filter(pk__in=DocumentAccessPolicy.authorized_documents(
+            self.request.user, require_ready=self.action not in {'retrieve','update','partial_update','destroy'}).values('pk'))
+
     def perform_create(self, serializer):
         """Set uploaded_by on document creation."""
         serializer.save(uploaded_by=self.request.user)
@@ -290,12 +279,16 @@ class DocumentViewSet(viewsets.ModelViewSet):
     def download(self, request, pk=None):
         """Record a document download."""
         document = self.get_object()
+        from documents.access_policy import DocumentAccessPolicy
+        if not DocumentAccessPolicy.can_read(request.user, document):
+            from django.http import Http404
+            raise Http404('Document not found')
         file_id = request.data.get('file_id')
         
         from .engagement.models import DocumentDownload
         from .documents.models import DocumentFile
         
-        document_file = DocumentFile.objects.get(id=file_id) if file_id else document.latest_version.files.first()
+        document_file = get_object_or_404(DocumentFile, id=file_id, document_version__document=document) if file_id else document.latest_version.files.first()
         
         DocumentDownload.objects.create(
             document=document,

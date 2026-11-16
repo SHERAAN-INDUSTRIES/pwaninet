@@ -209,6 +209,10 @@
         }
 
         init() {
+            this.refreshMemoryProposals();
+            this.refreshAcademicTracking();
+            this._memoryFocus = () => { this.refreshMemoryProposals(); this.refreshAcademicTracking(); };
+            window.addEventListener('focus', this._memoryFocus);
             this.initWorkspaceGeometry();
             this.initInitialContextResources();
             this.initStudyMode();
@@ -829,6 +833,8 @@
                 this.workspace.dataset.studyMode = this.studyModeActive ? 'true' : 'false';
                 if (this.studySessionId) {
                     this.workspace.dataset.studySessionId = this.studySessionId;
+                } else {
+                    delete this.workspace.dataset.studySessionId;
                 }
             }
             if (this.input) {
@@ -1014,6 +1020,9 @@
                 });
                 if (!response.ok) return;
                 const data = await response.json();
+                if (data.memory_proposal_status) {
+                    this._memoryProposalNotice = {...data.memory_proposal_status, conversationId:this.conversationId};
+                }
                 if (data.study_session) {
                     this.activeStudySession = data.study_session;
                 }
@@ -1953,6 +1962,9 @@
 
         renderMarkdownWithMathAndCode(content) {
             if (!content) return '';
+            content = String(content);
+            // Fail closed when the sanitizer has not loaded. Never insert raw HTML.
+            if (!window.DOMPurify || typeof window.DOMPurify.sanitize !== 'function' || window.DOMPurify.isSupported === false) return escapeHtml(content);
 
             // 0. Transform accidental synthetic tool calls into Markdown
             let processed = content;
@@ -1960,9 +1972,18 @@
                 processed = this.sanitizeToolCallTokens(processed);
             }
 
+            // Protect fenced/inline code from math extraction. Restore verbatim
+            // before Marked parses it, so dollar signs/backslashes remain code.
+            const nonce = 'SPARK' + Math.random().toString(36).slice(2);
+            const codePlaceholders = [];
+            processed = processed.replace(/(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n\2[ \t]*(?=\n|$)|(`+)[^\n]*?\3/g, raw => {
+                const id = nonce + 'CODE' + codePlaceholders.length + 'END';
+                codePlaceholders.push({id,raw});
+                return id;
+            });
             const mathPlaceholders = [];
             const storeMath = (mathCode, displayMode) => {
-                const id = `PWANIMATE_MATH_PH_${mathPlaceholders.length}_XYZ`;
+                const id = `${nonce}MATH${mathPlaceholders.length}END`;
                 mathPlaceholders.push({ id, code: mathCode, displayMode });
                 return id;
             };
@@ -1983,6 +2004,8 @@
                 if (!code.trim()) return match;
                 return storeMath(code, false);
             });
+
+            for (const {id,raw} of codePlaceholders) processed = processed.split(id).join(raw);
 
             // 3. Marked parse
             let html = '';
@@ -2014,7 +2037,8 @@
                         const renderedMath = window.katex.renderToString(decodedCode, {
                             displayMode: displayMode,
                             throwOnError: false,
-                            output: 'htmlAndMathml'
+                            output: 'htmlAndMathml',
+                            trust: false, maxExpand: 1000, maxSize: 20
                         });
                         html = html.split(id).join(renderedMath);
                     } catch (err) {
@@ -2030,7 +2054,11 @@
                 });
             }
 
-            return html;
+            // Sanitize the complete result, including inserted math output.
+            return window.DOMPurify.sanitize(html, {
+                USE_PROFILES: {html:true, mathMl:true},
+                FORBID_TAGS: ['script','style','iframe','object','embed','form','input','button'],
+            });
         }
 
         getSafeExternalUrl(value) {
@@ -2341,11 +2369,7 @@
             if (this.composerForm) {
                 this.composerForm.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    if (this.isGenerating) {
-                        this.handleAbort();
-                    } else {
-                        this.handleSend();
-                    }
+                    if (!this.isGenerating) this.handleSend();
                 });
             }
 
@@ -2387,11 +2411,7 @@
                     if (e.key === 'Enter' && !e.shiftKey) {
                         if (isFinePointerDevice()) {
                             e.preventDefault();
-                            if (this.isGenerating) {
-                                this.handleAbort();
-                            } else {
-                                this.handleSend();
-                            }
+                            if (!this.isGenerating) this.handleSend();
                         }
                         // On touch/coarse devices, do not preventDefault: native newline is inserted
                     }
@@ -5589,25 +5609,44 @@
             const sig = this._interactionSignature();
             if (this._interactionBlockEl && this._interactionBlockSig === sig) return;
             if (this._interactionBlockEl) {
+                if (this._interactionBlockEl._composerDraftCleanup) this._interactionBlockEl._composerDraftCleanup();
                 this._interactionBlockEl.remove();
                 this._interactionBlockEl = null;
                 this._interactionBlockSig = '';
             }
+            this._restoreComposerPlaceholder();
             if (!sig) return;
             const el = this._buildInteractionBlock(this.pendingInteraction);
             this.composerForm.parentNode.insertBefore(el, this.composerForm);
             this._interactionBlockEl = el;
             this._interactionBlockSig = sig;
+            if (el.classList.contains('spark-interaction-block--merged') && this.input) {
+                if (this._savedComposerPlaceholder === undefined) {
+                    this._savedComposerPlaceholder = this.input.placeholder;
+                }
+                this.input.placeholder = 'Type your answer';
+            }
             if (window.sparkRenderIcons) window.sparkRenderIcons(el);
+        }
+
+        _restoreComposerPlaceholder() {
+            if (this.input && this._savedComposerPlaceholder !== undefined
+                    && this.input.placeholder === 'Type your answer') {
+                this.input.placeholder = this._savedComposerPlaceholder;
+            }
+            this._savedComposerPlaceholder = undefined;
         }
 
         // Renders the answer controls for ONE question spec and returns
         // {read, controls}: read() yields the normalized answer payload
         // ({text}|{selected}|{confirmed}) or undefined when unanswered.
-        _questionControls(q, initial, onChange) {
+        // opts.suppressCustom hides inline free-text fields — used when the
+        // main composer is the typed-answer field for this interaction.
+        _questionControls(q, initial, onChange, opts = null) {
             const frag = document.createDocumentFragment();
             const controls = [];
             let current = initial || null;
+            const suppressCustom = Boolean(opts && opts.suppressCustom);
             const itype = q.input_type || 'text';
             const options = Array.isArray(q.options) ? q.options.filter(o => o && (o.id || o.label)) : [];
             const emit = (value) => { current = value; if (onChange) onChange(value); };
@@ -5621,8 +5660,13 @@
                 no.textContent = 'Decline';
                 if (current && current.confirmed === true) yes.classList.add('is-selected');
                 if (current && current.confirmed === false) no.classList.add('is-selected');
-                yes.addEventListener('click', () => emit({confirmed: true}));
-                no.addEventListener('click', () => emit({confirmed: false}));
+                const choose = value => {
+                    yes.classList.toggle('is-selected',value); no.classList.toggle('is-selected',!value);
+                    yes.setAttribute('aria-pressed',String(value)); no.setAttribute('aria-pressed',String(!value));
+                    emit({confirmed:value});
+                };
+                yes.addEventListener('click', () => choose(true));
+                no.addEventListener('click', () => choose(false));
                 frag.append(yes, no);
                 controls.push(yes, no);
                 return {read: () => current, controls, el: frag};
@@ -5634,7 +5678,10 @@
                 const selected = new Set((current && current.selected) || []);
                 let customInput = null;
                 const syncCustom = () => {
-                    if (!customInput) return;
+                    if (!customInput) {
+                        if (itype === 'multi_choice') emit(selected.size ? {selected:[...selected]} : null);
+                        return;
+                    }
                     const text = (customInput.value || '').trim();
                     if (text) {
                         emit(itype === 'single_choice' ? {text} : {selected: [...selected], text});
@@ -5648,7 +5695,7 @@
                     const b = document.createElement('button');
                     b.type = 'button';
                     b.className = 'spark-interaction-option' + (selected.has(opt.id) ? ' is-selected' : '');
-                    b.textContent = opt.label || opt.id;
+                    b.innerHTML = this.renderMarkdownWithMathAndCode(String(opt.label || opt.id));
                     b.addEventListener('click', () => {
                         if (itype === 'single_choice') {
                             wrap.querySelectorAll('.spark-interaction-option').forEach(x => x.classList.remove('is-selected'));
@@ -5667,7 +5714,7 @@
                     wrap.appendChild(b);
                 }
                 frag.appendChild(wrap);
-                if (q.allow_custom_answer !== false && itype === 'multi_choice') {
+                if (q.allow_custom_answer !== false && itype === 'multi_choice' && !suppressCustom) {
                     // Multi-select keeps a visible free-text field alongside
                     // the choices, matching the original single-question UI.
                     const holder = document.createElement('div');
@@ -5681,7 +5728,7 @@
                     customInput.addEventListener('input', syncCustom);
                     holder.appendChild(customInput);
                     frag.appendChild(holder);
-                } else if (q.allow_custom_answer !== false) {
+                } else if (q.allow_custom_answer !== false && !suppressCustom) {
                     const other = document.createElement('button');
                     other.type = 'button';
                     other.className = 'spark-interaction-option spark-interaction-other';
@@ -5744,8 +5791,8 @@
             progress.className = 'spark-interaction-progress';
             el.appendChild(progress);
 
-            const prompt = document.createElement('p');
-            prompt.className = 'spark-interaction-prompt';
+            const prompt = document.createElement('div');
+            prompt.className = 'spark-interaction-prompt pwanimate-markdown-body';
             el.appendChild(prompt);
 
             const status = document.createElement('p');
@@ -5766,6 +5813,17 @@
                     required: pi.required !== false,
                     allow_custom_answer: pi.allow_custom_answer !== false}];
 
+            // Unified composer interactions: typed questions and mixed
+            // choice+text questions render as the upper section of the
+            // composer — the main input IS the answer field and its Send
+            // submits through the same durable resume path. Choices-only,
+            // confirm and group wizards keep their standalone block.
+            const primaryType = isGroup ? null : (pi.input_type || 'text');
+            const isChoiceQuestion = primaryType === 'single_choice' || primaryType === 'multi_choice';
+            const mergedComposer = !isGroup && primaryType !== 'confirm'
+                && !(isChoiceQuestion && pi.allow_custom_answer === false);
+            if (mergedComposer) el.classList.add('spark-interaction-block--merged');
+
             // Editing state: independent answers per stable question id,
             // current index, and submission lifecycle. Drafts persist in
             // localStorage so a refresh restores progress and answers.
@@ -5776,10 +5834,17 @@
                 if (draft && typeof draft === 'object') {
                     if (Number.isInteger(draft.index)) state.index = Math.min(Math.max(draft.index, 0), questions.length - 1);
                     if (draft.answers && typeof draft.answers === 'object') state.answers = draft.answers;
+                    if (mergedComposer && typeof draft.composer_text === 'string'
+                            && draft.composer_text && this.input && !this.input.value.trim()) {
+                        this.input.value = draft.composer_text;
+                        if (this.resetTextareaHeight) this.resetTextareaHeight();
+                    }
                 }
             } catch (_) {}
             const saveDraft = () => {
-                try { localStorage.setItem(draftKey, JSON.stringify({index: state.index, answers: state.answers})); } catch (_) {}
+                const draftPayload = {index: state.index, answers: state.answers};
+                if (mergedComposer && this.input) draftPayload.composer_text = this.input.value || '';
+                try { localStorage.setItem(draftKey, JSON.stringify(draftPayload)); } catch (_) {}
             };
             const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch (_) {} };
 
@@ -5788,22 +5853,23 @@
 
             const setBusy = (busy) => {
                 state.submitting = busy;
-                document.querySelectorAll('.spark-interaction-block button, .spark-interaction-block input, .spark-interaction-block textarea')
+                el.querySelectorAll('button, input, textarea')
                     .forEach(c => { c.disabled = busy; });
                 status.textContent = busy ? 'Sending…' : '';
                 status.classList.remove('is-error');
             };
             const fail = (message) => {
+                setBusy(false);
+                backBtn.disabled = state.index === 0;
                 status.dataset.error = '1';
                 status.textContent = message || 'Could not send your answer. Try again.';
                 status.classList.add('is-error');
-                setBusy(false);
             };
             const submit = (payload) => {
                 if (this.isGenerating || state.submitting) return;
                 setBusy(true);
                 this.resumeInteraction(pi.run_id, pi.interaction_id, payload, null)
-                    .then(() => { state.submitting = false; clearDraft(); })
+                    .then(() => { clearDraft(); el.remove(); })
                     .catch(err => {
                         state.submitting = false;
                         fail(err && err.message ? err.message : 'Could not send your answer. Try again.');
@@ -5815,8 +5881,6 @@
             const backBtn = document.createElement('button');
             backBtn.type = 'button'; backBtn.className = 'spark-interaction-nav-btn';
             backBtn.textContent = 'Back';
-            const nextBtn = document.createElement('button');
-            nextBtn.type = 'button'; nextBtn.className = 'btn btn-sm btn-primary spark-interaction-submit';
             const sendBtn = document.createElement('button');
             sendBtn.type = 'button'; sendBtn.className = 'btn btn-sm btn-primary spark-interaction-submit';
             sendBtn.textContent = 'Send';
@@ -5832,72 +5896,93 @@
             };
 
             const render = () => {
-                collectCurrent();
                 saveDraft();
                 const q = questions[state.index];
                 body.replaceChildren();
                 allControls.length = 0;
                 progress.textContent = isGroup ? `Question ${state.index + 1} of ${questions.length}` : '';
                 progress.hidden = !isGroup;
-                prompt.textContent = q.prompt || 'Spark has a question.';
-                view = this._questionControls(q, state.answers[q.id], (value) => {
-                    if (value) state.answers[q.id] = value; else delete state.answers[q.id];
-                    saveDraft();
-                });
-                body.appendChild(view.el);
-                allControls.push(...view.controls);
-                nav.replaceChildren();
-                if (isGroup) {
-                    backBtn.disabled = state.index === 0 || state.submitting;
-                    backBtn.onclick = () => { if (state.index > 0) { state.index -= 1; render(); } };
-                    if (state.index < questions.length - 1) {
-                        nextBtn.textContent = 'Next';
-                        nextBtn.disabled = state.submitting;
-                        nextBtn.onclick = () => { state.index += 1; render(); };
-                        nav.append(backBtn, nextBtn);
-                    } else {
-                        sendBtn.disabled = state.submitting;
-                        sendBtn.onclick = () => {
-                            collectCurrent();
-                            const missing = questions.findIndex(qq =>
-                                qq.required !== false && !state.answers[qq.id]);
-                            if (missing >= 0) {
-                                state.index = missing;
-                                render();
-                                status.dataset.error = '1';
-                                status.textContent = 'Please answer every required question.';
-                                status.classList.add('is-error');
-                                return;
-                            }
-                            const answers = {};
-                            for (const qq of questions) {
-                                if (state.answers[qq.id]) answers[qq.id] = state.answers[qq.id];
-                            }
-                            submit({answers});
-                        };
-                        nav.append(backBtn, sendBtn);
-                    }
+                prompt.innerHTML = this.renderMarkdownWithMathAndCode(q.prompt || 'Spark has a question.');
+                if (mergedComposer && !isChoiceQuestion) {
+                    // Typed question: the composer is the answer field — the
+                    // panel only carries the prompt, status and escape links.
+                    view = null;
                 } else {
-                    // Mode A: explicit Send — selecting an option never
-                    // resolves the interaction by itself.
-                    sendBtn.textContent = 'Send';
-                    sendBtn.disabled = state.submitting;
-                    sendBtn.onclick = () => {
-                        collectCurrent();
-                        const qid = questions[0].id;
-                        const ans = state.answers[qid];
-                        if (!ans) { status.textContent = 'Please answer the question.'; status.classList.add('is-error'); return; }
-                        if (ans.confirmed !== undefined) submit({confirmed: ans.confirmed});
-                        else if (ans.selected) submit({selected: ans.selected, ...(ans.text ? {text: ans.text} : {})});
-                        else submit({text: ans.text});
-                    };
-                    nav.append(sendBtn);
+                    view = this._questionControls(q, state.answers[q.id], (value) => {
+                        if (value) state.answers[q.id] = value; else delete state.answers[q.id];
+                        saveDraft();
+                        this.updateSendButtonState?.();
+                    }, mergedComposer ? {suppressCustom: true} : null);
+                    body.appendChild(view.el);
+                    allControls.push(...view.controls);
                 }
-                el.querySelector('.spark-interaction-nav-slot')?.remove();
-                const slot = document.createElement('div');
-                slot.className = 'spark-interaction-nav-slot';
-                slot.appendChild(nav);
-                body.after(slot);
+                if (mergedComposer) {
+                    const hint = document.createElement('p');
+                    hint.className = 'spark-interaction-hint';
+                    hint.textContent = isChoiceQuestion
+                        ? 'Choose options above and/or type your answer below — Send submits both together.'
+                        : 'Type your answer in the message box below, then press Send.';
+                    body.appendChild(hint);
+                }
+                nav.replaceChildren();
+                backBtn.disabled = state.index === 0 || state.submitting;
+                backBtn.onclick = () => {
+                    if (state.submitting || state.index === 0) return;
+                    collectCurrent();
+                    state.index -= 1;
+                    view = null;
+                    render();
+                };
+                sendBtn.disabled = state.submitting;
+                sendBtn.onclick = () => {
+                    if (state.submitting || this.isGenerating) return;
+                    collectCurrent();
+                    saveDraft();
+                    const q = questions[state.index];
+                    if (q.required !== false && !state.answers[q.id]) {
+                        fail('Please answer the question.');
+                        return;
+                    }
+                    status.textContent = '';
+                    status.classList.remove('is-error');
+                    // Only Send advances. Never collect the old controls under a new ID.
+                    if (isGroup && state.index < questions.length - 1) {
+                        state.index += 1;
+                        view = null;
+                        render();
+                        body.querySelector('textarea, input, button')?.focus();
+                        return;
+                    }
+                    const missing = questions.findIndex(qq => qq.required !== false && !state.answers[qq.id]);
+                    if (missing >= 0) {
+                        state.index = missing;
+                        view = null;
+                        render();
+                        fail('Please answer every required question.');
+                        return;
+                    }
+                    if (isGroup) {
+                        const answers = {};
+                        for (const qq of questions) {
+                            if (state.answers[qq.id]) answers[qq.id] = state.answers[qq.id];
+                        }
+                        submit({answers});
+                    } else {
+                        submit(state.answers[questions[0].id] || {text: ''});
+                    }
+                };
+                if (mergedComposer) {
+                    // No in-panel Send for composer-answered interactions.
+                    el.querySelector('.spark-interaction-nav-slot')?.remove();
+                } else {
+                    if (isGroup) nav.appendChild(backBtn);
+                    nav.appendChild(sendBtn);
+                    el.querySelector('.spark-interaction-nav-slot')?.remove();
+                    const slot = document.createElement('div');
+                    slot.className = 'spark-interaction-nav-slot';
+                    slot.appendChild(nav);
+                    body.after(slot);
+                }
                 if (window.sparkRenderIcons) window.sparkRenderIcons(body);
             };
 
@@ -5926,6 +6011,31 @@
             });
             foot.append(fresh, cancel);
             el.appendChild(foot);
+
+            if (mergedComposer) {
+                // The composer Send calls this to assemble the atomic answer:
+                // panel selections plus typed text, validated server-side.
+                el._composerAnswer = (composerText) => {
+                    const typed = (composerText || '').trim();
+                    if (isChoiceQuestion) {
+                        const stored = state.answers[questions[0].id];
+                        const selected = stored && Array.isArray(stored.selected) ? stored.selected : [];
+                        if (!selected.length && !typed) return null;
+                        const payload = {};
+                        if (selected.length) payload.selected = selected;
+                        if (typed) payload.text = typed;
+                        return payload;
+                    }
+                    return typed ? {text: typed} : null;
+                };
+                // Composer keystrokes persist into the same interaction draft
+                // so reconnects and reloads restore the typed answer too.
+                const persistComposerDraft = () => saveDraft();
+                if (this.input) this.input.addEventListener('input', persistComposerDraft);
+                el._composerDraftCleanup = () => {
+                    if (this.input) this.input.removeEventListener('input', persistComposerDraft);
+                };
+            }
             render();
             return el;
         }
@@ -5952,7 +6062,7 @@
                     latestWait = e;
                 }
             }
-            const metaRun = data && data.metadata && data.metadata.run;
+            const metaRun = (data && data.run) || (data && data.metadata && data.metadata.run);
             const interaction = (data && data.interaction)
                 || (metaRun && metaRun.interaction) || null;
             if (interaction && interaction.interaction_id) {
@@ -5966,7 +6076,8 @@
                     questions: Array.isArray(interaction.questions) ? interaction.questions : [],
                     allow_custom_answer: interaction.allow_custom_answer !== false,
                 };
-            } else if (latestWait && latestWait.kind === 'clarification') {
+            } else if (!metaRun && latestWait && latestWait.kind === 'clarification'
+                    && !this._acceptedInteractions?.has(String(latestWait.interaction_id))) {
                 this.pendingInteraction = {
                     run_id: latestWait.run_id,
                     interaction_id: latestWait.interaction_id || null,
@@ -5980,10 +6091,23 @@
             } else {
                 this.pendingInteraction = null;
             }
-            this.activeRunId = (latestWait && latestWait.run_id)
+            this.activeRunId = (metaRun && metaRun.id) || (latestWait && latestWait.run_id)
                 || (interaction && interaction.run_id)
                 || (data && data.run_id) || null;
             this._syncInteractionBlock();
+        }
+
+        _acceptInteraction(runId, interactionId) {
+            if (!interactionId) return;
+            if (!this._acceptedInteractions) this._acceptedInteractions = new Set();
+            this._acceptedInteractions.add(String(interactionId));
+            try { localStorage.removeItem('spark-interaction-draft:' + interactionId); } catch (_) {}
+            if (String(this.pendingInteraction?.interaction_id) === String(interactionId)) {
+                this._markClarificationResolved(runId);
+                this.pendingInteraction = null;
+                this.setWaitingForInput(false);
+            }
+            this.activeRunId = runId;
         }
 
         _clearRunState() {
@@ -6018,17 +6142,28 @@
                 this.sendBtn.setAttribute('title', 'Stop voice input before sending');
                 return;
             }
-            if (this.isGenerating || this.waitingForInput) {
+            if (this.isGenerating) {
                 this.sendBtn.disabled = false;
                 this.sendBtn.classList.add('is-generating');
                 this.sendBtn.classList.remove('is-active');
-                if (this.isGenerating) {
-                    this.sendBtn.setAttribute('aria-label', 'Stop generating');
-                    this.sendBtn.setAttribute('title', 'Stop generating (Esc)');
-                } else {
-                    this.sendBtn.setAttribute('aria-label', 'Spark is waiting for your input');
-                    this.sendBtn.setAttribute('title', 'Spark is paused until you respond');
-                }
+                this.sendBtn.setAttribute('aria-label', 'Stop generating');
+                this.sendBtn.setAttribute('title', 'Stop generating (Esc)');
+                return;
+            }
+            if (this.waitingForInput) {
+                // Paused for input: a normal Send affordance — the stop glyph
+                // would wrongly suggest generation is still running. Enabled
+                // state reflects whether the composer can produce an answer.
+                this.sendBtn.classList.remove('is-generating');
+                const block = this._interactionBlockEl;
+                const answerReady = Boolean(block
+                    && block.classList.contains('spark-interaction-block--merged')
+                    && typeof block._composerAnswer === 'function'
+                    && block._composerAnswer(this.input ? this.input.value : ''));
+                this.sendBtn.disabled = false;
+                this.sendBtn.classList.toggle('is-active', answerReady);
+                this.sendBtn.setAttribute('aria-label', answerReady ? 'Send answer' : 'Spark is waiting for your input');
+                this.sendBtn.setAttribute('title', answerReady ? 'Send answer (Enter)' : 'Spark is paused until you respond');
                 return;
             }
 
@@ -6476,8 +6611,44 @@
             const hasStagedAttachments = isRetry
                 ? (retryOptions.attachments || []).length > 0
                 : (this.stagedAttachments && this.stagedAttachments.length > 0);
-            if (!text && !hasStagedAttachments) {
+            // While a typed/mixed interaction is pending, the panel merged
+            // with the composer supplies panel selections; the composer text
+            // is the typed part of the same atomic answer.
+            const pendingBlock = (!isRetry && this.waitingForInput && this.pendingInteraction
+                    && this._interactionBlockEl
+                    && this._interactionBlockEl.classList.contains('spark-interaction-block--merged')
+                    && String(this._interactionBlockEl.dataset.interactionId) === String(this.pendingInteraction.interaction_id))
+                ? this._interactionBlockEl : null;
+            const composerAnswer = pendingBlock && typeof pendingBlock._composerAnswer === 'function'
+                ? pendingBlock._composerAnswer(text) : null;
+
+            if (!text && !hasStagedAttachments && !composerAnswer) {
                 if (this.waitingForInput) this.showSystemNotice('Spark is waiting for your input above — answer the question or review the actions to continue.');
+                return;
+            }
+
+            if (!isRetry && this.waitingForInput && this.pendingInteraction) {
+                const pi = this.pendingInteraction;
+                if (pi.input_type === 'group' || hasStagedAttachments
+                        || (!pendingBlock && pi.input_type !== 'text')) {
+                    this.showSystemNotice('Use the question block to submit all required answers.');
+                    return;
+                }
+                const answer = pendingBlock ? composerAnswer : {text};
+                if (!answer) {
+                    this.showSystemNotice('Please answer the question — type your reply below.');
+                    return;
+                }
+                try {
+                    await this.resumeInteraction(pi.run_id, pi.interaction_id, answer, this.currentActivityTrail);
+                    // Submitted: always clean the composer — text typed while
+                    // the answer was in flight must not linger as a stray draft.
+                    if (this.input) {
+                        this.input.value = '';
+                        this.resetTextareaHeight();
+                        this.updateSendButtonState?.();
+                    }
+                } catch (_) { /* Existing continuation handler preserves the draft and error. */ }
                 return;
             }
 
@@ -6622,7 +6793,6 @@
                         // The final answer has started streaming: collapse the
                         // completed preparation trail unless the student
                         // explicitly opened it.
-                        if (this.currentActivityTrail) this.currentActivityTrail.finish();
                     }
                     streamRaw += chunkText;
                     if (!streamRenderTimer) {
@@ -6666,6 +6836,7 @@
                 }
 
                 if (!responseOk) {
+                    if (data.study_context) await this.refreshStudyContext();
                     let errMsg = data.error || 'Failed to get answer from Spark.';
                     if (responseStatus === 429) {
                         errMsg = data.error || 'All free-tier model quotas are temporarily depleted. Please wait a moment for limits to reset.';
@@ -6734,7 +6905,9 @@
                 });
                 // A paused run shows only the trail's input block — the question
                 // or approval prompt is not a normal answer bubble.
-                const assistantRow = this.appendAssistantMessage(awaitingInput ? '' : data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || []);
+                this._showAcademicPreflight?.({conversation_id:data.conversation_id, actions:data.academic_actions || []});
+                const assistantRow = this.appendAssistantMessage(awaitingInput && !data.metadata?.teaching ? '' : data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || [], data.follow_ups || [], data.academic_actions || []);
+                this.renderTeachingMode?.(assistantRow, data.metadata?.teaching);
                 this.adoptActivity(assistantRow, data.activity || [], Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification));
                 const disclaimer = this.transcript.querySelector('#pwanimate-chat-disclaimer');
                 if (disclaimer) disclaimer.classList.remove('d-none');
@@ -6857,28 +7030,9 @@
 
         }
 
-        appendInterimMessage(text, eventId) {
-            if (!text || !String(text).trim()) return null;
-            if (!this.renderedSayIds) this.renderedSayIds = new Set();
-            if (eventId && this.renderedSayIds.has(eventId)) return null;
-            if (eventId) this.renderedSayIds.add(eventId);
-            const row = document.createElement('div');
-            row.className = 'pwanimate-message-row assistant pwanimate-interim-row';
-            row.innerHTML = `
-                <div class="pwanimate-message-content">
-                    <div class="pwanimate-assistant-bubble pwanimate-interim-bubble">
-                        <div class="pwanimate-markdown-body">${this.renderMarkdownWithMathAndCode(String(text))}</div>
-                    </div>
-                </div>
-            `;
-            const typing = this.transcript ? this.transcript.querySelector('#pwanimate-typing-row') : null;
-            if (typing && typing.parentNode === this.transcript) {
-                this.transcript.insertBefore(row, typing);
-            } else {
-                this.appendTranscriptRow(row);
-            }
-            this.scrollToBottom();
-            return row;
+        appendInterimMessage() {
+            // Old journal "say" entries were planner narration, never chat turns.
+            return null;
         }
 
         ensureActivityTrail() {
@@ -6951,6 +7105,7 @@
             const decoder = new TextDecoder();
             let buffer = '';
             let finalPayload = null;
+            let answerStarted = false;
 
             const dispatchBlock = (block) => {
                 const lines = block.split(/\r?\n/);
@@ -6969,7 +7124,12 @@
                     return;
                 }
 
-                if (eventName === 'activity') {
+                if (eventName === 'academic_consent') {
+                    this._showAcademicPreflight(payload);
+                } else if (eventName === 'interaction_accepted') {
+                    this._acceptInteraction?.(payload.run_id, payload.interaction_id);
+                } else if (eventName === 'activity') {
+                    if (payload?.kind === 'clarification' && this._acceptedInteractions?.has(String(payload.interaction_id))) return;
                     if (payload && payload.kind === 'say') {
                         // Spark speaks mid-task: a real bubble, not a trail step.
                         this.appendInterimMessage(payload.text, payload.id);
@@ -6983,30 +7143,28 @@
                         // A durable run just paused: the composer can now answer
                         // the pending interaction through the same resolution path.
                         this.activeRunId = payload.run_id;
-                        if (payload.kind === 'clarification') {
-                            this.pendingInteraction = {
-                                run_id: payload.run_id,
-                                interaction_id: payload.interaction_id || null,
-                                input_type: payload.input_type || 'text',
-                                kind: 'clarification',
-                                prompt: payload.text || '',
-                                options: Array.isArray(payload.options) ? payload.options : [],
-                                questions: Array.isArray(payload.questions) ? payload.questions : [],
-                                allow_custom_answer: payload.allow_custom_answer !== false,
-                            };
-                        } else {
-                            this.pendingInteraction = null;
-                        }
-                        this._syncInteractionBlock();
+                        // Journal waits are historical progress, not authoritative form state.
+                        // The terminal envelope / run status supplies the current interaction.
                     }
                 } else if (eventName === 'status') {
                     this.updateThinkingStatus(payload.stage);
                 } else if (eventName === 'chunk') {
+                    if (!answerStarted && typeof payload.text === 'string' && payload.text.trim()) {
+                        answerStarted = true;
+                        const trail = this.currentActivityTrail;
+                        if (trail) {
+                            trail.finish();
+                            trail.element.open = false;
+                        }
+                    }
                     if (onChunk && typeof payload.text === 'string') {
                         onChunk(payload.text);
                     }
                 } else if (eventName === 'response') {
                     finalPayload = payload;
+                    if (payload.data?.response_complete === false && !payload.data?.metadata?.awaiting_input && payload.data?.answer) {
+                        this.showSystemNotice('This response is incomplete. Saved partial text is not completed learning.');
+                    }
                 }
             };
 
@@ -7256,74 +7414,7 @@
         }
 
         async resumeAgent(runId, decision, actionIds, priorTrail, eventId = null) {
-            if (this.isGenerating) return;
-            this.setGenerating(true);
-            this.abortController = new AbortController();
-            this.showTypingIndicator();
-            this.currentActivityTrail = priorTrail;
-            priorTrail.element.open = true;
-            priorTrail.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            let stillWaiting = false;
-            try {
-                const response = await fetch('/api/pwanimate/chat/', {
-                    method:'POST', credentials:'same-origin',signal:this.abortController.signal,
-                    headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json','X-CSRFToken':getCsrfToken()},
-                    body:JSON.stringify({resume_run_id:runId,decision,action_ids:actionIds})
-                });
-                const result = (response.headers.get('content-type') || '').includes('text/event-stream')
-                    ? await this.readChatEventStream(response) : {status_code:response.status,data:await response.json()};
-                const data = result.data || {};
-                if (result.status_code >= 400) throw new Error(data.error || 'Could not continue this task.');
-                if (data.approval_pending) {
-                    stillWaiting = true;
-                    this._trackRunState(data);
-                    if (eventId) this.resolvedActivityEvents.add(eventId);
-                    priorTrail.add({id:'approval-'+runId,kind:'approval',text:'Please review the remaining actions.',status:'waiting',run_id:runId,actions:data.run.actions});
-                    priorTrail.finish(true);
-                    // Replace the original approval controls, which may contain stale decisions.
-                    priorTrail.element.querySelectorAll('.spark-approval').forEach(box => {
-                        if (box !== priorTrail.element.querySelector('.spark-activity-step:last-child .spark-approval')) box.remove();
-                    });
-                    return;
-                }
-                this.removeTypingIndicator();
-                (data.activity || []).forEach(e => {
-                    if (e && e.kind === 'say') this.appendInterimMessage(e.text, e.id);
-                });
-                const awaitingNow = Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification);
-                if (eventId) this.resolvedActivityEvents.add(eventId);
-                if (awaitingNow) {
-                    // Still waiting: the paused trail already hosts the input
-                    // block — no new bubble, generation visibly continues.
-                    stillWaiting = true;
-                    this._trackRunState(data);
-                } else {
-                    this._clearRunState();
-                    const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id);
-                    this.adoptActivity(row,data.activity || [],false);
-                    // adoptActivity moved the trail into the answer row; drop the
-                    // emptied pause bubble so no blank Spark message remains.
-                    const trailEl = this.currentActivityTrail && this.currentActivityTrail.element;
-                    const pauseRow = priorTrail && priorTrail.element
-                        ? priorTrail.element.closest('.pwanimate-message-row') : null;
-                    if (trailEl && row.contains(trailEl) && pauseRow && pauseRow !== row) {
-                        pauseRow.remove();
-                    }
-                    this.scrollToMessageStart(row);
-                    this.refreshConversationsList();
-                }
-            } catch (error) {
-                // The dots must never outlive the request: a failed resume is
-                // over, so clear them before surfacing the notice.
-                this.removeTypingIndicator();
-                this.showSystemNotice(error.message || 'The task was interrupted. Refresh to see saved outcomes.');
-                priorTrail.element.querySelectorAll('button').forEach(b => { b.disabled = false; });
-                throw error;
-            } finally {
-                this.abortController = null;
-                this.setGenerating(false);
-                this.setWaitingForInput(stillWaiting);
-            }
+            return this._resumeChatPayload({resume_run_id:runId, decision, action_ids:actionIds}, priorTrail, eventId);
         }
 
         async resumeClarification(runId, answer, priorTrail, eventId = null, interactionId = null) {
@@ -7337,6 +7428,39 @@
         // text) resolve through the same durable claim path as free text.
         // `answer` matches the server contract: {text} | {selected:[ids]} |
         // {confirmed:bool}.
+        renderTeachingMode(row, teaching) {
+            if (!row || !teaching?.session_id || row.querySelector('[data-teaching-mode]')) return;
+            const label = document.createElement('label');
+            label.className = 'small text-muted d-inline-flex align-items-center gap-2 my-2';
+            label.textContent = 'Teaching mode';
+            const select = document.createElement('select');
+            select.dataset.teachingMode = teaching.state_id;
+            select.className = 'form-select form-select-sm w-auto';
+            select.setAttribute('aria-label', 'Teaching mode');
+            ['QUICK','GUIDED','DEEP','PRACTICE'].forEach(mode => {
+                const option = document.createElement('option');
+                option.value = mode; option.textContent = mode.toLowerCase();
+                option.selected = mode === teaching.mode; select.appendChild(option);
+            });
+            select.addEventListener('change', async () => {
+                const prior = teaching.mode;
+                select.disabled = true;
+                try {
+                    const response = await fetch(`/api/pwanimate/study-sessions/${teaching.session_id}/teaching/`, {
+                        method:'PATCH', credentials:'same-origin',
+                        headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()},
+                        body:JSON.stringify({mode:select.value})
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.detail || 'Could not change teaching mode');
+                    teaching.mode = result.teaching.mode;
+                } catch (error) {
+                    select.value = prior; this.showSystemNotice(error.message);
+                } finally { select.disabled = false; }
+            });
+            label.appendChild(select); row.appendChild(label);
+        }
+
         async resumeInteraction(runId, interactionId, answer, priorTrail, eventId = null) {
             return this._resumeChatPayload(
                 {interaction_id: interactionId, resume_run_id: runId, answer},
@@ -7344,7 +7468,11 @@
         }
 
         async _resumeChatPayload(payload, priorTrail, eventId = null) {
-            if (this.isGenerating) return;
+            if (this.isGenerating) throw new Error('Spark is already processing a response.');
+            const runId = payload.resume_run_id;
+            const conversationId = this.conversationId;
+            priorTrail = priorTrail || this.currentActivityTrail;
+            const priorRow = priorTrail?.element.closest('.pwanimate-message-row') || null;
             this.setGenerating(true);
             this.abortController = new AbortController();
             // Dots at the bottom signal live work; events still stream into
@@ -7357,15 +7485,24 @@
             }
             let stillWaiting = false;
             try {
-                const response = await fetch('/api/pwanimate/chat/', {
-                    method:'POST', credentials:'same-origin',signal:this.abortController.signal,
-                    headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json','X-CSRFToken':getCsrfToken()},
-                    body:JSON.stringify(payload)
-                });
-                const result = (response.headers.get('content-type') || '').includes('text/event-stream')
-                    ? await this.readChatEventStream(response) : {status_code:response.status,data:await response.json()};
+                let result;
+                try {
+                    const response = await fetch('/api/pwanimate/chat/', {
+                        method:'POST', credentials:'same-origin',signal:this.abortController.signal,
+                        headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json','X-CSRFToken':getCsrfToken()},
+                        body:JSON.stringify(payload)
+                    });
+                    result = (response.headers.get('content-type') || '').includes('text/event-stream')
+                        ? await this.readChatEventStream(response) : {status_code:response.status,data:await response.json()};
+                } catch (error) {
+                    if (error.name === 'AbortError' || this.abortController.signal.aborted) throw error;
+                    result = await this._recoverResumeStream(runId, payload, error);
+                }
+                if (result.status_code === 409) result = await this._recoverResumeStream(runId, payload);
+                if (conversationId !== this.conversationId) return;
                 const data = result.data || {};
-                if (result.status_code >= 400) throw new Error(data.error || 'Could not continue this task.');
+                if (result.status_code >= 400 || data.error) throw new Error(data.error || 'Could not continue this task.');
+                this._acceptInteraction?.(runId, payload.interaction_id);
                 if (data.approval_pending) {
                     stillWaiting = true;
                     this._trackRunState(data);
@@ -7383,20 +7520,28 @@
                 if (awaitingNow) {
                     stillWaiting = true;
                     this._trackRunState(data);
+                    if (data.metadata?.teaching && data.answer) {
+                        const row = this.appendAssistantMessage(data.answer, data.sources, data.citations, null, data.quota_info, [], data.message_id, '', [], data.follow_ups || []);
+                        this.renderTeachingMode?.(row, data.metadata.teaching);
+                        this.adoptActivity(row, data.activity || [], true);
+                        this.scrollToMessageStart(row);
+                    }
                 } else {
                     this._clearRunState();
-                    const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id);
+                    const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id, '', [], data.follow_ups || []);
+                    this.renderTeachingMode?.(row, data.metadata?.teaching);
                     this.adoptActivity(row,data.activity || [],false);
                     const trailEl = this.currentActivityTrail && this.currentActivityTrail.element;
-                    const pauseRow = priorTrail && priorTrail.element
-                        ? priorTrail.element.closest('.pwanimate-message-row') : null;
-                    if (trailEl && row.contains(trailEl) && pauseRow && pauseRow !== row) {
-                        pauseRow.remove();
+                    const priorBody = priorRow?.querySelector('.pwanimate-markdown-body');
+                    if (trailEl && row.contains(trailEl) && priorRow && priorRow !== row
+                            && (!priorBody?.textContent.trim() || priorBody.classList.contains('d-none'))) {
+                        priorRow.remove();
                     }
                     this.scrollToMessageStart(row);
                     this.refreshConversationsList();
                 }
             } catch (error) {
+                stillWaiting = Boolean(this.pendingInteraction);
                 this.removeTypingIndicator();
                 this.showSystemNotice(error.message || 'The task was interrupted. Refresh to see saved outcomes.');
                 if (priorTrail) priorTrail.element.querySelectorAll('button, input').forEach(b => { b.disabled = false; });
@@ -7404,8 +7549,27 @@
             } finally {
                 this.abortController = null;
                 this.setGenerating(false);
-                this.setWaitingForInput(stillWaiting);
+                if (conversationId === this.conversationId) {
+                    this.setWaitingForInput(stillWaiting);
+                    if (this.refreshStudyContext) await this.refreshStudyContext().catch(() => {});
+                }
             }
+        }
+
+        async _recoverResumeStream(runId, payload, originalError = null) {
+            const response = await fetch(`/api/pwanimate/agent-runs/${encodeURIComponent(runId)}/`,
+                {credentials:'same-origin',cache:'no-store',signal:this.abortController.signal});
+            if (!response.ok) throw originalError || new Error('Could not verify whether the answer was accepted. Retry when connected.');
+            const run = await response.json();
+            const accepted = payload.interaction_id
+                ? (run.resolved_interaction_ids || []).includes(String(payload.interaction_id))
+                : Boolean(payload.action_ids?.length) && (payload.action_ids || []).every(id => (run.actions || []).some(a => String(a.id) === String(id) && a.status !== 'pending'));
+            if (!accepted) throw originalError || new Error('The question has not been accepted. Review it and retry.');
+            this._acceptInteraction?.(runId,payload.interaction_id);
+            const stream = await fetch(`/api/pwanimate/agent-runs/${encodeURIComponent(runId)}/stream/`,
+                {credentials:'same-origin',cache:'no-store',headers:{Accept:'text/event-stream'},signal:this.abortController.signal});
+            if (!stream.ok) throw new Error('Your answer was accepted; reconnect to see the result.');
+            return this.readChatEventStream(stream);
         }
 
         // ------------------------------------------------- proposed actions
@@ -7431,6 +7595,7 @@
                     return;
                 }
 
+                if (this.refreshStudyContext) await this.refreshStudyContext().catch(() => {});
                 const action = data.action || {};
                 const card = button ? button.closest('.pwanimate-action-card') : null;
                 if (card) {
@@ -7485,7 +7650,12 @@
             }
         }
 
-        appendAssistantMessage(answer, sources, citations, fallbackInfo, quotaInfo, people = [], messageId = null, peopleHtmlFromServer = '', pendingActions = []) {
+        appendAssistantMessage(answer, sources, citations, fallbackInfo, quotaInfo, people = [], messageId = null, peopleHtmlFromServer = '', pendingActions = [], followUps = [], academicActions = []) {
+            if (messageId && this.transcript) {
+                const existing = Array.from(this.transcript.querySelectorAll('.pwanimate-message-row.assistant'))
+                    .find(node => String(node.dataset.messageId) === String(messageId));
+                if (existing) return existing; // journal replay/HTTP retry uses durable message identity
+            }
             const row = document.createElement('div');
             row.className = 'pwanimate-message-row assistant';
             if (messageId) {
@@ -7605,6 +7775,33 @@
                 actionsHtml = `<div class="pwanimate-action-cards">${cards}</div>`;
             }
 
+            // Contextual follow-up suggestions (SALS 0.3 WP2)
+            let followUpsHtml = '';
+            if (Array.isArray(followUps) && followUps.length > 0) {
+                const links = followUps.map((fu) => {
+                    const followUpId = escapeHtml(fu.id || '');
+                    const label = escapeHtml(fu.label || '');
+                    const status = fu.status || 'pending';
+                    const disabled = !['pending', 'failed', 'executing', 'interrupted'].includes(status);
+                    const statusClass = status === 'consumed' ? 'consumed' : status === 'expired' ? 'expired' : status === 'cancelled' ? 'cancelled' : 'pending';
+                    return `
+                        <button type="button" class="pwanimate-follow-up-link ${statusClass}" data-follow-up-id="${followUpId}" ${disabled ? 'disabled' : ''}>
+                            <i data-lucide="arrow-right"></i>
+                            <span>${label}</span>
+                        </button>
+                    `;
+                }).join('');
+                followUpsHtml = `
+                    <div class="pwanimate-follow-ups">
+                        <div class="pwanimate-follow-ups-header">
+                            <i data-lucide="compass"></i>
+                            <span>Suggested follow-ups</span>
+                        </div>
+                        <div class="pwanimate-follow-ups-list">${links}</div>
+                    </div>
+                `;
+            }
+
             let fallbackHtml = '';
             if (fallbackInfo && fallbackInfo.vision_text_fallback) {
                 // No banner: the model reports the outage in its answer. The
@@ -7637,6 +7834,7 @@
                         ${citationsHtml}
                         ${fallbackHtml}
                         ${actionsHtml}
+                        ${followUpsHtml}
                     </div>
                     <div class="pwanimate-message-actions assistant-actions">
                         <div class="dropdown pwanimate-resource-export">
@@ -7675,6 +7873,19 @@
             `;
 
             this.appendTranscriptRow(row);
+            // Academic-tracking consent proposals ride with the turn that
+            // triggered them: explicit Approve/Decline controls attached to
+            // this answer instead of prose-only asks or a detached poll block.
+            if (Array.isArray(academicActions) && academicActions.length > 0) {
+                const bubble = row.querySelector('.pwanimate-assistant-bubble');
+                if (bubble) {
+                    for (const action of academicActions) {
+                        if (!action || !action.id) continue;
+                        if (this.transcript && this.transcript.querySelector(`.spark-academic-approval[data-action-id="${CSS.escape(String(action.id))}"]`)) continue;
+                        bubble.appendChild(this._academicTrackingBlock(action));
+                    }
+                }
+            }
             const mdBody = row.querySelector('.pwanimate-markdown-body');
             if (mdBody) {
                 this.postProcessMarkdownDOM(mdBody);
@@ -7684,6 +7895,49 @@
             if (window.htmx && typeof window.htmx.process === 'function') {
                 window.htmx.process(row);
             }
+            // Wire up follow-up link clicks
+            row.querySelectorAll('.pwanimate-follow-up-link').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    const followUpId = btn.dataset.followUpId;
+                    if (!followUpId || btn.disabled) return;
+                    btn.disabled = true;
+                    btn.classList.add('loading');
+                    try {
+                        const response = await fetch(`/api/pwanimate/follow-ups/${followUpId}/execute/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken(),
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({conversation_id: this.conversationId}),
+                        });
+                        const data = await response.json();
+                        if (response.status === 202) {
+                            btn.classList.remove('loading');
+                            btn.textContent = data.status === 'interrupted' ? 'Interrupted — refresh chat' : 'In progress — check again';
+                            btn.disabled = false;
+                        } else if (response.ok && data.executed) {
+                            btn.classList.remove('loading');
+                            btn.classList.add('consumed');
+                            // Reload conversation to show updated state
+                            if (this.conversationId) {
+                                this.loadConversation(this.conversationId);
+                            }
+                        } else {
+                            btn.classList.remove('loading');
+                            btn.disabled = response.status === 410;
+                            if (response.status === 410) btn.classList.add('expired');
+                            alert(data.error || 'Could not execute follow-up.');
+                        }
+                    } catch (err) {
+                        btn.classList.remove('loading');
+                        btn.disabled = false;
+                        alert('Network error while executing follow-up.');
+                    }
+                });
+            });
             if (this.autoTtsEnabled) {
                 const speakBtn = row.querySelector('.pwanimate-speak-btn');
                 if (speakBtn) this.speakResponse(answer, speakBtn);
@@ -7904,7 +8158,297 @@
             }
         }
 
+        async refreshMemoryProposals() {
+            const conversationId = this.conversationId;
+            if (!conversationId || !this.transcript) return;
+            const generation = (this._memoryGeneration || 0) + 1;
+            this._memoryGeneration = generation;
+            try {
+                const response = await fetch('/api/pwanimate/memory/?conversation_id=' + encodeURIComponent(conversationId) + '&status=proposed', {credentials:'same-origin',cache:'no-store'});
+                if (!response.ok) return;
+                const data = await response.json();
+                if (generation !== this._memoryGeneration || conversationId !== this.conversationId) return;
+                const currentBlocks = this.transcript.querySelectorAll('.spark-memory-approval');
+                if (data.enabled && Array.from(currentBlocks).some(n => n.dataset.memoryBusy === 'true' || n.querySelector('textarea'))) return;
+                currentBlocks.forEach(n => n.remove());
+                const notice = this._memoryProposalNotice;
+                const labels = {memory_disabled:'Personal memory is off. Enable it in Memory settings, then ask again.',
+                    feature_disabled:'Chat memory proposals are unavailable. You can manage preferences in Memory settings.',
+                    rate_limited:'No new preference was saved. You can review proposals in Memory settings; new preference requests are limited to one per day.',
+                    already_pending:'This preference already has a pending proposal. Review it here or in Memory settings.',
+                    already_approved:'No new proposal was created. Review existing preferences in Memory settings.',
+                    unavailable:'A memory proposal could not be prepared. You can retry or open Memory settings.'};
+                const pendingFacts = (data.facts || []).filter(f => f.status === 'proposed' && String(f.conversation_id) === String(conversationId));
+                const noticeStatus = notice && !data.enabled && notice.status !== 'ineligible' ? 'memory_disabled' : notice?.status;
+                if (notice && notice.conversationId === conversationId && labels[noticeStatus]
+                        && !(noticeStatus === 'already_pending' && pendingFacts.length)) {
+                    const block = document.createElement('div');
+                    block.className = 'spark-memory-approval spark-interaction-block';
+                    const text = document.createElement('p'); text.textContent = labels[noticeStatus];
+                    const link = document.createElement('a'); link.href='/pwanimate/settings/memory/';
+                    link.textContent='Memory settings'; block.append(text,link); this.transcript.appendChild(block);
+                }
+                if (!data.enabled) return;
+                for (const fact of pendingFacts) {
+                    this.transcript.appendChild(this._memoryApprovalBlock(fact));
+                }
+            } catch (_) { /* Optional memory controls must never break chat. */ }
+        }
+
+        _memoryApprovalBlock(fact) {
+            const block = document.createElement('div');
+            block.className = 'spark-memory-approval spark-interaction-block';
+            block.dataset.memoryId = fact.id;
+            const title = document.createElement('p'); title.textContent = 'Remember this preference?';
+            const text = document.createElement('p'); text.textContent = fact.text;
+            const status = document.createElement('p'); status.setAttribute('role','status');
+            const actions = document.createElement('div'); actions.className = 'spark-interaction-nav';
+            block.append(title,text,actions,status);
+            let busy = false;
+            const change = async (action, edited) => {
+                if (busy) return;
+                busy = true;
+                block.dataset.memoryBusy = 'true';
+                block.querySelectorAll('button,textarea').forEach(n => { n.disabled = true; });
+                status.textContent = 'Saving…';
+                try {
+                    const response = await fetch('/api/pwanimate/memory/', {
+                        method:'PATCH',credentials:'same-origin',
+                        headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()},
+                        body:JSON.stringify({fact_id:fact.id,version:fact.version,action,...(edited !== undefined ? {text:edited} : {})}),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.detail || 'Could not update this memory. Refresh to review its current state.');
+                    if (action === 'edit') {
+                        Object.assign(fact,data.fact);
+                        block.replaceWith(this._memoryApprovalBlock(fact));
+                    } else block.remove();
+                } catch (error) {
+                    status.textContent = error.message;
+                    busy = false;
+                    block.dataset.memoryBusy = 'false';
+                    block.querySelectorAll('button,textarea').forEach(n => { n.disabled = false; });
+                    if (block.querySelector('textarea')) approveButton.disabled = true;
+                }
+            };
+            const button = (label, fn) => {
+                const b = document.createElement('button');b.type='button';b.className='btn btn-outline-secondary btn-sm';
+                b.textContent=label;b.addEventListener('click',fn);actions.appendChild(b);return b;
+            };
+            const approveButton = button('Approve',() => change('approve'));
+            button('Edit',() => {
+                if (busy || block.querySelector('textarea')) return;
+                const input=document.createElement('textarea');input.className='spark-interaction-input';
+                approveButton.disabled = true;
+                input.value=fact.text;input.maxLength=1000;input.setAttribute('aria-label','Edit proposed memory');
+                block.insertBefore(input,actions);
+                button('Save edit',() => { if (input.value.trim()) return change('edit',input.value); });
+                input.focus();
+            });
+            button('Reject',() => change('reject'));
+            return block;
+        }
+
+        async refreshAcademicTracking() {
+            if (this.refreshStudyContext) await this.refreshStudyContext().catch(()=>{});
+            const conversationId = this.conversationId;
+            if (!conversationId || !this.transcript) return;
+            const generation = (this._academicGeneration || 0) + 1;
+            this._academicGeneration = generation;
+            try {
+                const response = await fetch('/api/pwanimate/academic/?conversation_id=' + encodeURIComponent(conversationId),
+                    {credentials:'same-origin', cache:'no-store'});
+                if (!response.ok) return;
+                const data = await response.json();
+                if (generation !== this._academicGeneration || conversationId !== this.conversationId) return;
+                if (Array.from(this.transcript.querySelectorAll('.spark-academic-approval')).some(n => n.dataset.busy === 'true')) return;
+                // Drop resolved/expired consent cards wherever they render;
+                // busy cards are mid-decision and stay until the request lands.
+                const pendingIds = new Set((data.pending_actions || []).map(a => String(a && a.id)));
+                this.transcript.querySelectorAll('.spark-academic-approval[data-action-id]').forEach(n => {
+                    if (n.dataset.busy !== 'true' && !pendingIds.has(n.dataset.actionId)) n.remove();
+                });
+                // Only detached transcript-level poll blocks are rebuilt here;
+                // consent cards already attached inside assistant messages stay.
+                this.transcript.querySelectorAll(':scope > .spark-academic-approval').forEach(n => n.remove());
+                for (const action of data.pending_actions || []) {
+                    if (action && action.id && this.transcript.querySelector(`.spark-academic-approval[data-action-id="${CSS.escape(String(action.id))}"]`)) continue;
+                    const host = this._academicActionHost(action);
+                    host.appendChild(this._academicTrackingBlock(action));
+                }
+                if (data.attribution?.ambiguous?.length) {
+                    const block = document.createElement('div'); block.className='spark-academic-approval spark-interaction-block';
+                    const note = document.createElement('p');
+                    const names = [...new Set(data.attribution.ambiguous.flatMap(a => a.candidates.map(c => c.unit_name)))];
+                    note.textContent = 'This topic could belong to ' + names.join(' or ') + '. Name the unit in your next question to track it. Nothing has been attributed yet.';
+                    block.appendChild(note); this.transcript.appendChild(block);
+                }
+            } catch (_) { /* Academic controls are optional; chat continues. */ }
+        }
+
+        // Consent proposals belong to the assistant reply that answered the
+        // user turn which triggered detection (params.source_message_id).
+        _academicActionHost(action) {
+            const srcId = action && action.params && action.params.source_message_id;
+            if (srcId && this.transcript) {
+                const rows = this.transcript.querySelectorAll('.pwanimate-message-row');
+                let seenSource = false;
+                for (const row of rows) {
+                    if (row.dataset.messageId === String(srcId)) { seenSource = true; continue; }
+                    if (seenSource && row.classList.contains('assistant') && !row.querySelector('.pwanimate-interim-bubble')) {
+                        const bubble = row.querySelector('.pwanimate-assistant-bubble');
+                        if (bubble) return bubble;
+                    }
+                }
+            }
+            return this.transcript;
+        }
+
+        async refreshStudyContext() {
+            if (!this.conversationId) return;
+            const id=this.conversationId;
+            const request = this._studyContextRequest = (this._studyContextRequest || 0) + 1;
+            const isCurrent = () => id === this.conversationId && request === this._studyContextRequest;
+            const response=await fetch(`/api/pwanimate/study-context/${encodeURIComponent(id)}/`,{credentials:'same-origin',cache:'no-store'});
+            if (!response.ok || id!==this.conversationId) return;
+            const context=await response.json();
+            if (!isCurrent()) return;
+            const previous = this._studyContextVersion;
+            if (previous?.id === id && Number.isInteger(context.generation) && context.generation < previous.generation) return;
+            let sessionDetail = null;
+            if (context.session_id) {
+                const detail = await fetch(`/api/pwanimate/study-sessions/${encodeURIComponent(context.session_id)}/`, {credentials:'same-origin',cache:'no-store'});
+                if (!detail.ok) return;
+                sessionDetail = await detail.json();
+                if (!isCurrent() || String(sessionDetail.study_session?.id) !== String(context.session_id)) return;
+            }
+            this._studyContextVersion = {id, generation:context.generation || 0};
+            if (!context.session_id) {
+                this.activeStudySession = null;
+                this.studySessionId = null;
+                this.studyModeActive = false;
+                this.pendingInteraction = null;
+                this.activeRunId = null;
+                this.setWaitingForInput(false);
+                this.syncStudyModeUI();
+            }
+            this.workspace.querySelectorAll('[data-study-handoff]').forEach(n=>n.remove());
+            if (context.ambiguous) {
+                const panel=document.createElement('div'); panel.dataset.studyHandoff='true';
+                panel.className='spark-interaction-block';
+                const title=document.createElement('p'); title.textContent='Choose the study session to continue. Other active sessions in this chat will be paused.';panel.appendChild(title);
+                for (const session of context.candidates) {
+                    const button=document.createElement('button');button.className='btn btn-outline-secondary btn-sm';
+                    button.textContent=`${session.unit || 'Study Mode'} — ${session.status}${session.topic ? ' · '+session.topic : ''}`;
+                    button.onclick=async()=>{
+                        button.disabled=true;
+                        try {
+                        const result=await fetch(`/api/pwanimate/study-context/${encodeURIComponent(id)}/`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()},body:JSON.stringify({session_id:session.id,generation:context.generation})});
+                        if (!result.ok) { const data=await result.json();alert(data.error || 'Refresh the session selection.'); }
+                        await this.refreshStudyContext();
+                        } catch(error) {alert('Could not switch sessions. Retry when connected.');}
+                        finally {button.disabled=false;}
+                    };
+                    panel.appendChild(button);
+                }
+                this.transcript.appendChild(panel);
+            } else if (context.session_id) {
+                if (context.tracking==='needs_consent') {
+                    const panel=document.createElement('div');panel.dataset.studyHandoff='true';panel.className='spark-interaction-block';
+                    const button=document.createElement('button');button.className='btn btn-outline-secondary btn-sm';button.textContent='Authorize tracking for this session';
+                    button.onclick=async()=>{
+                        button.disabled=true;
+                        try {
+                        const result=await fetch(`/api/pwanimate/study-context/${encodeURIComponent(id)}/`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()},body:JSON.stringify({action:'request_tracking',generation:context.generation})});
+                        const data=await result.json();
+                        if (result.ok) this._showAcademicPreflight({conversation_id:id,actions:data.actions || []});
+                        else alert(data.error || data.detail || 'Could not request tracking.');
+                        } catch(error) {alert('Could not request tracking. Retry when connected.');}
+                        finally {button.disabled=false;}
+                    };
+                    panel.appendChild(button);this.transcript.appendChild(panel);
+                }
+                const changed=this.studySessionId!==context.session_id;
+                if (changed || (context.status!=='active' && this.waitingForInput) ||
+                    ((this.pendingInteraction?.interaction_id || null)!==(context.pending_interaction?.interaction_id || null))) {
+                    // Detach UI only; the parked question remains pending server-side.
+                    this.pendingInteraction=null;
+                    this.activeRunId=context.pending_run_id || null;
+                    this.setWaitingForInput(context.status==='active' && Boolean(context.pending_interaction),context.pending_interaction,context.pending_run_id);
+                }
+                this.studySessionId=context.session_id;
+                if (sessionDetail && isCurrent()) {
+                    const data=sessionDetail;
+                    this.activeStudySession=data.study_session;
+                    this.studyModeActive=context.status==='active';
+                    if (changed && this.activeStudySession?.context_state?.resources) {
+                        this.contextResources=this.activeStudySession.context_state.resources;
+                        this.syncContextView?.();
+                    }
+                    this.syncStudyModeUI();
+                    const banner=document.getElementById('pwanimate-study-session-banner');
+                    if (banner) {
+                        let summary=banner.querySelector('[data-study-tracking-summary]');
+                        if (!summary) {summary=document.createElement('span');summary.dataset.studyTrackingSummary='true';summary.className='small text-muted';banner.appendChild(summary);}
+                        summary.textContent=`Tracking: ${context.tracking}${context.pending_interaction ? ' · Practice waiting' : ''}`;
+                    }
+                }
+            }
+        }
+
+        _showAcademicPreflight(payload) {
+            if (!this.conversationId) this.conversationId = payload.conversation_id;
+            if (String(payload.conversation_id) !== String(this.conversationId)) return;
+            for (const action of payload.actions || []) {
+                if (!action.id || this.transcript.querySelector(`.spark-academic-approval[data-action-id="${CSS.escape(String(action.id))}"]`)) continue;
+                this.transcript.appendChild(this._academicTrackingBlock(action));
+            }
+        }
+
+        _academicTrackingBlock(action) {
+            const block = document.createElement('div'); block.className='spark-academic-approval spark-interaction-block';
+            if (action && action.id) block.dataset.actionId = String(action.id);
+            const head = document.createElement('div'); head.className='spark-interaction-head';
+            const icon = document.createElement('i'); icon.setAttribute('data-lucide','graduation-cap');
+            const kind = document.createElement('span'); kind.className='spark-interaction-kind'; kind.textContent='Study tracking';
+            head.append(icon, kind); block.appendChild(head);
+            const prompt = document.createElement('p'); prompt.textContent=action.summary;
+            const status = document.createElement('p'); status.setAttribute('role','status');
+            const buttons = document.createElement('div'); buttons.className='spark-interaction-nav';
+            block.append(prompt, buttons, status);
+            for (const [label, decision] of [['Start Tracking','confirm'], ['Not Now','cancel']]) {
+                const button = document.createElement('button'); button.type='button';
+                button.className='btn btn-outline-secondary btn-sm'; button.textContent=label;
+                button.addEventListener('click', async () => {
+                    if (block.dataset.busy === 'true') return;
+                    block.dataset.busy='true'; block.querySelectorAll('button').forEach(b => { b.disabled=true; });
+                    try {
+                        if (action.run_id) {
+                            await this.resumeAgent(action.run_id, decision, [String(action.id)], this.activityTrail);
+                            block.remove();
+                            await this.refreshStudyContext().catch(() => {});
+                            return;
+                        }
+                        const response = await fetch('/api/pwanimate/actions/' + encodeURIComponent(action.id) + '/',
+                            {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','X-CSRFToken':getCsrfToken()},
+                             body:JSON.stringify({decision})});
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Could not update tracking consent.');
+                        block.remove();
+                        if (this.refreshStudyContext) await this.refreshStudyContext().catch(() => {});
+                    } catch (error) {
+                        status.textContent=error.message; block.dataset.busy='false';
+                        block.querySelectorAll('button').forEach(b => { b.disabled=false; });
+                    }
+                });
+                buttons.appendChild(button);
+            }
+            return block;
+        }
+
         async refreshConversationsList() {
+            this.refreshMemoryProposals();
+            this.refreshAcademicTracking();
             try {
                 const url = this.historyFilter === 'study'
                     ? '/api/pwanimate/conversations/?filter=study'

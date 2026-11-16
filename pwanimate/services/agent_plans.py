@@ -89,6 +89,6 @@ def sync_steps(run, checklist, observed=None):
 
 
 def serialize_steps(run):
-    return [{'id': str(s.id), 'key': s.key, 'seq': s.seq, 'title': s.title,
-             'status': s.status, 'finding': s.finding, 'depends_on': s.depends_on}
+    return [{'id': str(s.id), 'key': f'step-{s.seq + 1}', 'seq': s.seq, 'title': f'Step {s.seq + 1}',
+             'status': s.status, 'finding': '', 'depends_on': s.depends_on}
             for s in SparkAgentPlanStep.objects.filter(run=run).order_by('seq', 'created_at')]

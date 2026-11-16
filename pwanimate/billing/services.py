@@ -124,6 +124,10 @@ def is_free_route(provider: str, model_id: str) -> bool:
     if not provider or not model_id:
         return False
     provider = provider.lower()
+    if provider in {"zai", "alibaba", "tencent", "deepseek"}:
+        from pwanimate.ai.providers.compatible import CompatibleLLMProvider
+        from pwanimate.ai.gateway.types import LLMRequest
+        return CompatibleLLMProvider(provider).eligible(LLMRequest(task="general"), model_id)
     if provider == "mock":
         return True
     if provider == "openrouter":

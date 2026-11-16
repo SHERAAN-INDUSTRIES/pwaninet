@@ -181,7 +181,7 @@
       // Progress
       const progress = el('div', 'spark-session-progress mt-3');
       const overall = el('div', 'd-flex align-items-center justify-content-between mb-1');
-      overall.appendChild(el('span', 'small fw-semibold', 'Progress'));
+      overall.appendChild(el('span', 'small fw-semibold', 'Legacy progress'));
       overall.appendChild(el('span', 'small fw-bold text-primary', `${session.progress_percent || 0}%`));
       progress.appendChild(overall);
       const bar = el('div', 'spark-progress');
@@ -190,7 +190,7 @@
       bar.appendChild(fill);
       progress.appendChild(bar);
       progress.appendChild(progressRow('Roadmap coverage', session.roadmap_coverage_percent ?? 0, 'spark-progress-coverage'));
-      progress.appendChild(progressRow('Tested mastery', session.mastery_percent || 0, 'spark-progress-mastery'));
+      progress.appendChild(progressRow('Legacy score (uncertified)', session.mastery_percent || 0, 'spark-progress-mastery'));
       card.appendChild(progress);
 
       // Roadmap (collapsible)
@@ -306,144 +306,169 @@
       });
     }
 
+    function quizMetricsText(assessment) {
+      const m = assessment.metrics;
+      if (!m) return `${assessment.correct}/${assessment.answered} graded · ${assessment.total} total · Legacy results (uncertified)`;
+      return `Completion ${m.completion_percent}% (${m.answered}/${m.total} submitted) · Graded accuracy ${m.accuracy_percent ?? '—'}% (${m.correct}/${m.graded}) · Mastery: insufficient evidence`;
+    }
+
     async function renderQuizPanel(panel, session) {
       const data = await api(`study-sessions/${session.id}/assessments/`);
       const assessments = Array.isArray(data.assessments) ? data.assessments : [];
       panel.replaceChildren();
-
+      let busy = false;
       const head = el('div', 'd-flex align-items-center justify-content-between mb-2');
-      head.appendChild(el('h6', 'fw-bold mb-0', 'Quiz & mastery'));
+      head.appendChild(el('h6', 'fw-bold mb-0', 'Quiz & feedback'));
       const newBtn = el('button', 'btn btn-primary btn-sm', 'New quiz');
-      newBtn.type = 'button';
-      head.appendChild(newBtn);
-      panel.appendChild(head);
-
-      const history = el('div', 'spark-quiz-history mb-2');
-      panel.appendChild(history);
+      newBtn.type = 'button'; head.appendChild(newBtn); panel.appendChild(head);
+      const history = el('div', 'spark-quiz-history mb-2'); panel.appendChild(history);
+      const work = el('div', 'spark-quiz-work mt-2'); panel.appendChild(work);
+      const setBusy = value => {
+        busy = value;
+        newBtn.disabled = value;
+        history.querySelectorAll('button').forEach(button => { button.disabled = value; });
+        work.querySelectorAll('[data-quiz-navigation]').forEach(button => { button.disabled = value; });
+      };
       const renderHistory = () => {
         history.replaceChildren();
-        if (!assessments.length) {
-          history.appendChild(el('p', 'small text-muted mb-0', 'No quizzes yet. Only correctly graded answers raise mastery.'));
-          return;
-        }
+        if (!assessments.length) history.appendChild(el('p', 'text-muted small', 'No quizzes yet.'));
         assessments.slice(0, 6).forEach(a => {
-          const row = el('div', 'small d-flex align-items-center gap-2 py-1 border-bottom');
-          row.appendChild(el('span', 'fw-semibold', a.title || a.mode));
-          row.appendChild(el('span', 'badge rounded-pill bg-secondary-subtle text-secondary',
-            `${a.correct}/${a.answered}/${a.total} · ${a.status}`));
-          if (a.counts_toward_mastery === false) {
-            row.appendChild(el('span', 'badge rounded-pill bg-warning-subtle text-warning-emphasis', 'practice'));
-          }
+          const row = el('button', 'spark-quiz-history-entry btn text-start w-100 border-bottom');
+          row.type = 'button'; row.disabled = busy;
+          row.appendChild(el('span', 'd-block fw-semibold', a.title || a.mode));
+          row.appendChild(el('span', 'd-block small', quizMetricsText(a)));
+          if (a.counts_toward_mastery === false) row.appendChild(el('span', 'small text-muted', 'Not eligible for mastery'));
+          row.addEventListener('click', () => { if (!busy) showAssessment(a); });
           history.appendChild(row);
         });
       };
-      renderHistory();
-
-      const work = el('div', 'spark-quiz-work mt-2');
-      panel.appendChild(work);
-
-      const showAssessment = (assessment) => {
-        work.replaceChildren();
-        const unanswered = (assessment.questions || []).filter(q => !q.answered);
-        if (!unanswered.length) {
-          work.appendChild(el('p', 'small text-success mb-0',
-            assessment.status === 'completed' ? 'This quiz is complete — every answer was graded.' : 'All questions answered.'));
-          return;
+      const showAssessment = (assessment, index = null) => {
+        const questions = assessment.questions || [];
+        if (index === null) {
+          index = questions.findIndex(q => !q.answered && !q.submitted);
+          if (index < 0) index = 0;
         }
-        const list = el('div', 'd-flex flex-column gap-3');
-        unanswered.forEach(q => list.appendChild(renderQuestion(session, assessment, q)));
-        work.appendChild(list);
+        work.replaceChildren();
+        if (!questions.length) { work.appendChild(el('p', 'text-muted', 'No questions available.')); return; }
+        const position = el('p', 'small text-muted', `Question ${index + 1} of ${questions.length}`);
+        work.appendChild(position);
+        work.appendChild(renderQuestion(session, assessment, questions[index], updated => {
+          Object.assign(assessment, updated); renderHistory();
+        }, setBusy));
+        const nav = el('div', 'd-flex gap-2 mt-2');
+        for (const [label, target] of [['Previous', index - 1], ['Next', index + 1]]) {
+          if (target < 0 || target >= questions.length) continue;
+          const button = el('button', 'btn btn-outline-secondary btn-sm', label);
+          button.type = 'button'; button.dataset.quizNavigation = '1';
+          button.addEventListener('click', () => { if (!busy) showAssessment(assessment, target); });
+          nav.appendChild(button);
+        }
+        work.appendChild(nav);
       };
-
-      const startNew = async () => {
-        newBtn.disabled = true;
-        newBtn.textContent = 'Generating…';
+      newBtn.addEventListener('click', async () => {
+        if (busy) return;
+        setBusy(true); newBtn.textContent = 'Generating…';
         try {
           const created = await api(`study-sessions/${session.id}/assessments/`, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'generate', count: 5, mode: session.assessment_mode || undefined }),
+            method: 'POST', body: JSON.stringify({action: 'generate', count: 5, mode: session.assessment_mode || undefined}),
           });
-          assessments.unshift(created.assessment);
-          renderHistory();
-          showAssessment(created.assessment);
-        } catch (err) {
-          work.replaceChildren(el('p', 'small text-danger', err.message || 'Could not generate the quiz.'));
-        } finally {
-          newBtn.disabled = false;
-          newBtn.textContent = 'New quiz';
-        }
-      };
-      newBtn.addEventListener('click', startNew);
-
-      const open = assessments.find(a => (a.questions || []).some(q => !q.answered));
-      if (open) showAssessment(open);
+          assessments.unshift(created.assessment); renderHistory(); showAssessment(created.assessment);
+        } catch (err) { work.replaceChildren(el('p', 'text-danger', err.message)); }
+        finally { setBusy(false); newBtn.textContent = 'New quiz'; }
+      });
+      renderHistory();
+      if (assessments.length) showAssessment(assessments[0]);
     }
 
-    function renderQuestion(session, assessment, question) {
+    function renderQuestion(session, assessment, question, onResult = () => {}, onBusy = () => {}) {
       const box = el('div', 'spark-quiz-question border rounded-3 p-3');
       box.appendChild(el('p', 'small fw-semibold mb-2', question.prompt));
-      const verdict = el('div', 'spark-quiz-verdict mt-2');
       const controls = el('div', 'spark-quiz-controls');
-
-      const lock = (correct, feedback, explanation, mastery, progress) => {
-        box.querySelectorAll('button, input').forEach(n => { n.disabled = true; });
-        verdict.classList.remove('d-none');
-        verdict.classList.add(correct ? 'text-success' : 'text-danger');
-        verdict.innerHTML = '';
-        verdict.appendChild(el('div', 'small fw-semibold', correct ? 'Correct' : 'Not quite'));
-        if (feedback) verdict.appendChild(el('div', 'small text-muted', feedback));
-        if (explanation) verdict.appendChild(el('div', 'small text-muted fst-italic', explanation));
-        if (typeof mastery === 'number') {
-          verdict.appendChild(el('div', 'small mt-1', `Mastery ${mastery}% · Progress ${progress ?? '—'}%`));
-          updateSessionProgress(session.id, mastery, progress);
+      const verdict = el('div', 'spark-quiz-verdict mt-2'); verdict.setAttribute('role', 'status');
+      const summary = el('div', 'small mt-2');
+      let pending = false, uncertain = question._quizUncertain === true, selected = question._quizDraft || '';
+      const decisive = () => typeof question.correct === 'boolean';
+      const submitted = () => question.submitted || question.answered || decisive();
+      const send = el('button', 'btn btn-primary btn-sm mt-2', 'Send'); send.type = 'button';
+      const check = el('button', 'btn btn-outline-secondary btn-sm mt-2', 'Check saved result'); check.type = 'button';
+      check.hidden = true;
+      const showOutcome = () => {
+        verdict.replaceChildren();
+        if (submitted() || question.outcome) {
+          const label = decisive() ? (question.correct ? 'Correct' : 'Incorrect')
+            : question.outcome === 'evaluation_failed' ? 'Evaluation failed — no credit'
+            : 'Inconclusive — not graded';
+          verdict.appendChild(el('div', 'small fw-semibold', label));
+          if (question.feedback) verdict.appendChild(el('div', 'small', question.feedback));
+          if (question.explanation) verdict.appendChild(el('div', 'small', question.explanation));
         }
+        summary.textContent = quizMetricsText(assessment);
       };
-
-      const submit = async (answer) => {
-        try {
-          const res = await api(`study-sessions/${session.id}/assessments/`, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'answer', assessment_id: assessment.id, qid: question.qid, answer }),
-          });
-          question.answered = true;
-          question.correct = res.result.correct;
-          question.feedback = res.result.feedback;
-          question.explanation = res.result.explanation;
-          lock(res.result.correct, res.result.feedback, res.result.explanation,
-            res.result.mastery_percent, res.result.progress_percent);
-        } catch (err) {
-          verdict.classList.remove('d-none');
-          verdict.classList.add('text-danger');
-          verdict.textContent = err.message || 'Could not grade that answer.';
-        }
+      const lock = () => {
+        // Accepted answers keep their feedback, not an inactive input block.
+        controls.hidden = Boolean(submitted());
+        send.hidden = Boolean(submitted());
+        controls.querySelectorAll('button, input').forEach(n => { n.disabled = pending || uncertain || submitted(); });
+        send.disabled = pending || uncertain || submitted();
+        send.textContent = pending ? 'Sending…' : 'Send';
+        check.disabled = pending; check.hidden = !uncertain;
       };
-
+      const accept = updated => {
+        if (!updated || !Array.isArray(updated.questions)) throw new Error('Missing saved assessment. Check saved result before retrying.');
+        const saved = updated.questions.find(q => q.qid === question.qid);
+        if (!saved) throw new Error('Question is unavailable. Reopen this quiz.');
+        saved._quizDraft = selected;
+        Object.assign(question, saved); Object.assign(assessment, updated);
+        uncertain = false; delete question._quizUncertain; onResult(updated); showOutcome();
+      };
       if (Array.isArray(question.options) && question.options.length) {
-        question.options.forEach((opt, idx) => {
-          const btn = el('button', 'btn btn-outline-secondary btn-sm d-block w-100 text-start mb-1 spark-quiz-option');
-          btn.type = 'button';
-          btn.textContent = `${String.fromCharCode(65 + idx)}. ${opt}`;
-          btn.addEventListener('click', () => submit(opt));
-          controls.appendChild(btn);
+        question.options.forEach((option, idx) => {
+          const button = el('button', 'spark-quiz-option btn btn-outline-secondary d-block w-100 text-start mb-1',
+            `${String.fromCharCode(65 + idx)}. ${option}`);
+          button.type = 'button'; button.setAttribute('aria-pressed', String(selected === option));
+          button.addEventListener('click', () => {
+            if (pending || uncertain || submitted()) return;
+            selected = option; question._quizDraft = selected;
+            controls.querySelectorAll('button').forEach(b => { b.setAttribute('aria-pressed', String(b === button)); });
+          });
+          controls.appendChild(button);
         });
       } else {
-        const input = el('input', 'form-control form-control-sm');
-        input.type = 'text';
-        input.placeholder = 'Type your answer…';
-        const send = el('button', 'btn btn-primary btn-sm mt-2', 'Submit answer');
-        send.type = 'button';
-        send.addEventListener('click', () => {
-          const value = input.value.trim();
-          if (value) submit(value);
-        });
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') send.click(); });
+        const input = el('input', 'spark-quiz-input form-control form-control-sm');
+        input.type = 'text'; input.value = selected; input.setAttribute('aria-label', 'Your answer');
+        input.addEventListener('input', () => { selected = input.value.trim(); question._quizDraft = selected; });
+        input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); send.click(); } });
         controls.appendChild(input);
-        controls.appendChild(send);
       }
-
-      box.appendChild(controls);
-      verdict.classList.add('d-none');
-      box.appendChild(verdict);
+      send.addEventListener('click', async () => {
+        if (pending || uncertain || submitted()) return;
+        if (!selected) { verdict.textContent = 'Select or enter an answer before sending.'; return; }
+        pending = true; onBusy(true); lock();
+        try {
+          const res = await api(`study-sessions/${session.id}/assessments/`, {
+            method: 'POST', body: JSON.stringify({action: 'answer', assessment_id: assessment.id, qid: question.qid, answer: selected}),
+          });
+          if (res.result?.outcome === 'invalid') {
+            verdict.textContent = res.result.feedback || 'Invalid answer. Please correct it.';
+          } else accept(res.assessment);
+        } catch (err) {
+          uncertain = true; question._quizUncertain = true;
+          verdict.textContent = `${err.message} Check the saved result before retrying. A request may already have been accepted.`;
+        } finally { pending = false; onBusy(false); lock(); }
+      });
+      check.addEventListener('click', async () => {
+        if (pending) return;
+        pending = true; onBusy(true); lock();
+        try {
+          const data = await api(`study-sessions/${session.id}/assessments/`);
+          const saved = (data.assessments || []).find(a => a.id === assessment.id);
+          accept(saved);
+          if (!submitted()) verdict.textContent = 'No saved answer found. You may retry Send; server idempotency is not guaranteed.';
+        } catch (err) { verdict.textContent = err.message; }
+        finally { pending = false; onBusy(false); lock(); }
+      });
+      box.append(controls, send, check, verdict, summary);
+      showOutcome(); lock();
       return box;
     }
 
@@ -464,7 +489,7 @@
       }
       if (typeof mastery === 'number') {
         card.querySelectorAll('.spark-meter-row').forEach(row => {
-          if (row.querySelector('.spark-meter-label')?.textContent === 'Tested mastery') {
+          if (row.querySelector('.spark-meter-label')?.textContent === 'Legacy score (uncertified)') {
             const fill = row.querySelector('.spark-progress-fill');
             const val = row.querySelector('.spark-meter-value');
             if (fill) fill.style.width = `${Math.max(0, Math.min(100, mastery))}%`;

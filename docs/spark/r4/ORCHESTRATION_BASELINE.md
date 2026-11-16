@@ -1,0 +1,23 @@
+# R4 baseline — recorded before runtime edits
+
+The starting tree contains extensive uncommitted R1/R2/WP4/SRI-01 and gateway work; it is the baseline, not a clean HEAD. No owner services, paid providers or student database were used.
+
+## Audited lifecycle
+
+`api/views.py` validates the owner/conversation, resolves canonical Study Mode (WP4), parks pending work, persists the user message, performs consent/document attribution, loads bounded server history, approved personal facts and `UnitLearningService.safe_context`. SSE starts an existing worker/journal stream; durable requests are dispatched through existing Celery execution. `agent_execution.py` reconstructs versioned snapshots, rechecks canonical selection and fresh authorization, resolves documents and invokes the same orchestrator. Cancellation, lease and attempt fencing protect result publication.
+
+`orchestrator/service.py` first handles SRI-01 greetings with `casual_context` (bounded finalized recent academic activity and approved preferences). Other turns load social updates and a user snapshot, resolve authorized `DocumentTurnContext`, then consult `TeachingService.applies`. Eligible active teaching uses the existing phase controller and receipts. Otherwise deterministic tool routing precedes WP3 direct/RAG heuristics. Remaining unselected text can enter `StudyAgent`: bounded plan/observe rounds, validated server tools, signature deduplication, checkpoints/questions and conditional checklist reconciliation. Tool/RAG/conversation paths call the existing AI Gateway and stream a final answer.
+
+Gateway candidate routing honors capability/tier policy and cooldowns. The existing planner already stops retrying `AIGatewayError`; malformed planning output can retry twice. A failed initial planner returns to the standard answer path, which may make an additional gateway call. Cross-turn observation cache currently seeds unversioned read results; this cannot attest current access or source versions. Within-run signature deduplication already exists.
+
+RAG defaults to document/post/user/group searches, even for ordinary explanations and saved-history questions. ContextEngine bounds/deduplicates retrieved items; SRI-01 academic JSON projection is structurally bounded. Ordinary finalization uses the effective authorized source. Only explicit completed output can finalize academic exposure; independent evidence is required for mastery. Partial streaming stays interrupted; teaching can persist a completed segment while waiting on its exact next question. R1 follow-up claims/results and R2 atomic memory outbox remain separate durable consumers. Frontend activity projects canonical safe events and deduplicates by identity; existing Lucide/layout/composer behavior is retained.
+
+Reviewed implementation reports: R1 follow-up, R2 dispatch, Phase B continuity, WP4, SRI-01 repairs; source inspection also covered gateway, teaching, context engine, academic/personal memory, document retrieval, tasks, durable executor and SSE/activity contracts. Their PostgreSQL/browser gates remain pending.
+
+## Repeatable workload
+
+`tests/spark_r4/benchmark.py` executes the actual orchestrator with a mock gateway, empty authorized retrieval, mocked teaching eligibility/social updates/usage and anonymous synthetic requests. Twenty iterations per workload. Raw measurements: `baseline.json`. Planner returns an empty plan; these are branch/call-count probes, not model-quality or research-completion tests. Fixed answer usage is 20 prompt + 5 output tokens. Planner token accounting on an empty-plan fallback is absent in the old result; gateway call counts are the reliable baseline.
+
+Before: plain greeting 0 planner/0 retrieval/1 answer; emoji greeting and emoji thanks 1/1/1; explanation and mixed greeting/explanation 0/1/1; recall 0/1/1; math 0/0/1; code 1/1/1; three-paper comparison incorrectly takes routine RAG (0/1/1).
+
+Timing uses a local monotonic clock with immediate mocked responses. Classification/context/DB/cache/provider/durable-transition costs are not independently measured by this harness; no owner DB or durable run is executed. A later instrumented probe found an optional anonymous inventory query attempted against empty offline SQLite and caught by its existing handler; see PERFORMANCE_REPORT.md. Existing TimingRecorder has lifecycle marks, planner/answer durations, first-token mark and partial counters. Wall times are dominated by local Python/mock overhead and are not production latency estimates. First-token baseline includes setup before the run; subsequent comparisons must retain that definition.

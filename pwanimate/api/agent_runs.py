@@ -81,6 +81,19 @@ class AgentRunEventsView(APIView):
         return response
 
 
+class AgentRunStreamView(APIView):
+    """Reconnect to an owned run without claiming or dispatching execution."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, run_id):
+        run = get_object_or_404(SparkAgentRun, user=request.user, pk=run_id)
+        try:
+            after = max(0, int(request.query_params.get('after') or 0))
+        except (TypeError, ValueError):
+            after = 0
+        return _stream_run_events(request.user, run.id, after_seq=after)
+
+
 class AgentRunCancelView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -155,6 +168,8 @@ def _prepare_submission(request, data):
         if interaction is None:
             raise InteractionError('This question is unavailable.', 'not_found')
         run = interaction.run
+        if data.get('resume_run_id') and str(data['resume_run_id']) != str(run.pk):
+            raise InteractionError('This question does not belong to this task.', 'not_found')
         # `answer` may be a structured dict; otherwise text/selected/message.
         raw = data.get('answer')
         if raw is None:
@@ -252,26 +267,45 @@ def _claim_and_tail(request, run, continuation, *, interaction, raw_answer,
                     legacy_text, via):
     """SSE path: atomic claim + durable dispatch, then tail the journal."""
     try:
-        if run.status == SparkAgentRun.STATUS_WAITING:
+        replay = _accepted_submission(request.user, run, interaction, raw_answer)
+        if replay is not None:
+            locked = replay
+        else:
             locked, attempt_id = agent_execution.claim_run(
                 request.user, run, interaction=interaction, raw_answer=raw_answer,
                 legacy_text=legacy_text, note=continuation['note'],
                 kind=continuation['kind'], via=via)
             from pwanimate.tasks.agent_runs import dispatch_run
             dispatch_run(locked.id, attempt_id)
-        elif run.status == SparkAgentRun.STATUS_RUNNING and run.attempt_id:
-            locked = _arm_attempt(run, continuation)
-        else:
-            raise RunError('This task has already continued. Refresh the conversation to see its status.')
-    except InteractionError as exc:
-        http = {'not_found': 404, 'resolved': 409, 'expired': 410}.get(exc.code, 400)
+    except (InteractionError, RunError, TransitionError) as exc:
+        # A racing submit may have committed after the first replay check.
+        replay = _accepted_submission(request.user, run, interaction, raw_answer)
+        if replay is not None:
+            return _stream_run_events(request.user, replay.id,
+                accepted_interaction_id=str(interaction.id) if interaction else None)
+        code = getattr(exc, 'code', '')
+        http = {'not_found':404, 'resolved':409, 'expired':410}.get(code,
+            409 if 'already continued' in str(exc) else 410 if 'expired' in str(exc) else 400)
         return _error_response(str(exc), http)
-    except (RunError, TransitionError) as exc:
-        msg = str(exc)
-        http = (409 if 'already continued' in msg
-                else 410 if 'expired' in msg else 400)
-        return _error_response(msg, http)
-    return _stream_run_events(request.user, locked.id)
+    return _stream_run_events(request.user, locked.id,
+        accepted_interaction_id=str(interaction.id) if interaction else None)
+
+
+def _accepted_submission(user, run, interaction, raw_answer):
+    """A replay may attach only to the identical authenticated accepted answer.
+    It never re-arms a lease, replaces continuation, or dispatches another job.
+    """
+    if interaction is None: return None
+    fresh = SparkAgentRun.objects.filter(pk=run.pk,user=user).first()
+    answered = SparkAgentInteraction.objects.filter(pk=interaction.pk,run=fresh,user=user,
+        status=SparkAgentInteraction.STATUS_ANSWERED).first() if fresh else None
+    if answered is None: return None
+    from pwanimate.services.interactions import _validate_answer
+    try:
+        if _validate_answer(answered,raw_answer) != answered.answer: return None
+    except InteractionError:
+        return None
+    return fresh
 
 
 def _claim_and_execute(request, run, continuation, *, interaction, raw_answer,
@@ -362,7 +396,7 @@ def _execute_sync(request, run, continuation):
     return Response(payload)
 
 
-def _stream_run_events(user, run_id, after_seq=0):
+def _stream_run_events(user, run_id, after_seq=0, *, accepted_interaction_id=None):
     """Journal-tail SSE: replays missed events, then live-polls until the run
     pauses again or reaches a terminal state.
 
@@ -375,6 +409,9 @@ def _stream_run_events(user, run_id, after_seq=0):
         seq = int(after_seq or 0)
         deadline = time.monotonic() + TAIL_MAX_SECONDS
         last_keepalive = time.monotonic()
+        if accepted_interaction_id:
+            yield 'event: interaction_accepted\ndata: ' + json.dumps({
+                'run_id':str(run_id),'interaction_id':accepted_interaction_id}) + '\n\n'
         yield 'event: status\ndata: {"stage":"thinking"}\n\n'
         while time.monotonic() < deadline:
             run, events = await asyncio.to_thread(
@@ -385,7 +422,8 @@ def _stream_run_events(user, run_id, after_seq=0):
             for entry in events:
                 seq = entry.seq
                 yield _journal_event_sse(entry)
-            last_keepalive = time.monotonic()
+            if events:
+                last_keepalive = time.monotonic()
             if _run_settled(run):
                 payload = await asyncio.to_thread(_terminal_payload, run)
                 yield _sse_response(200, payload)
@@ -405,7 +443,7 @@ def _stream_run_events(user, run_id, after_seq=0):
 
 def _run_settled(run):
     """Terminal, or paused again with a persisted result (re-asked question)."""
-    if AgentRunService.is_terminal(run):
+    if AgentRunService.is_terminal(run) or run.status == SparkAgentRun.STATUS_INTERRUPTED:
         return True
     return (run.status == SparkAgentRun.STATUS_WAITING
             and run.result_message_id is not None)
@@ -417,7 +455,10 @@ def _sse_response(status_code, data):
 
 
 def _journal_event_sse(entry):
-    payload = entry.payload or {}
+    from pwanimate.orchestrator.activity import public_event
+    payload = public_event(entry.payload) if entry.type == 'activity' else {}
+    if entry.type == 'activity' and payload is None:
+        return ': private activity omitted\n\n'
     if entry.type == 'activity' and payload.get('type') == 'activity':
         return f"event: activity\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
     # Lifecycle journal entries surface as plan notes in the trail.
@@ -438,14 +479,15 @@ def _journal_event_sse(entry):
 
 def _terminal_payload(run):
     """Final response envelope built from durable state, not request memory."""
+    from pwanimate.orchestrator.activity import public_events
     base = {'run_id': str(run.id), 'status': run.status,
-            'activity': run.activity or []}
+            'activity': public_events(run.activity)}
     if run.status == SparkAgentRun.STATUS_CANCELLED:
         base.update({'cancelled': True,
                      'answer': 'Stopped — you cancelled this task.',
                      'message': 'Stopped — you cancelled this task.'})
         return base
-    if run.status == SparkAgentRun.STATUS_FAILED:
+    if run.status in {SparkAgentRun.STATUS_FAILED, SparkAgentRun.STATUS_INTERRUPTED}:
         base['error'] = ('The task could not continue. Approved actions remain '
                          'recorded; refresh to inspect their outcomes.')
         return base
@@ -453,7 +495,15 @@ def _terminal_payload(run):
         base['error'] = 'This task expired. Ask Spark again to get a fresh answer.'
         return base
     if run.result_message_id:
-        msg = PwanimateMessage.objects.filter(pk=run.result_message_id).first()
+        msg = PwanimateMessage.objects.filter(pk=run.result_message_id, conversation=run.user_message.conversation, conversation__user=run.user).first()
+        if msg is not None:
+            from pwanimate.services.teaching_output import persisted_teaching
+            teaching = persisted_teaching(msg, run)
+            completion = (run.state or {}).get('result_completion') or {}
+            if completion.get('message_id') == msg.pk:
+                base.update({k: completion[k] for k in ('finish_reason','response_complete') if k in completion})
+            if run.status == SparkAgentRun.STATUS_WAITING and not teaching:
+                msg = None  # Generic agent pauses never expose interim/planner text.
         if msg is not None:
             base.update({
                 'answer': msg.content, 'message_id': msg.id,
@@ -463,6 +513,16 @@ def _terminal_payload(run):
                 'metadata': {'awaiting_clarification': False,
                              'awaiting_approval': False},
             })
+            if teaching:
+                base['metadata']['teaching'] = teaching
+            if run.status == SparkAgentRun.STATUS_WAITING:
+                payload = AgentRunService.serialize(run)
+                base['metadata'].update({
+                    'awaiting_clarification': run.wait_reason == SparkAgentRun.WAIT_CLARIFICATION,
+                    'awaiting_approval': run.wait_reason == SparkAgentRun.WAIT_APPROVAL,
+                    'awaiting_input': True, 'run': payload})
+                if payload.get('interaction'):
+                    base['interaction'] = payload['interaction']
             return base
     # Re-paused: surface the awaiting metadata so the UI re-renders controls.
     payload = AgentRunService.serialize(run)

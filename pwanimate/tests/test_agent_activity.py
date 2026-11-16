@@ -50,11 +50,11 @@ class AgentActivityTests(TestCase):
         with patch.object(ActionService,'_execute_send_message') as execute:
             run=self.pause()
             execute.assert_not_called()
-        self.assertEqual(self.events[0]['kind'],'plan')
-        self.assertEqual(self.events[1]['kind'],'tool')
-        self.assertEqual(self.events[1]['status'],'running')
-        self.assertEqual(self.events[2]['id'],self.events[1]['id'])
-        self.assertEqual(self.events[2]['status'],'completed')
+        self.assertFalse(any(e['kind'] in {'plan','say','thinking'} for e in self.events))
+        self.assertEqual(self.events[0]['kind'],'tool')
+        self.assertEqual(self.events[0]['status'],'running')
+        self.assertEqual(self.events[1]['id'],self.events[0]['id'])
+        self.assertEqual(self.events[1]['status'],'completed')
         self.assertEqual(self.events[-1]['kind'],'approval')
         self.assertEqual(run.status,'waiting')
         self.assertEqual(PendingAction.objects.filter(status='pending').count(),2)
@@ -121,7 +121,7 @@ class AgentActivityTests(TestCase):
 
     def test_resume_restores_server_request_and_persists_activity_without_new_user_turn(self):
         run=self.pause()
-        gateway=Mock();gateway.generate.side_effect=[reply({'update':'Your approved actions are complete.','calls':[]}),LLMResponse(content='The message and follow are complete.',provider='mock',model='mock')]
+        gateway=Mock();gateway.generate.side_effect=[reply({'update':'Your approved actions are complete.','calls':[]}),LLMResponse(content='The message and follow are complete.',provider='mock',model='mock',finish_reason='stop')]
         orchestrator=PwanimateOrchestrator(gateway=gateway)
         from pwanimate.api.views import PwanimateChatView
         with patch.object(PwanimateChatView,'orchestrator',orchestrator),patch.object(orchestrator,'_record_usage'),patch.object(ActionService,'_execute_send_message',return_value={'message_id':999}),patch.object(ActionService,'_execute_follow_user',return_value={'followed':True}):
@@ -156,24 +156,30 @@ class AgentActivityTests(TestCase):
         orchestrator=PwanimateOrchestrator(gateway=gateway)
         with patch.object(orchestrator,'_record_usage'):
             result=orchestrator.run(OrchestrationRequest(query='Who built Spark?',user=self.user))
-        self.assertEqual(result.metadata['agent_trace'][0]['tool'],'site_info')
-        self.assertTrue(result.metadata['agent_trace'][0]['success'])
+        self.assertNotIn('agent_trace',result.metadata)
+        self.assertIn('Zayne Earthman',result.answer)
+        self.assertEqual(gateway.generate.call_count, 3)
 
 
 class ActivityStreamTests(SimpleTestCase):
     def test_activity_is_emitted_before_answer_tokens(self):
         from pwanimate.api.views import PwanimateChatView
         view=PwanimateChatView()
-        def work(request,progress_callback=None,token_callback=None):
+        def work(request,progress_callback=None,token_callback=None,timing=None):
             progress_callback(event('plan','I’ll search the selected document.',status='completed'))
             progress_callback(event('tool','Searching document content',event_id='search'))
             token_callback('Here is the answer.')
             return Response({'answer':'Here is the answer.'})
-        with patch.object(view,'_post_chat',side_effect=work),patch('pwanimate.api.views.close_old_connections'):
+        async def inline_thread(fn, *args, **kwargs):
+            # Same isolated Python 3.14 executor-shutdown workaround used by
+            # SRI transport tests. The view still owns its real producer thread.
+            return fn(*args, **kwargs)
+        with patch.object(view,'_post_chat',side_effect=work),patch('pwanimate.api.views.close_old_connections'), \
+             patch('pwanimate.api.views.asyncio.to_thread', side_effect=inline_thread):
             response=view._stream_chat_response(SimpleNamespace())
             async def collect():
                 return ''.join([chunk.decode() if isinstance(chunk,bytes) else chunk async for chunk in response.streaming_content])
             body=asyncio.run(collect())
         self.assertLess(body.index('event: activity'),body.index('event: chunk'))
         self.assertLess(body.index('event: chunk'),body.index('event: response'))
-        self.assertIn('I’ll search',body.replace('\\u2019','’'))
+        self.assertNotIn('I’ll search',body.replace('\\u2019','’'))

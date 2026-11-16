@@ -486,16 +486,9 @@
             font-size: 1.1rem !important;
             line-height: 1 !important;
             flex-shrink: 0 !important;
-            /* GPT‑style rounded icon */
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 1.4rem;
-            height: 1.4rem;
-            border-radius: 999px;
-            background: var(--primary, #2563eb);
-            color: #fff !important;
-            padding: 0;
+            background: none !important;
+            border-radius: 0 !important;
+            color: inherit !important;
         }
         .postcard-actions .engagement-button span,
         .engagement-button span {
@@ -6981,7 +6974,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 <script src="{% static 'js/native-offline.js' %}?v=20261108-snapshot" defer></script>
 <script src="{% static 'js/offline-resources.js' %}?v=20261108-snapshot" defer></script>
 <script src="{% static 'js/offline-capture.js' %}" defer></script>
-{% if request.user.is_authenticated %}<script src="{% static 'js/spark-reminders.js' %}" defer></script><script src="{% static 'js/spark-study-desk.js' %}?v=20261109-settings" defer></script><script src="{% static 'js/spark-study-sessions.js' %}?v=20261109-sessions" defer></script><script src="{% static 'js/pwanimate/activity-trail.js' %}?v=20261109-pause" defer></script>{% endif %}
+{% if request.user.is_authenticated %}<script src="{% static 'js/spark-reminders.js' %}" defer></script><script src="{% static 'js/spark-study-desk.js' %}?v=20261109-settings" defer></script><script src="{% static 'js/spark-study-sessions.js' %}?v=20261109-sessions" defer></script><script src="{% static 'js/pwanimate/activity-trail.js' %}?v=20261112-explanations" defer></script>{% endif %}
 </body>
 
 </html>

@@ -45,7 +45,8 @@ Use send_message when the student asks Pwanimate to message a specific person, a
         r"web|internet|online|browse|research|latest|new|updated|up[- ]to[- ]date|breaking|"
         r"current(?:ly)?|recent|today|yesterday|as\s+of\s+now|this\s+(?:week|month|year)|news|"
         r"prices?|pricing|forecast|weather|version|release|law|regulation|schedule|election|"
-        r"score|stock|exchange\s+rate|vasto|pwanimate|site|platform|app|about|help)\b",
+        r"plans?|reminders?|study\s+blocks?|follow|message|cancel|remove|delete|save|"
+        r"score|stock|exchange\s+rate|vasto|pwanimate|site|platform|app)\b",
         re.IGNORECASE,
     )
 

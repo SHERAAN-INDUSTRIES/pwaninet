@@ -73,92 +73,10 @@ class DocumentSemanticRetrievalService:
             )
         qs = chunk_qs
 
-        # Authorization filter
-        if user and getattr(user, 'is_authenticated', False):
-            # Staff, superuser, and executive student leaders have administrative read access
-            global_role = getattr(user, 'global_role', None)
-            is_admin_or_leader = (
-                user.is_staff or
-                user.is_superuser or
-                global_role in ['PRESIDENT', 'DELEGATE']
-            )
-
-            if is_admin_or_leader:
-                qs = qs.filter(Q(document__is_ai_generated=False) | Q(document__uploaded_by=user))
-            else:
-                # Build student visibility query
-                visibility_q = Q(document__visibility='public', document__is_ai_generated=False) | Q(document__uploaded_by=user)
-
-                # Restricted visibility check
-                restricted_q = Q(document__visibility='restricted', document__is_ai_generated=False)
-                has_restricted_match = False
-
-                # 1. Match student's enrolled programme units or direct unit enrollments
-                programme = getattr(user, 'programme', None)
-                if programme:
-                    visibility_q |= (
-                        restricted_q &
-                        Q(document__academic_units__academic_unit__programme_units__programme=programme)
-                    )
-                    has_restricted_match = True
-
-                # 2. Match direct StudentUnitEnrollment
-                visibility_q |= (
-                    restricted_q &
-                    Q(
-                        document__academic_units__academic_unit__student_enrollments__user=user,
-                        document__academic_units__academic_unit__student_enrollments__is_active=True,
-                    )
-                )
-
-                # 3. Legacy fallback to course
-                course = getattr(user, 'course', None)
-                if course and not has_restricted_match:
-                    visibility_q |= (
-                        restricted_q &
-                        Q(document__academic_units__academic_unit__code__icontains=course.name)
-                    )
-
-                qs = qs.filter(visibility_q).distinct()
-        else:
-            # Anonymous users can only view public documents
-            qs = qs.filter(document__visibility='public', document__is_ai_generated=False)
-
-        # Domain metadata filters
-        if filters:
-            if filters.get('category'):
-                cat = filters['category']
-                qs = qs.filter(
-                    Q(document__category__code=cat) |
-                    Q(document__category__id=cat)
-                )
-
-            if filters.get('academic_unit'):
-                unit = str(filters['academic_unit']).strip()
-                unit_obj = self._resolve_academic_unit(unit)
-                if unit_obj is not None:
-                    qs = qs.filter(document__academic_units__academic_unit_id=unit_obj.id)
-                else:
-                    # Unresolvable code: match nothing rather than leak
-                    # unscoped results under a unit-scoped query.
-                    qs = qs.none()
-
-            if filters.get('academic_units'):
-                units = filters['academic_units']
-                qs = qs.filter(
-                    document__academic_units__academic_unit_id__in=units
-                )
-
-            if filters.get('document_id'):
-                qs = qs.filter(document_id=filters['document_id'])
-
-            if filters.get('document_ids'):
-                qs = qs.filter(document_id__in=filters['document_ids'])
-
-            if filters.get('file_type'):
-                ft = str(filters['file_type']).lower().strip()
-                qs = qs.filter(document__versions__files__extension=ft)
-
+        from documents.access_policy import DocumentAccessPolicy
+        qs = qs.filter(document_id__in=DocumentAccessPolicy.authorized_documents(user, filters=filters).values('pk'))
+        if filters and filters.get('file_type'):
+            qs = qs.filter(document__versions__files__extension=str(filters['file_type']).lower())
         return qs
 
     @staticmethod
