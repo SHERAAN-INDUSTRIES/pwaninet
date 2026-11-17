@@ -126,13 +126,13 @@
                hx-history="true"
                class="btn btn-sm btn-outline-secondary rounded-pill fw-bold text-uppercase mb-3 px-3"
                onclick="if (document.referrer && document.referrer.startsWith(window.location.origin) && window.history.length > 1) { window.history.back(); return false; }">
-                <i class="bi bi-arrow-left me-1"></i> {% if is_multi_image_post %}{% trans "Back to feed" %}{% else %}{% trans "Back" %}{% endif %}
+                <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon me-1"></i> {% if is_multi_image_post %}{% trans "Back to feed" %}{% else %}{% trans "Back" %}{% endif %}
             </a>
             {% else %}
             <button type="button"
                     class="btn btn-sm btn-outline-secondary rounded-pill fw-bold text-uppercase mb-3 px-3"
                     onclick="if (window.showGuestAuthPrompt) { window.showGuestAuthPrompt({ title: '{% trans "Sign in to explore vasto" %}', subtitle: '{% trans "Join vasto to browse the campus feed, groups, and academic materials." %}' }); }">
-                <i class="bi bi-arrow-left me-1"></i> {% if is_multi_image_post %}{% trans "Back to feed" %}{% else %}{% trans "Back" %}{% endif %}
+                <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon me-1"></i> {% if is_multi_image_post %}{% trans "Back to feed" %}{% else %}{% trans "Back" %}{% endif %}
             </button>
             {% endif %}
         </div>
@@ -157,10 +157,10 @@
                             <img src="{{ post_image.image.url }}" alt="Post image {{ forloop.counter }}" loading="lazy">
                         </a>
                         <div class="postcard-actions px-3 py-2 border-top d-flex align-items-center justify-content-between gap-2">
-                            <button class="btn btn-sm border-0 {% if post_image.viewer_has_liked %}text-primary{% else %}text-muted{% endif %} d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1 image-detail-like" style="flex:1 1 0;min-width:0" type="button" data-post-id="{{ post.share_id }}" data-image-id="{{ post_image.id }}" aria-label="{% trans 'Like image' %}"><i class="bi fs-5 {% if post_image.viewer_has_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i> <span class="fw-bold">{{ post_image.likes.count }}</span></button>
-                            <button class="btn btn-sm border-0 text-muted d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1 image-detail-comment" style="flex:1 1 0;min-width:0" type="button" data-post-id="{{ post.share_id }}" data-image-id="{{ post_image.id }}" aria-label="{% trans 'Comment on image' %}"><i class="bi bi-chat-dots fs-5"></i> <span class="fw-bold">{{ post_image.comments.count }}</span></button>
-                            <button class="btn btn-sm border-0 text-muted d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1" style="flex:1 1 0;min-width:0" type="button" data-bs-toggle="modal" data-bs-target="#globalShareModal" data-post-id="{{ post.share_id }}" data-post-url="{% url 'posts:post_details' post.share_id %}?image={{ forloop.counter0 }}" data-post-content="{{ post.content|truncatechars:80|escapejs }}" aria-label="{% trans 'Share image' %}"><i class="bi bi-share fs-5"></i> <span class="fw-bold">{% trans "Share" %}</span></button>
-                            <button class="btn btn-sm border-0 {% if post.allow_downloads %}text-muted{% else %}text-secondary opacity-50{% endif %} d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1" style="flex:1 1 0;min-width:0" type="button" data-action="download-media" data-download-allowed="{{ post.allow_downloads|yesno:'true,false' }}" data-post-id="{{ post.share_id }}" data-media-type="image" {% if post.allow_downloads %}data-url="{% protected_download_url post 'image' post_image.id %}"{% else %}disabled aria-disabled="true"{% endif %} data-filename="{{ post_image.image.name|default:'image.jpg' }}" aria-label="{% trans 'Download image' %}"><i class="bi bi-download fs-5"></i> <span class="fw-bold">{% trans "Download" %}</span></button>
+                            <button class="btn btn-sm border-0 {% if post_image.viewer_has_liked %}text-primary{% else %}text-muted{% endif %} d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1 image-detail-like" style="flex:1 1 0;min-width:0" type="button" data-post-id="{{ post.share_id }}" data-image-id="{{ post_image.id }}" aria-label="{% trans 'Like image' %}"><i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if post_image.viewer_has_liked %} vasto-icon--filled{% else %}{% endif %}"></i> <span class="fw-bold">{{ post_image.likes.count }}</span></button>
+                            <button class="btn btn-sm border-0 text-muted d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1 image-detail-comment" style="flex:1 1 0;min-width:0" type="button" data-post-id="{{ post.share_id }}" data-image-id="{{ post_image.id }}" aria-label="{% trans 'Comment on image' %}"><i aria-hidden="true" data-lucide="message-circle" class="vasto-icon fs-5"></i> <span class="fw-bold">{{ post_image.comments.count }}</span></button>
+                            <button class="btn btn-sm border-0 text-muted d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1" style="flex:1 1 0;min-width:0" type="button" data-bs-toggle="modal" data-bs-target="#globalShareModal" data-post-id="{{ post.share_id }}" data-post-url="{% url 'posts:post_details' post.share_id %}?image={{ forloop.counter0 }}" data-post-content="{{ post.content|truncatechars:80|escapejs }}" aria-label="{% trans 'Share image' %}"><i aria-hidden="true" data-lucide="share" class="vasto-icon fs-5"></i> <span class="fw-bold">{% trans "Share" %}</span></button>
+                            <button class="btn btn-sm border-0 {% if post.allow_downloads %}text-muted{% else %}text-secondary opacity-50{% endif %} d-flex align-items-center justify-content-center gap-1 text-decoration-none engagement-button flex-grow-1" style="flex:1 1 0;min-width:0" type="button" data-action="download-media" data-download-allowed="{{ post.allow_downloads|yesno:'true,false' }}" data-post-id="{{ post.share_id }}" data-media-type="image" {% if post.allow_downloads %}data-url="{% protected_download_url post 'image' post_image.id %}"{% else %}disabled aria-disabled="true"{% endif %} data-filename="{{ post_image.image.name|default:'image.jpg' }}" aria-label="{% trans 'Download image' %}"><i aria-hidden="true" data-lucide="download" class="vasto-icon fs-5"></i> <span class="fw-bold">{% trans "Download" %}</span></button>
                         </div>
                     </article>
                     {% endfor %}
@@ -196,7 +196,7 @@
                     const like = event.target.closest('.image-detail-like');
                     if (like) {
                       const response = await fetch(`/api/posts/${like.dataset.postId}/images/${like.dataset.imageId}/like/`, {method:'POST',headers:{'X-CSRFToken':csrf,'Content-Type':'application/json'}});
-                      if (response.ok) { const data = await response.json(); like.querySelector('span').textContent = data.likes_count; like.classList.toggle('text-primary'); like.classList.toggle('text-muted'); like.querySelector('i').classList.toggle('bi-heart-fill'); like.querySelector('i').classList.toggle('bi-heart'); }
+                      if (response.ok) { const data = await response.json(); like.querySelector('span').textContent = data.likes_count; like.classList.toggle('text-primary'); like.classList.toggle('text-muted'); const iconEl=like.querySelector('[data-lucide]'); if(iconEl) iconEl.classList.toggle('vasto-icon--filled'); }
                     }
                     const comment = event.target.closest('.image-detail-comment');
                     if (comment && modalEl && window.bootstrap) { bootstrap.Modal.getOrCreateInstance(modalEl).show(); loadComments(comment.dataset.postId, comment.dataset.imageId); }
@@ -250,7 +250,7 @@
                             <label class="btn border-0 p-0 text-muted position-absolute mb-0" 
                                    style="right: 66px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer;" 
                                    title="{% trans 'Attach photo as sticker' %}">
-                                <i class="bi bi-camera fs-6"></i>
+                                <i aria-hidden="true" data-lucide="camera" class="vasto-icon fs-6"></i>
                                 <input type="file" name="attachment_image" class="comment-photo-input d-none" accept="image/*">
                             </label>
                             <button type="button" 
@@ -259,12 +259,12 @@
                                     data-input="#detail-comment-input-{{ post.share_id }}"
                                     style="right: 36px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
                                     title="{% trans 'Emoji, GIFs & Stickers' %}">
-                                <i class="bi bi-emoji-smile fs-6"></i>
+                                <i aria-hidden="true" data-lucide="smile" class="vasto-icon fs-6"></i>
                             </button>
                             <button type="submit" 
                                     class="main-composer-send" 
                                     aria-label="{% trans 'Send comment' %}">
-                                <i class="bi bi-send-fill"></i>
+                                <i aria-hidden="true" data-lucide="send" class="vasto-icon"></i>
                             </button>
                         </div>
                     </div>

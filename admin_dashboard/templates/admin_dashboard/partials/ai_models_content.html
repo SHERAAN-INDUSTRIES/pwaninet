@@ -1,0 +1,164 @@
+<main class="adw-page" data-adw-section="models">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">AI console</div>
+      <h1 class="adw-page-title">Models</h1>
+      <p class="adw-page-sub">Every model the platform can name — switch registered models on or off.</p>
+    </div>
+    <div class="adw-page-actions">
+      <a href="{% url 'admin_dashboard:ai_providers' %}" class="adw-btn"
+         hx-get="{% url 'admin_dashboard:ai_providers' %}" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="network" class="vasto-icon vasto-icon--sm"></i> Providers
+      </a>
+      <a href="{% url 'admin_dashboard:ai_usage' %}" class="adw-btn adw-btn-primary"
+         hx-get="{% url 'admin_dashboard:ai_usage' %}" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="chart-column" class="vasto-icon vasto-icon--sm"></i> Token usage
+      </a>
+    </div>
+  </header>
+
+  {% if flash %}
+  <div class="adw-flash is-{{ flash_level|default:'info' }}">
+    <i aria-hidden="true" data-lucide="{% if flash_level == 'success' %}circle-check-big{% else %}info{% endif %}" class="vasto-icon vasto-icon--sm"></i>
+    <div>{{ flash }}</div>
+  </div>
+  {% endif %}
+
+  {# ── Fleet tally ── #}
+  <div class="adw-tally-bar">
+    <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i> {{ ops.model_counts.active|default:0 }} active</span>
+    {% if ops.model_counts.rate_limited %}<span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i> {{ ops.model_counts.rate_limited }} rate limited</span>{% endif %}
+    {% if ops.model_counts.disabled %}<span class="adw-chip is-off"><i aria-hidden="true" data-lucide="ban" class="vasto-icon vasto-icon--sm"></i> {{ ops.model_counts.disabled }} disabled</span>{% endif %}
+    {% if ops.model_counts.no_key %}<span class="adw-chip is-mute"><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i> {{ ops.model_counts.no_key }} no key</span>{% endif %}
+    {% if ops.model_counts.unregistered %}<span class="adw-chip is-mute"><i aria-hidden="true" data-lucide="circle-minus" class="vasto-icon vasto-icon--sm"></i> {{ ops.model_counts.unregistered }} unregistered</span>{% endif %}
+    <span class="adw-tally-total">{{ ops.model_total }} models total · {{ registry.offerings }} in registry</span>
+  </div>
+
+  {% if not registry.healthy %}
+  <div class="adw-flash is-warn">
+    <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon vasto-icon--sm"></i>
+    <div>
+      {% if not registry.offerings %}
+        <strong>The model registry is empty.</strong> Models below are code-governed and cannot be switched from here —
+        run <code>python manage.py seed_model_registry</code> to price and manage them.
+      {% else %}
+        <strong>No default tier.</strong> Tier gating is bypassed until a default tier exists —
+        run <code>python manage.py seed_model_registry</code>.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Model catalog</h2>
+        <div class="adw-panel-sub">Disabled rows are inert everywhere: the router removes them before tier and health checks (≤60s to propagate).</div>
+      </div>
+      <i aria-hidden="true" data-lucide="cpu" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <div class="adw-table-wrap">
+        <table class="adw-table adw-table-models">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Status</th>
+              <th>Used by</th>
+              <th>Tier</th>
+              <th class="adw-num">Tokens · {{ usage_days }}d</th>
+              <th class="adw-num">Requests</th>
+              <th class="adw-col-switch">Switch</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for model in models %}
+            <tr class="{% if model.disabled %}adw-row-off{% elif model.rate_limited %}adw-row-limited{% endif %}">
+              <td>
+                <div class="adw-cell-strong"><code>{{ model.model_id }}</code></div>
+                <div class="adw-cell-sub">{{ model.provider_label }} · {{ model.provider }}</div>
+              </td>
+              <td>
+                {% if model.status == 'active' %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i> Active</span>
+                {% elif model.status == 'rate_limited' %}
+                  <span class="adw-chip is-warn" title="Cooldown: {{ model.cooldown_remaining|floatformat:1 }}s"><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i> Rate limited · {{ model.cooldown_remaining|floatformat:0 }}s</span>
+                {% elif model.status == 'disabled' %}
+                  <span class="adw-chip is-off"><i aria-hidden="true" data-lucide="ban" class="vasto-icon vasto-icon--sm"></i> Disabled</span>
+                {% elif model.status == 'no_key' %}
+                  <span class="adw-chip is-off" title="{{ model.key_detail }}"><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i> No API key</span>
+                {% else %}
+                  <span class="adw-chip is-mute" title="Reachable through code/settings but not priced or gated — seed the registry to manage it."><i aria-hidden="true" data-lucide="circle-minus" class="vasto-icon vasto-icon--sm"></i> Not in registry</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if model.primary_of %}
+                  <div class="adw-cell-strong">{{ model.primary_of|join:", " }}</div>
+                {% endif %}
+                {% if model.engines %}
+                  <div class="adw-cell-sub">
+                    {% for e in model.engines %}{% if not forloop.first %} · {% endif %}{{ e.name }}{% endfor %}
+                  </div>
+                {% elif model.in_global_chain %}
+                  <div class="adw-cell-sub">Global chat chain</div>
+                {% else %}
+                  <div class="adw-cell-sub">—</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if model.registered %}
+                  {% if model.min_tier %}<span class="adw-chip is-info">{{ model.min_tier_name }}+</span>{% else %}<span class="adw-chip is-mute">Free route</span>{% endif %}
+                {% else %}
+                  <span class="adw-chip is-mute">—</span>
+                {% endif %}
+              </td>
+              <td class="adw-num">
+                {% if model.usage_tokens %}
+                  <div class="adw-usage">
+                    <span class="adw-usage-bar"><span style="width: {{ model.usage_share }}%"></span></span>
+                    <span class="adw-usage-value">{{ model.usage_tokens }}</span>
+                  </div>
+                {% else %}
+                  <span class="adw-text-muted">0</span>
+                {% endif %}
+              </td>
+              <td class="adw-num">{% if model.usage_requests %}{{ model.usage_requests }}{% else %}<span class="adw-text-muted">0</span>{% endif %}</td>
+              <td class="adw-col-switch">
+                {% if model.toggleable %}
+                <form class="adw-switch-form" method="post"
+                      hx-post="{% url 'admin_dashboard:toggle_model' %}"
+                      hx-target="#page-content-target" hx-swap="innerHTML">
+                  {% csrf_token %}
+                  <input type="hidden" name="provider" value="{{ model.provider }}">
+                  <input type="hidden" name="model_id" value="{{ model.model_id }}">
+                  <input type="hidden" name="active" value="{{ model.disabled|yesno:'1,0' }}">
+                  <button type="submit" class="adw-switch{% if model.disabled %} is-off{% endif %}"
+                          role="switch" aria-checked="{% if model.disabled %}false{% else %}true{% endif %}"
+                          title="{% if model.disabled %}Enable {{ model.model_id }}{% else %}Disable {{ model.model_id }}{% endif %}">
+                    <span class="adw-switch-thumb"></span>
+                  </button>
+                  <span class="adw-switch-state">{% if model.disabled %}Off{% else %}On{% endif %}</span>
+                </form>
+                {% else %}
+                <span class="adw-switch-note" title="Not in the model registry — run seed_model_registry to make it switchable.">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="adw-empty"><i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i><strong>No models found</strong><span>Check the engine ladders.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="adw-panel-note">
+        <i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i>
+        Usage covers the last {{ usage_days }} days from the metering ledger. Rate limits are per worker process.
+        Toggling publishes an <code>admin.model.toggled</code> event for the audit trail.
+      </p>
+    </div>
+  </section>
+
+</main>

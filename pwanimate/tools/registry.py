@@ -130,5 +130,7 @@ def get_default_tool_registry() -> ToolRegistry:
         from pwanimate.tools.domain.memory import ProposePersonalMemoryTool, RecallMemoryTool
         registry.register(ProposePersonalMemoryTool())
         registry.register(RecallMemoryTool())
+        from pwanimate.tools.domain.exports import GenerateDocumentTool
+        registry.register(GenerateDocumentTool())
         _default_registry = registry
     return _default_registry

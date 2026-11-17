@@ -18,7 +18,7 @@
         {% else %}
           <div class="rounded-circle d-flex align-items-center justify-content-center"
                style="width: 40px; height: 40px; background-color: var(--border);">
-            <i class="bi bi-person-fill"></i>
+            <i aria-hidden="true" data-lucide="user-round" class="vasto-icon"></i>
           </div>
         {% endif %}
         
@@ -45,7 +45,7 @@
       
       <!-- Expand Icon -->
       <div>
-        <i class="bi bi-chevron-down" id="expand-icon-{{ sender_group.sender.id }}"></i>
+        <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon" id="expand-icon-{{ sender_group.sender.id }}"></i>
       </div>
       
       <!-- Time -->
@@ -68,7 +68,7 @@
           <button class="btn btn-sm"
                   style="background-color: var(--brand-light); color: var(--brand);"
                   onclick="markSenderGroupAsRead({{ sender_group.sender.id }}, event)">
-            <i class="bi bi-check2-all"></i> Mark all as read
+            <i aria-hidden="true" data-lucide="check-check" class="vasto-icon"></i> Mark all as read
           </button>
         </div>
       {% endif %}
@@ -76,7 +76,7 @@
   </div>
 {% empty %}
   <div class="empty-state">
-    <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
+    <div class="empty-icon"><i aria-hidden="true" data-lucide="bell-off" class="vasto-icon"></i></div>
     <div class="empty-title">No notifications</div>
     <p class="empty-sub">You're all caught up!</p>
   </div>
@@ -90,12 +90,10 @@ function toggleSenderGroup(senderId) {
   
   if (activities.style.display === 'none') {
     activities.style.display = 'block';
-    expandIcon.classList.remove('bi-chevron-down');
-    expandIcon.classList.add('bi-chevron-up');
+    if (window.VastoIcons) { window.VastoIcons.setIcon(expandIcon, 'chevron-up'); }
   } else {
     activities.style.display = 'none';
-    expandIcon.classList.remove('bi-chevron-up');
-    expandIcon.classList.add('bi-chevron-down');
+    if (window.VastoIcons) { window.VastoIcons.setIcon(expandIcon, 'chevron-down'); }
   }
 }
 

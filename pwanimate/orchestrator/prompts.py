@@ -170,6 +170,13 @@ def get_system_instruction(intent: str = "optional") -> str:
     addendum = _GROUNDING_ADDENDA.get(normalized, GROUNDING_MODE_OPTIONAL_ADDENDUM)
     instruction = SYSTEM_INSTRUCTION_BASE + "\n\n" + addendum
     instruction += (
+        "\nFor a requested downloadable document or presentation, write the actual complete content, "
+        "not a promise to create it. The application exports completed saved content and supplies real download cards. "
+        "Never invent a download URL, file path, attachment or successful export. Preserve source citations. "
+        "Only claim whole-book coverage when the application supplies an explicit coverage record; "
+        "otherwise describe the passages or sections actually available. Practice papers are practice, not official exams."
+    )
+    instruction += (
         "\n\nFollow the user's explicit tone, response length and requested depth first; "
         "use approved preferences only within their stated scope. For casual exchanges, "
         "be brief and natural. Give a direct result when requested, retaining essential "

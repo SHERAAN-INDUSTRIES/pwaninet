@@ -119,11 +119,11 @@ if (!window.__pwaniConvListDelegationBound) {
         if (data.status === 'followed') {
           btn.classList.remove('btn-follow', 'btn-outline-primary');
           btn.classList.add('btn-primary', 'start-conversation');
-          btn.innerHTML = '<i class="bi bi-chat-dots me-1"></i> Message';
+          btn.innerHTML = '<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon me-1"></i> Message';
         } else if (data.status === 'unfollowed') {
           btn.classList.remove('btn-primary', 'start-conversation');
           btn.classList.add('btn-outline-primary', 'btn-follow');
-          btn.innerHTML = '<i class="bi bi-person-plus me-1"></i> Follow';
+          btn.innerHTML = '<i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon me-1"></i> Follow';
         }
       })
       .catch(error => console.error('Error:', error));
@@ -1194,7 +1194,7 @@ function showNotification(message, type = 'info') {
       <h1 class="page-title">Messaging</h1>
     </div>
     <button class="btn-create whatsapp-start-chat-btn" data-bs-toggle="modal" data-bs-target="#newConversationModal">
-      <i class="bi bi-plus-lg"></i> Start New Chat
+      <i aria-hidden="true" data-lucide="plus" class="vasto-icon"></i> Start New Chat
     </button>
   </div>
 
@@ -1225,7 +1225,7 @@ function showNotification(message, type = 'info') {
           <div class="card">
             <div class="card-body">
               <div class="sidebar-label">
-                <i class="bi bi-chat-dots-fill"></i> Your Recent Chats
+                <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i> Your Recent Chats
               </div>
               <div class="chats-scroll">
                 {% for item in conversation_data %}
@@ -1234,7 +1234,7 @@ function showNotification(message, type = 'info') {
                     <a href="{% url 'messaging:conversation_detail' conversation.id %}" class="chat-row{% if active_conversation and conversation.id|stringformat:'s' == active_conversation|stringformat:'s' %} active{% endif %}" data-conversation-id="{{ conversation.id }}" data-is-pinned="{% if item.is_pinned %}true{% else %}false{% endif %}">
                       {% if conversation.type == 'group' %}
                         <div class="chat-icon">
-                          <i class="bi bi-people-fill"></i>
+                          <i aria-hidden="true" data-lucide="users" class="vasto-icon"></i>
                         </div>
                       {% else %}
                         {% for member in conversation.members.all %}
@@ -1248,7 +1248,7 @@ function showNotification(message, type = 'info') {
                               {% else %}
                                 <div class="chat-avatar d-flex align-items-center justify-content-center bg-secondary text-white"
                                      data-user-id="{{ member.user.id }}">
-                                  <i class="bi bi-person-fill fs-5"></i>
+                                  <i aria-hidden="true" data-lucide="user-round" class="vasto-icon fs-5"></i>
                                 </div>
                               {% endif %}
                               {% if member.user.is_online %}
@@ -1276,7 +1276,7 @@ function showNotification(message, type = 'info') {
 
                           <!-- Top Right Actions: Pin icon, Time/Receipt (padded for 3-dots) -->
                           <div class="chat-meta d-flex align-items-center gap-1 flex-shrink-0 ms-auto" style="padding-right: 26px;">
-                            <i class="bi bi-pin-angle-fill text-primary chat-pin-icon {% if not item.is_pinned %}d-none{% endif %}" title="Pinned" style="font-size: 0.78rem;"></i>
+                            <i aria-hidden="true" data-lucide="pin" class="vasto-icon text-primary chat-pin-icon {% if not item.is_pinned %}d-none{% endif %}" title="Pinned" style="font-size: 0.78rem;"></i>
                             {% if conversation.last_message and conversation.last_message.sender == request.user %}
                               <span class="read-receipt-icon" style="font-size: 12px; color: var(--text-muted);">&#10003;</span>
                             {% endif %}
@@ -1292,7 +1292,7 @@ function showNotification(message, type = 'info') {
                             {% if item.preview %}
                               <span class="chat-preview-text text-truncate d-block {% if item.unread_count > 0 %}fw-bold text-body unread{% else %}text-muted fw-normal{% endif %}">
                                 {% if item.preview.icon %}
-                                  <i class="bi {{ item.preview.icon }} me-1 {% if item.preview.type == 'audio' %}text-primary{% else %}text-muted{% endif %}"></i>
+                                  <i aria-hidden="true" data-lucide="{{ item.preview.icon }}" class="vasto-icon me-1 {% if item.preview.type == 'audio' %}text-primary{% else %}text-muted{% endif %}"></i>
                                 {% endif %}
                                 {{ item.preview.text }}
                               </span>
@@ -1328,7 +1328,7 @@ function showNotification(message, type = 'info') {
                               aria-expanded="false"
                               title="Chat options"
                               style="width: 24px; height: 24px;">
-                        <i class="bi bi-three-dots-vertical" style="font-size: 0.85rem;"></i>
+                        <i aria-hidden="true" data-lucide="ellipsis-vertical" class="vasto-icon" style="font-size: 0.85rem;"></i>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end shadow border py-1 small" style="z-index: 1070;">
                         <li>
@@ -1336,7 +1336,7 @@ function showNotification(message, type = 'info') {
                                   type="button"
                                   data-conversation-id="{{ conversation.id }}"
                                   data-action="{% if item.is_pinned %}unpin{% else %}pin{% endif %}">
-                            <i class="bi bi-pin-angle{% if item.is_pinned %}-fill{% endif %} me-2 text-primary"></i>
+                            <i aria-hidden="true" data-lucide="pin" class="vasto-icon me-2 text-primary{% if item.is_pinned %} vasto-icon--filled{% endif %}"></i>
                             {% if item.is_pinned %}Unpin chat{% else %}Pin chat{% endif %}
                           </button>
                         </li>
@@ -1344,7 +1344,7 @@ function showNotification(message, type = 'info') {
                           <button class="dropdown-item py-1 px-3 mark-read-btn"
                                   type="button"
                                   data-conversation-id="{{ conversation.id }}">
-                            <i class="bi bi-check2-all me-2 text-info"></i> Mark as read
+                            <i aria-hidden="true" data-lucide="check-check" class="vasto-icon me-2 text-info"></i> Mark as read
                           </button>
                         </li>
                       </ul>
@@ -1353,7 +1353,7 @@ function showNotification(message, type = 'info') {
                   {% endwith %}
                 {% empty %}
                   <div class="sidebar-empty">
-                    <i class="bi bi-chat"></i>
+                    <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                     <p>No conversations yet.</p>
                   </div>
                 {% endfor %}
@@ -1362,7 +1362,7 @@ function showNotification(message, type = 'info') {
               <!-- Suggested Friends Section at Bottom -->
               {% if suggested_users or unmessaged_friends %}
               <div class="sidebar-label mt-4 pt-3 border-top d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-people-fill me-1"></i> Suggested Friends</span>
+                <span><i aria-hidden="true" data-lucide="users" class="vasto-icon me-1"></i> Suggested Friends</span>
                 <span class="badge bg-secondary-subtle text-muted" style="font-size: 0.68rem;">{{ suggested_users|length|default:unmessaged_friends|length }}</span>
               </div>
               <div class="suggested-friends-list mt-2">
@@ -1376,7 +1376,7 @@ function showNotification(message, type = 'info') {
                         <img src="{{ u.profile_pic.url }}" class="rounded-circle" style="width: 38px; height: 38px; object-fit: cover;" alt="{{ u.username }}">
                       {% else %}
                         <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white" style="width: 38px; height: 38px; font-size: 15px;">
-                          <i class="bi bi-person-fill"></i>
+                          <i aria-hidden="true" data-lucide="user-round" class="vasto-icon"></i>
                         </div>
                       {% endif %}
                       {% if u.is_online %}
@@ -1393,7 +1393,7 @@ function showNotification(message, type = 'info') {
                     </div>
                   </div>
                   <button type="button" class="btn btn-sm btn-outline-primary rounded-pill start-conversation flex-shrink-0 px-2 py-1" data-user-id="{{ u.id }}" style="font-size: 0.75rem;">
-                    <i class="bi bi-chat-dots me-1"></i>Message
+                    <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon me-1"></i>Message
                   </button>
                 </div>
                 {% endfor %}
@@ -1405,7 +1405,7 @@ function showNotification(message, type = 'info') {
           <!-- Tip Card -->
           <div class="tip-card" style="margin-bottom: 16px;">
             <div class="tip-title">
-              <i class="bi bi-lightbulb-fill" style="color: var(--brand);"></i>
+              <i aria-hidden="true" data-lucide="lightbulb" class="vasto-icon" style="color: var(--brand);"></i>
               Quick tip
             </div>
             <p class="tip-body">
@@ -1416,7 +1416,7 @@ function showNotification(message, type = 'info') {
           <!-- Encryption Info -->
           <div class="tip-card">
             <div class="tip-title">
-              <i class="bi bi-shield-lock-fill" style="color: var(--success);"></i>
+              <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon" style="color: var(--success);"></i>
               End-to-end encryption
             </div>
             <p class="tip-body">
@@ -1484,12 +1484,12 @@ function showNotification(message, type = 'info') {
     <small class="text-muted">@{{ user.username }}</small>
   </div>
   <button class="btn btn-sm btn-primary start-conversation" data-user-id="{{ user.id }}">
-    <i class="bi bi-chat-dots"></i> Start chat
+    <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i> Start chat
   </button>
 </div>
 {% empty %}
 <div class="list-group-item" style="border: none; color: var(--text-secondary); text-align: center; padding: 1rem;">
-  <i class="bi bi-people" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+  <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
   Follow some users to start conversations
 </div>
 {% endfor %}

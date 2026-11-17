@@ -13,6 +13,13 @@ import { deviceMediaStore } from '../core/device-media-store.js?v=20261106-group
 
 import { createMediaZoom } from './media-zoom.js';
 
+function vastoSwapIcon(el, name) {
+    if (!el) return;
+    if (window.VastoIcons) { VastoIcons.setIcon(el, name); return; }
+    el.setAttribute('data-lucide', name);
+    el.classList.add('vasto-icon');
+}
+
 export class MessageRenderer {
     constructor() {
         this.container = null;
@@ -183,9 +190,9 @@ export class MessageRenderer {
                     const bubble = other.closest('.voice-note-bubble, .audio-track-bubble, .media-bubble');
                     if (bubble) {
                         const vnIcon = bubble.querySelector('.vn-play-icon');
-                        if (vnIcon) vnIcon.classList.replace('bi-pause-fill', 'bi-play-fill');
+                        if (vnIcon) vastoSwapIcon(vnIcon, 'play');
                         const trackIcon = bubble.querySelector('.track-play-icon');
-                        if (trackIcon) trackIcon.classList.replace('bi-pause-fill', 'bi-play-fill');
+                        if (trackIcon) vastoSwapIcon(trackIcon, 'play');
                     }
                 }
             });
@@ -287,7 +294,7 @@ export class MessageRenderer {
                             other.pause();
                             other.currentTime = 0;
                             const otherBubble = other.closest('.voice-note-bubble, .audio-track-bubble');
-                            otherBubble?.querySelector('.vn-play-icon, .track-play-icon')?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                            vastoSwapIcon(otherBubble?.querySelector('.vn-play-icon, .track-play-icon'), 'play');
                             otherBubble?.querySelectorAll('.vn-bar')?.forEach(b => b.classList.remove('is-played'));
                         }
                     });
@@ -297,11 +304,11 @@ export class MessageRenderer {
                     audio.playbackRate = currentSpeed;
 
                     audio.play().then(() => {
-                        playIcon?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                        vastoSwapIcon(playIcon, 'pause');
                     }).catch(err => console.warn('[VOICE_NOTE] Delegated play blocked:', err));
                 } else {
                     audio.pause();
-                    playIcon?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                    vastoSwapIcon(playIcon, 'play');
                 }
                 return;
             }
@@ -355,16 +362,16 @@ export class MessageRenderer {
                             other.pause();
                             other.currentTime = 0;
                             const otherBubble = other.closest('.voice-note-bubble, .audio-track-bubble');
-                            otherBubble?.querySelector('.vn-play-icon, .track-play-icon')?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                            vastoSwapIcon(otherBubble?.querySelector('.vn-play-icon, .track-play-icon'), 'play');
                         }
                     });
 
                     audio.play().then(() => {
-                        playIcon?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                        vastoSwapIcon(playIcon, 'pause');
                     }).catch(err => console.warn('[AUDIO_TRACK] Delegated play blocked:', err));
                 } else {
                     audio.pause();
-                    playIcon?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                    vastoSwapIcon(playIcon, 'play');
                 }
                 return;
             }
@@ -485,7 +492,7 @@ export class MessageRenderer {
                 playBtn.classList.add('vn-download-mode');
                 playBtn.setAttribute('aria-label', 'Download voice note');
                 playBtn.setAttribute('title', 'Download voice note');
-                playBtn.innerHTML = `<i class="bi bi-arrow-down vn-play-icon"></i>`;
+                playBtn.innerHTML = `<i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon vn-play-icon"></i>`;
             }
             const timer = bubble.querySelector('.vn-timer');
             if (timer) timer.textContent = '0:00';
@@ -509,7 +516,7 @@ export class MessageRenderer {
                 playBtn.classList.add('audio-download-mode');
                 playBtn.setAttribute('aria-label', 'Download track');
                 playBtn.setAttribute('title', 'Download track');
-                playBtn.innerHTML = `<i class="bi bi-arrow-down track-play-icon"></i>`;
+                playBtn.innerHTML = `<i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon track-play-icon"></i>`;
             }
             const fill = bubble.querySelector('.audio-track-scrubber-fill');
             if (fill) fill.style.width = '0%';
@@ -825,7 +832,7 @@ export class MessageRenderer {
                     playBtn.classList.remove('vn-download-mode');
                     playBtn.setAttribute('aria-label', 'Play voice note');
                     playBtn.setAttribute('title', 'Play voice note');
-                    playBtn.innerHTML = `<i class="bi bi-play-fill vn-play-icon"></i>`;
+                    playBtn.innerHTML = `<i aria-hidden="true" data-lucide="play" class="vasto-icon vn-play-icon"></i>`;
                 }
                 const timer = bubble.querySelector('.vn-timer');
                 if (timer) timer.textContent = '0:00';
@@ -840,7 +847,7 @@ export class MessageRenderer {
                     try {
                         const playIcon = playBtn?.querySelector('.vn-play-icon');
                         audio.play().then(() => {
-                            playIcon?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                            vastoSwapIcon(playIcon, 'pause');
                         }).catch(e => console.warn('[VOICE_NOTE] Autoplay blocked after download:', e));
                     } catch (_) {}
                 }
@@ -850,7 +857,7 @@ export class MessageRenderer {
                     playBtn.classList.remove('audio-download-mode');
                     playBtn.setAttribute('aria-label', 'Play track');
                     playBtn.setAttribute('title', 'Play track');
-                    playBtn.innerHTML = `<i class="bi bi-play-fill track-play-icon"></i>`;
+                    playBtn.innerHTML = `<i aria-hidden="true" data-lucide="play" class="vasto-icon track-play-icon"></i>`;
                 }
                 const timeEl = bubble.querySelector('.audio-track-time');
                 if (timeEl) timeEl.textContent = '0:00';
@@ -863,7 +870,7 @@ export class MessageRenderer {
                     try {
                         const playIcon = playBtn?.querySelector('.track-play-icon');
                         audio.play().then(() => {
-                            playIcon?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                            vastoSwapIcon(playIcon, 'pause');
                         }).catch(e => console.warn('[AUDIO_TRACK] Autoplay blocked after download:', e));
                     } catch (_) {}
                 }
@@ -881,20 +888,20 @@ export class MessageRenderer {
             if (isVoiceNote) {
                 const playBtn = bubble.querySelector('.vn-play-btn');
                 if (playBtn) {
-                    playBtn.innerHTML = `<i class="bi bi-arrow-clockwise vn-play-icon"></i>`;
+                    playBtn.innerHTML = `<i aria-hidden="true" data-lucide="rotate-cw" class="vasto-icon vn-play-icon"></i>`;
                 }
                 const timer = bubble.querySelector('.vn-timer');
                 if (timer) timer.textContent = 'Retry';
             } else if (isAudioTrack) {
                 const playBtn = bubble.querySelector('.audio-track-play-btn');
                 if (playBtn) {
-                    playBtn.innerHTML = `<i class="bi bi-arrow-clockwise track-play-icon"></i>`;
+                    playBtn.innerHTML = `<i aria-hidden="true" data-lucide="rotate-cw" class="vasto-icon track-play-icon"></i>`;
                 }
                 const timeEl = bubble.querySelector('.audio-track-time');
                 if (timeEl) timeEl.textContent = 'Retry';
             } else {
                 if (dlIcon) {
-                    dlIcon.innerHTML = `<i class="bi bi-arrow-clockwise" style="font-size: 1.1rem;"></i>`;
+                    dlIcon.innerHTML = `<i aria-hidden="true" data-lucide="rotate-cw" class="vasto-icon" style="font-size: 1.1rem;"></i>`;
                     dlIcon.classList.remove('d-none');
                 }
                 if (spinner) spinner.classList.add('d-none');
@@ -1023,7 +1030,7 @@ export class MessageRenderer {
         // Pulsing red mic + pulsing text
         bubble.innerHTML = `
             <div class="recording-indicator-content">
-                <span class="recording-mic-pulse"><i class="bi bi-mic-fill"></i></span>
+                <span class="recording-mic-pulse"><i aria-hidden="true" data-lucide="mic" class="vasto-icon"></i></span>
                 <span class="recording-text-pulse">Recording voice note...</span>
             </div>
         `;
@@ -1272,7 +1279,7 @@ export class MessageRenderer {
             const vnBubble = bubble.classList.contains('voice-note-bubble') ? bubble : wrapperEl.querySelector('.voice-note-bubble');
             const playBtn = vnBubble.querySelector('.vn-play-btn');
             if (playBtn && (playBtn.querySelector('.spinner-border') || !playBtn.querySelector('.vn-play-icon'))) {
-                playBtn.innerHTML = `<i class="bi bi-play-fill vn-play-icon"></i>`;
+                playBtn.innerHTML = `<i aria-hidden="true" data-lucide="play" class="vasto-icon vn-play-icon"></i>`;
             }
             const audioEl = vnBubble.querySelector('.vn-audio-el');
             if (audioEl) {
@@ -1307,7 +1314,7 @@ export class MessageRenderer {
             const trackBubble = bubble.classList.contains('audio-track-bubble') ? bubble : wrapperEl.querySelector('.audio-track-bubble');
             const playBtn = trackBubble.querySelector('.audio-track-play-btn');
             if (playBtn && (playBtn.querySelector('.spinner-border') || !playBtn.querySelector('.track-play-icon'))) {
-                playBtn.innerHTML = `<i class="bi bi-play-fill track-play-icon"></i>`;
+                playBtn.innerHTML = `<i aria-hidden="true" data-lucide="play" class="vasto-icon track-play-icon"></i>`;
             }
             const audioEl = trackBubble.querySelector('.track-audio-el');
             if (audioEl) {
@@ -1360,7 +1367,7 @@ export class MessageRenderer {
                 link.className = 'document-download-btn';
                 link.title = `Download ${fileName}`;
                 link.setAttribute('aria-label', 'Download');
-                link.innerHTML = `<i class="bi bi-arrow-down"></i>`;
+                link.innerHTML = `<i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon"></i>`;
                 uploadingBtn.replaceWith(link);
             }
         }
@@ -1823,7 +1830,7 @@ export class MessageRenderer {
         if (!isForwarded) return '';
         return `
             <div class="message-forwarded-badge">
-                <i class="bi bi-reply-fill forward-icon" style="transform: scaleX(-1); display: inline-block;"></i>
+                <i aria-hidden="true" data-lucide="reply" class="vasto-icon forward-icon" style="transform: scaleX(-1); display: inline-block;"></i>
                 <span>Forwarded</span>
             </div>
         `;
@@ -1924,7 +1931,7 @@ export class MessageRenderer {
 
         messageDiv.innerHTML = `
             <div class="deleted-message-inner">
-                <i class="bi bi-slash-circle me-1"></i>
+                <i aria-hidden="true" data-lucide="circle-slash" class="vasto-icon me-1"></i>
                 <span>${isOwn ? 'You deleted this message' : 'This message was deleted'}</span>
                 ${this._getSpacerHtml(message)}
             </div>
@@ -2096,7 +2103,7 @@ export class MessageRenderer {
             const outcome = { ended: 'Ended', missed: 'Missed', declined: 'Declined', cancelled: 'Cancelled' }[call.status] || 'Ended';
             messageDiv.classList.add('voice-call-bubble');
             const body = messageDiv.querySelector('.message-content');
-            body.innerHTML = `<span class="voice-call-summary"><i class="bi bi-telephone-${message.isOwn ? 'outbound' : 'inbound'}" aria-hidden="true"></i><span><strong>Voice call</strong><span>${direction} · ${outcome}</span><time datetime="${escapeHtml(call.started_at)}">Started ${escapeHtml(Number.isNaN(started.getTime()) ? '' : started.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</time></span></span>${this._getSpacerHtml(message)}`;
+            body.innerHTML = `<span class="voice-call-summary"><i aria-hidden="true" data-lucide="phone-${message.isOwn ? 'outgoing' : 'incoming'}" class="vasto-icon"></i><span><strong>Voice call</strong><span>${direction} · ${outcome}</span><time datetime="${escapeHtml(call.started_at)}">Started ${escapeHtml(Number.isNaN(started.getTime()) ? '' : started.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))}</time></span></span>${this._getSpacerHtml(message)}`;
         }
 
         // Render link preview if available
@@ -3241,12 +3248,12 @@ export class MessageRenderer {
 
                         <!-- Transient Play/Pause HUD Indicator -->
                         <div class="media-viewer-play-hud" aria-hidden="true">
-                            <i class="bi bi-play-fill"></i>
+                            <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
                         </div>
 
                         <!-- Floating Mute / Unmute Toggle Button -->
                         <button type="button" class="media-viewer-floating-mute" title="Sound" aria-label="Toggle mute">
-                            <i class="bi bi-volume-up-fill"></i>
+                            <i aria-hidden="true" data-lucide="volume-2" class="vasto-icon"></i>
                         </button>
 
                         <!-- Draggable Micro-Scrubber / Progress Bar -->
@@ -3272,8 +3279,8 @@ export class MessageRenderer {
                         if (!muteBtn || !video) return;
                         const isMuted = Boolean(video.muted || video.volume === 0);
                         muteBtn.innerHTML = isMuted
-                            ? '<i class="bi bi-volume-mute-fill"></i>'
-                            : '<i class="bi bi-volume-up-fill"></i>';
+                            ? '<i aria-hidden="true" data-lucide="volume-x" class="vasto-icon"></i>'
+                            : '<i aria-hidden="true" data-lucide="volume-2" class="vasto-icon"></i>';
                         muteBtn.title = isMuted ? 'Unmute' : 'Mute';
                         muteBtn.setAttribute('aria-label', isMuted ? 'Unmute video' : 'Mute video');
                     };
@@ -3297,7 +3304,7 @@ export class MessageRenderer {
                     // Transient HUD trigger
                     const showHud = (isPlay) => {
                         if (!playHud) return;
-                        playHud.innerHTML = isPlay ? '<i class="bi bi-play-fill"></i>' : '<i class="bi bi-pause-fill"></i>';
+                        playHud.innerHTML = isPlay ? '<i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>' : '<i aria-hidden="true" data-lucide="pause" class="vasto-icon"></i>';
                         playHud.classList.add('show');
                         clearTimeout(playHud._hudTimeout);
                         playHud._hudTimeout = setTimeout(() => {
@@ -3609,7 +3616,7 @@ export class MessageRenderer {
             ${replyHtml}
             <div class="document-card-inner">
                 <div class="document-badge ${docStyles.badgeClass}">
-                    <i class="bi ${docStyles.icon}"></i>
+                    <i aria-hidden="true" data-lucide="${docStyles.icon}" class="vasto-icon"></i>
                     <span class="document-ext-pill">${ext.toUpperCase().slice(0, 4)}</span>
                 </div>
                 <div class="document-details">
@@ -3626,7 +3633,7 @@ export class MessageRenderer {
                     </div>
                 ` : `
                     <a href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileName)}" target="_blank" rel="noopener" class="document-download-btn" title="Download ${escapeHtml(fileName)}" aria-label="Download">
-                        <i class="bi bi-arrow-down"></i>
+                        <i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon"></i>
                     </a>
                 `}
             </div>
@@ -3768,8 +3775,8 @@ export class MessageRenderer {
 
         const playBtnClass = isNotDownloaded ? 'vn-play-btn vn-download-mode' : 'vn-play-btn';
         let playIconHtml = isNotDownloaded
-            ? `<i class="bi bi-arrow-down vn-play-icon"></i>`
-            : `<i class="bi bi-play-fill vn-play-icon"></i>`;
+            ? `<i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon vn-play-icon"></i>`
+            : `<i aria-hidden="true" data-lucide="play" class="vasto-icon vn-play-icon"></i>`;
         if (isUploading) {
             playIconHtml = `<span class="spinner-border spinner-border-sm" role="status" style="width: 1rem; height: 1rem; border-width: 2px;"></span>`;
         }
@@ -3858,7 +3865,7 @@ export class MessageRenderer {
                         other.pause();
                         other.currentTime = 0;
                         const otherBubble = other.closest('.voice-note-bubble, .audio-track-bubble');
-                        otherBubble?.querySelector('.vn-play-icon, .track-play-icon')?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                        vastoSwapIcon(otherBubble?.querySelector('.vn-play-icon, .track-play-icon'), 'play');
                         otherBubble?.querySelectorAll('.vn-bar')?.forEach(b => b.classList.remove('is-played'));
                     }
                 });
@@ -3868,11 +3875,11 @@ export class MessageRenderer {
                 audio.playbackRate = currentSpeed;
 
                 audio.play().then(() => {
-                    getPlayIcon()?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                    vastoSwapIcon(getPlayIcon(), 'pause');
                 }).catch(err => console.warn('[VOICE_NOTE] Play blocked:', err));
             } else {
                 audio.pause();
-                playIcon?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                vastoSwapIcon(playIcon, 'play');
             }
         });
 
@@ -3901,7 +3908,7 @@ export class MessageRenderer {
         });
 
         audio.addEventListener('ended', () => {
-            getPlayIcon()?.classList.replace('bi-pause-fill', 'bi-play-fill');
+            vastoSwapIcon(getPlayIcon(), 'play');
             bars.forEach(b => b.classList.remove('is-played'));
             if (progressFill) progressFill.style.width = '0%';
             if (progressThumb) progressThumb.style.left = '0%';
@@ -4008,8 +4015,8 @@ export class MessageRenderer {
 
         const playBtnClass = isNotDownloaded ? 'audio-track-play-btn audio-download-mode' : 'audio-track-play-btn';
         let playIconHtml = isNotDownloaded
-            ? `<i class="bi bi-arrow-down track-play-icon"></i>`
-            : `<i class="bi bi-play-fill track-play-icon"></i>`;
+            ? `<i aria-hidden="true" data-lucide="arrow-down" class="vasto-icon track-play-icon"></i>`
+            : `<i aria-hidden="true" data-lucide="play" class="vasto-icon track-play-icon"></i>`;
         if (isUploading) {
             playIconHtml = `<span class="spinner-border spinner-border-sm" role="status" style="width: 1rem; height: 1rem; border-width: 2px;"></span>`;
         }
@@ -4027,7 +4034,7 @@ export class MessageRenderer {
         const initialAudioTime = isUploading
             ? '0%'
             : (metadata.duration && isFinite(Number(metadata.duration)) ? this._formatAudioDuration(Number(metadata.duration)) : '0:00');
-        bubble.innerHTML = `${forwardedHtml}${replyHtml}<div class="audio-track-inner"><button type="button" class="${playBtnClass}" aria-label="${isNotDownloaded ? 'Download track' : 'Play track'}" title="${isNotDownloaded ? 'Download track' : 'Play track'}">${playIconHtml}</button><div class="audio-track-details"><div class="audio-track-title" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div><div class="audio-track-scrubber-track"><div class="audio-track-scrubber-fill" style="width: 0%;"></div></div><div class="audio-track-meta-row"><span class="audio-track-time">${initialAudioTime}</span>${sizeStr ? `<span class="audio-track-dot">•</span><span class="audio-track-size">${sizeStr}</span>` : ''}${isNotDownloaded ? `<span class="audio-track-status opacity-75 ms-1">• Tap to download</span>` : ''}</div></div><div class="audio-track-badge"><i class="bi bi-music-note-beamed"></i></div></div>${audioTag}`;
+        bubble.innerHTML = `${forwardedHtml}${replyHtml}<div class="audio-track-inner"><button type="button" class="${playBtnClass}" aria-label="${isNotDownloaded ? 'Download track' : 'Play track'}" title="${isNotDownloaded ? 'Download track' : 'Play track'}">${playIconHtml}</button><div class="audio-track-details"><div class="audio-track-title" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div><div class="audio-track-scrubber-track"><div class="audio-track-scrubber-fill" style="width: 0%;"></div></div><div class="audio-track-meta-row"><span class="audio-track-time">${initialAudioTime}</span>${sizeStr ? `<span class="audio-track-dot">•</span><span class="audio-track-size">${sizeStr}</span>` : ''}${isNotDownloaded ? `<span class="audio-track-status opacity-75 ms-1">• Tap to download</span>` : ''}</div></div><div class="audio-track-badge"><i aria-hidden="true" data-lucide="music" class="vasto-icon"></i></div></div>${audioTag}`;
 
         this._bindAudioTrackEvents(bubble);
 
@@ -4093,16 +4100,16 @@ export class MessageRenderer {
                         other.pause();
                         other.currentTime = 0;
                         const otherBubble = other.closest('.voice-note-bubble, .audio-track-bubble');
-                        otherBubble?.querySelector('.vn-play-icon, .track-play-icon')?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                        vastoSwapIcon(otherBubble?.querySelector('.vn-play-icon, .track-play-icon'), 'play');
                     }
                 });
 
                 audio.play().then(() => {
-                    getPlayIcon()?.classList.replace('bi-play-fill', 'bi-pause-fill');
+                    vastoSwapIcon(getPlayIcon(), 'pause');
                 }).catch(err => console.warn('[AUDIO_TRACK] Play blocked:', err));
             } else {
                 audio.pause();
-                getPlayIcon()?.classList.replace('bi-pause-fill', 'bi-play-fill');
+                vastoSwapIcon(getPlayIcon(), 'play');
             }
         });
 
@@ -4114,7 +4121,7 @@ export class MessageRenderer {
         });
 
         audio.addEventListener('ended', () => {
-            getPlayIcon()?.classList.replace('bi-pause-fill', 'bi-play-fill');
+            vastoSwapIcon(getPlayIcon(), 'play');
             if (fill) fill.style.width = '0%';
             if (timer) {
                 timer.textContent = (isFinite(audio.duration) && audio.duration > 0)
@@ -4170,32 +4177,32 @@ export class MessageRenderer {
         const cleanExt = (ext || '').toLowerCase().replace('.', '');
         switch (cleanExt) {
             case 'pdf':
-                return { icon: 'bi-file-earmark-pdf-fill', badgeClass: 'doc-badge-pdf', label: 'PDF Document' };
+                return { icon: 'file-text', badgeClass: 'doc-badge-pdf', label: 'PDF Document' };
             case 'doc':
             case 'docx':
-                return { icon: 'bi-file-earmark-word-fill', badgeClass: 'doc-badge-word', label: 'Word Document' };
+                return { icon: 'file-text', badgeClass: 'doc-badge-word', label: 'Word Document' };
             case 'xls':
             case 'xlsx':
             case 'csv':
-                return { icon: 'bi-file-earmark-excel-fill', badgeClass: 'doc-badge-excel', label: 'Spreadsheet' };
+                return { icon: 'file-spreadsheet', badgeClass: 'doc-badge-excel', label: 'Spreadsheet' };
             case 'ppt':
             case 'pptx':
-                return { icon: 'bi-file-earmark-ppt-fill', badgeClass: 'doc-badge-ppt', label: 'Presentation' };
+                return { icon: 'file-text', badgeClass: 'doc-badge-ppt', label: 'Presentation' };
             case 'zip':
             case 'rar':
             case '7z':
             case 'tar':
             case 'gz':
-                return { icon: 'bi-file-earmark-zip-fill', badgeClass: 'doc-badge-zip', label: 'Archive' };
+                return { icon: 'file-archive', badgeClass: 'doc-badge-zip', label: 'Archive' };
             case 'txt':
             case 'py':
             case 'js':
             case 'html':
             case 'css':
             case 'json':
-                return { icon: 'bi-file-earmark-code-fill', badgeClass: 'doc-badge-code', label: 'Code File' };
+                return { icon: 'file-code', badgeClass: 'doc-badge-code', label: 'Code File' };
             default:
-                return { icon: 'bi-file-earmark-fill', badgeClass: 'doc-badge-generic', label: 'Document' };
+                return { icon: 'file', badgeClass: 'doc-badge-generic', label: 'Document' };
         }
     }
 

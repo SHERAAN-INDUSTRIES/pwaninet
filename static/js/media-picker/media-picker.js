@@ -87,17 +87,17 @@
         <div class="media-picker-header">
           <div class="media-picker-tabs" role="tablist">
             <button type="button" class="media-picker-tab-btn active" data-tab="emojis" role="tab" aria-selected="true">
-              <i class="bi bi-emoji-smile"></i> Emoji
+              <i aria-hidden="true" data-lucide="smile" class="vasto-icon"></i> Emoji
             </button>
             <button type="button" class="media-picker-tab-btn" data-tab="gifs" role="tab" aria-selected="false">
-              <i class="bi bi-camera-video"></i> GIFs
+              <i aria-hidden="true" data-lucide="video" class="vasto-icon"></i> GIFs
             </button>
             <button type="button" class="media-picker-tab-btn" data-tab="stickers" role="tab" aria-selected="false">
-              <i class="bi bi-stickies"></i> Stickers
+              <i aria-hidden="true" data-lucide="sticky-note" class="vasto-icon"></i> Stickers
             </button>
           </div>
           <button type="button" class="media-picker-close-btn" id="mediaPickerCloseBtn" aria-label="Close picker">
-            <i class="bi bi-x-lg"></i>
+            <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
           </button>
         </div>
 
@@ -117,9 +117,9 @@
           <!-- GIFS PANEL -->
           <div class="media-picker-panel" id="mediaPickerGifPanel" data-panel="gifs">
             <div class="media-picker-search-wrap">
-              <i class="bi bi-search text-muted position-absolute" style="left: 24px;"></i>
+              <i aria-hidden="true" data-lucide="search" class="vasto-icon text-muted position-absolute" style="left: 24px;"></i>
               <input type="text" class="media-picker-search-input" id="mediaPickerGifSearch" placeholder="Search GIFs with KLIPY..." autocomplete="off">
-              <button type="button" class="media-picker-search-clear" id="mediaPickerGifClear" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+              <button type="button" class="media-picker-search-clear" id="mediaPickerGifClear" title="Clear search"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon"></i></button>
             </div>
             <div class="media-picker-categories" id="mediaPickerGifCategories">
               <button type="button" class="media-picker-chip active" data-query="">🔥 Trending</button>
@@ -153,9 +153,9 @@
               <button type="button" class="media-picker-pill" data-subtab="mine">My Stickers</button>
             </div>
             <div class="media-picker-search-wrap" id="mediaPickerStickerSearchWrap">
-              <i class="bi bi-search text-muted position-absolute" style="left: 24px;"></i>
+              <i aria-hidden="true" data-lucide="search" class="vasto-icon text-muted position-absolute" style="left: 24px;"></i>
               <input type="text" class="media-picker-search-input" id="mediaPickerStickerSearch" placeholder="Search stickers with KLIPY..." autocomplete="off">
-              <button type="button" class="media-picker-search-clear" id="mediaPickerStickerClear" title="Clear search"><i class="bi bi-x-circle-fill"></i></button>
+              <button type="button" class="media-picker-search-clear" id="mediaPickerStickerClear" title="Clear search"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon"></i></button>
             </div>
             <div class="media-picker-categories" id="mediaPickerStickerCategories">
               <button type="button" class="media-picker-chip active" data-query="">🔥 Trending</button>
@@ -944,7 +944,7 @@
             <span class="comment-attachment-preview-text">${title || 'Attachment'}</span>
           </div>
           <button type="button" class="comment-attachment-remove-btn" title="Remove attachment" aria-label="Remove attachment">
-            <i class="bi bi-x-lg"></i>
+            <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
           </button>
         </div>
       `;
@@ -1153,9 +1153,9 @@
               : (isError ? 'Unable to load GIFs at the moment' : 'No GIFs available at the moment');
             grid.innerHTML = `
               <div class="media-picker-empty">
-                <i class="bi bi-camera-video text-muted"></i>
+                <i aria-hidden="true" data-lucide="video" class="vasto-icon text-muted"></i>
                 <span class="fw-semibold">${emptyMsg}</span>
-                <button type="button" class="media-picker-empty-action" data-action="clear-gif-search"><i class="bi bi-arrow-clockwise me-1"></i>${isError ? 'Retry' : 'Browse Trending GIFs'}</button>
+                <button type="button" class="media-picker-empty-action" data-action="clear-gif-search"><i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon me-1"></i>${isError ? 'Retry' : 'Browse Trending GIFs'}</button>
               </div>
             `;
           }
@@ -1205,7 +1205,7 @@
         if (reset) {
           grid.innerHTML = `
             <div class="media-picker-empty text-danger">
-              <i class="bi bi-exclamation-circle"></i>
+              <i aria-hidden="true" data-lucide="circle-alert" class="vasto-icon"></i>
               <span>Failed to load GIFs. Check connection.</span>
               <button type="button" class="media-picker-empty-action" data-action="retry-gif-search">Try Again</button>
             </div>
@@ -1315,11 +1315,11 @@
               : (isError ? 'Unable to load stickers at the moment' : 'No stickers available');
             grid.innerHTML = `
               <div class="media-picker-empty">
-                <i class="bi bi-stickies text-muted"></i>
+                <i aria-hidden="true" data-lucide="sticky-note" class="vasto-icon text-muted"></i>
                 <span class="fw-semibold">${emptyMsg}</span>
                 <div class="d-flex gap-2 justify-content-center mt-2 flex-wrap">
-                  ${isError ? '<button type="button" class="media-picker-empty-action" data-action="switch-to-builtin-stickers"><i class="bi bi-stars me-1"></i>Open Built-in Stickers</button>' : ''}
-                  <button type="button" class="media-picker-empty-action" data-action="clear-sticker-search"><i class="bi bi-arrow-clockwise me-1"></i>${isError ? 'Retry' : 'Browse Trending Stickers'}</button>
+                  ${isError ? '<button type="button" class="media-picker-empty-action" data-action="switch-to-builtin-stickers"><i aria-hidden="true" data-lucide="sparkles" class="vasto-icon me-1"></i>Open Built-in Stickers</button>' : ''}
+                  <button type="button" class="media-picker-empty-action" data-action="clear-sticker-search"><i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon me-1"></i>${isError ? 'Retry' : 'Browse Trending Stickers'}</button>
                 </div>
               </div>
             `;
@@ -1368,7 +1368,7 @@
         if (reset && grid.children.length === 0) {
           grid.innerHTML = `
             <div class="media-picker-empty text-danger">
-              <i class="bi bi-exclamation-circle"></i>
+              <i aria-hidden="true" data-lucide="circle-alert" class="vasto-icon"></i>
               <span>Failed to load stickers.</span>
               <button type="button" class="media-picker-empty-action" data-action="retry-sticker-search">Try Again</button>
             </div>
@@ -1395,9 +1395,9 @@
       if (filtered.length === 0) {
         grid.innerHTML = `
           <div class="media-picker-empty">
-            <i class="bi bi-stickies text-muted"></i>
+            <i aria-hidden="true" data-lucide="sticky-note" class="vasto-icon text-muted"></i>
             <span class="fw-semibold">No built-in stickers found for "${this.escapeHtml(q)}"</span>
-            <button type="button" class="media-picker-empty-action" data-action="switch-to-klipy-stickers"><i class="bi bi-search me-1"></i>Search in KLIPY Stickers</button>
+            <button type="button" class="media-picker-empty-action" data-action="switch-to-klipy-stickers"><i aria-hidden="true" data-lucide="search" class="vasto-icon me-1"></i>Search in KLIPY Stickers</button>
           </div>
         `;
         return;
@@ -1439,7 +1439,7 @@
           const res = await fetch('/api/stickers/mine/');
           if (!res.ok) {
             if (res.status === 401 || res.status === 403) {
-              grid.innerHTML = '<div class="media-picker-empty"><i class="bi bi-lock"></i><span>Please log in to save and use custom stickers.</span></div>';
+              grid.innerHTML = '<div class="media-picker-empty"><i aria-hidden="true" data-lucide="lock" class="vasto-icon"></i><span>Please log in to save and use custom stickers.</span></div>';
               return;
             }
             throw new Error('Failed to load user stickers');
@@ -1448,7 +1448,7 @@
           this._myStickersCache = await res.json();
         } catch (err) {
           console.error('[MediaPicker] Error loading user stickers:', err);
-          grid.innerHTML = '<div class="media-picker-empty text-danger"><i class="bi bi-exclamation-circle"></i><span>Failed to load custom stickers.</span></div>';
+          grid.innerHTML = '<div class="media-picker-empty text-danger"><i aria-hidden="true" data-lucide="circle-alert" class="vasto-icon"></i><span>Failed to load custom stickers.</span></div>';
           return;
         }
       }
@@ -1464,7 +1464,7 @@
       // First item: "+ Add Sticker" button
       const uploadCard = document.createElement('div');
       uploadCard.className = 'media-picker-upload-card';
-      uploadCard.innerHTML = `<i class="bi bi-plus-circle"></i><span>Upload</span>`;
+      uploadCard.innerHTML = `<i aria-hidden="true" data-lucide="circle-plus" class="vasto-icon"></i><span>Upload</span>`;
       uploadCard.addEventListener('click', () => {
         const fileInput = document.getElementById('mediaPickerCustomStickerInput');
         if (fileInput) fileInput.click();

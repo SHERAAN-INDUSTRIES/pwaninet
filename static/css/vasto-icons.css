@@ -1,0 +1,28 @@
+/* ==========================================================================
+   VastoIcons — shared Lucide baseline
+   Applies to <svg class="lucide"> elements produced by createIcons().
+   These are fallbacks: inline styles and component-level classes override
+   them. Nothing here targets Bootstrap Icons (font-based) or other SVGs.
+   ========================================================================== */
+
+.lucide {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -0.125em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lucide--sm {
+  width: 16px;
+  height: 16px;
+}
+
+.lucide--lg {
+  width: 24px;
+  height: 24px;
+}

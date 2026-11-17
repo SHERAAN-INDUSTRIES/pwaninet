@@ -1318,6 +1318,12 @@ class PwanimateOrchestrator:
             response = self._run_tool(request, request.query,
                 ToolRoute(tool_name='study_agent',parameters={},confidence=1.0,matched_intent='multi_tool'),
                 t_start,on_progress=on_progress,on_token=on_token,prepared=prepared)
+        observations = getattr(prepared.get('result'), 'data', {}) or {}
+        if isinstance(observations, dict):
+            ids = [o.get('result', {}).get('data', {}).get('document_id') for o in observations.get('observations', [])
+                if o.get('tool') == 'generate_document' and o.get('result', {}).get('success')
+                and isinstance(o.get('result', {}).get('data'), dict)]
+            if any(ids): response.metadata['_document_ids'] = [pk for pk in ids if type(pk) is int]
         # Raw tool arguments/results stay inside the executor, never response metadata.
         for field,value in prepared['tokens'].items():
             setattr(response,field,(getattr(response,field) or 0)+value)
@@ -1810,7 +1816,8 @@ class PwanimateOrchestrator:
             and tool_result.data.get('route') == 'routine_tutoring_direct')
         # Removing research/planning must not shrink an explanation or code
         # answer to the shorter tool-summary ceiling. Explicit overrides win.
-        effective_max_tokens = self._resolve_effective_budget(request, "rag" if direct_academic else "tool")
+        from pwanimate.services.document_exports import requested_formats
+        effective_max_tokens = self._resolve_effective_budget(request, "rag" if direct_academic or requested_formats(query) else "tool")
 
         llm_request = LLMRequest(
             task="tool",

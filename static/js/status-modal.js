@@ -29,7 +29,7 @@
                 '<span class="visually-hidden">Loading...</span></div>';
         } else {
             iconEl.innerHTML =
-                '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+                '<i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon text-success" style="--vasto-icon-size: 3rem;"></i>';
         }
     }
 

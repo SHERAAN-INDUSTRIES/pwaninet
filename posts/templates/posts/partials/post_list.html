@@ -9,7 +9,7 @@
     {% if not cursor %}
         <div class="p-4 my-3 text-center feed-empty-card">
             <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle mb-3 mx-auto" style="width: 56px; height: 56px;">
-                <i class="bi bi-people-fill fs-3"></i>
+                <i aria-hidden="true" data-lucide="users" class="vasto-icon fs-3"></i>
             </div>
             <h5 class="fw-bold mb-1">Your feed is waiting for connections!</h5>
             <p class="text-muted small mx-auto mb-4" style="max-width: 420px;">
@@ -43,7 +43,7 @@
                                             hx-target="#onboarding-follow-btn-{{ sug_user.id }}"
                                             hx-swap="outerHTML"
                                             style="font-size: 0.75rem;">
-                                        <i class="bi bi-person-plus-fill"></i> Follow
+                                        <i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon"></i> Follow
                                     </button>
                                 </div>
                             </div>
@@ -60,11 +60,11 @@
                    hx-push-url="true"
                    hx-history="true"
                    class="btn btn-primary rounded-pill px-4 fw-bold shadow-xs">
-                    <i class="bi bi-plus-lg me-1"></i> Create first post
+                    <i aria-hidden="true" data-lucide="plus" class="vasto-icon me-1"></i> Create first post
                 </a>
                 <a href="{% url 'users:onboarding' %}?restart=true"
                    class="btn btn-outline-secondary rounded-pill px-4 fw-semibold">
-                    <i class="bi bi-compass me-1"></i> Find more classmates
+                    <i aria-hidden="true" data-lucide="compass" class="vasto-icon me-1"></i> Find more classmates
                 </a>
             </div>
         </div>

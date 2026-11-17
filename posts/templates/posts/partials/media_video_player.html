@@ -10,7 +10,7 @@
             title="{% trans 'Download' %}"
             aria-label="{% trans 'Download' %}"
             style="right: auto;">
-        <i class="bi bi-download"></i>
+        <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i>
     </button>
     <button type="button"
             class="reel-stage-overlay-btn reel-expand-btn text-white position-absolute top-0 end-0 m-2"
@@ -19,7 +19,7 @@
             title="{% trans 'Watch Fullscreen' %}"
             aria-label="{% trans 'Expand to fullscreen' %}"
             style="z-index: 4; width: 34px; height: 34px; font-size: 13px;">
-        <i class="bi bi-arrows-fullscreen"></i>
+        <i aria-hidden="true" data-lucide="maximize" class="vasto-icon"></i>
     </button>
     <div class="landscape-video-container bg-black position-relative"
          data-media-type="video"
@@ -56,7 +56,7 @@
 
         <!-- Play / Pause HUD Overlay -->
         <div id="video-play-hud-{{ post.share_id }}" class="reel-play-hud" aria-hidden="true">
-            <i class="bi bi-play-fill"></i>
+            <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
         </div>
 
         <!-- Central Buffering / Audio-Wait Spinner -->
@@ -78,7 +78,7 @@
                     data-action="mute-toggle"
                     title="{% trans 'Toggle mute' %}"
                     aria-label="{% trans 'Toggle mute' %}">
-                <i class="bi bi-volume-mute-fill"></i>
+                <i aria-hidden="true" data-lucide="volume-x" class="vasto-icon"></i>
             </button>
         </div>
 
@@ -95,7 +95,7 @@
                 {% if post.video_status == 'transcoding' %}
                 <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>{% trans "HD processing…" %}
                 {% elif post.video_status == 'failed' %}
-                <i class="bi bi-exclamation-triangle me-1"></i>{% trans "Processing failed" %}
+                <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon me-1"></i>{% trans "Processing failed" %}
                 {% else %}
                 <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>{% trans "Preparing…" %}
                 {% endif %}

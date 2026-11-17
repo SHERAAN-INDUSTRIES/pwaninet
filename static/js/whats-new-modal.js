@@ -148,7 +148,7 @@
                     <div class="modal-header people-modal-header border-0 pb-0 sticky-top" style="position: relative;">
                         <div class="people-modal-handle d-md-none" aria-hidden="true"></div>
                         <h5 class="modal-title fw-bold w-100 text-center pt-2">
-                            <i class="bi bi-star-fill me-2 text-warning"></i>What's New
+                            <i aria-hidden="true" data-lucide="star" class="vasto-icon vasto-icon--filled me-2 text-warning"></i>What's New
                         </h5>
                         <button type="button" class="btn-close people-modal-close" data-bs-dismiss="modal" aria-label="Close" style="position: absolute; right: 12px; top: 8px; z-index: 10; font-size: 1.25rem; opacity: 1; background-image: none;">✕</button>
                     </div>
@@ -172,7 +172,7 @@
                         
                         ${releaseData.mandatory_update ? `
                         <div class="alert alert-warning mt-3 mb-0">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon me-2"></i>
                             This is a mandatory update. Please update to continue using vasto.
                         </div>
                         ` : ''}
@@ -180,7 +180,7 @@
                         <div class="mt-4">
                             <a href="${releaseData.id ? `/system/releases/${releaseData.id}/` : '#'}" 
                                class="btn btn-outline-secondary w-100" target="_blank">
-                                <i class="bi bi-info-circle me-2"></i>View Full Details
+                                <i aria-hidden="true" data-lucide="info" class="vasto-icon me-2"></i>View Full Details
                             </a>
                         </div>
                     </div>

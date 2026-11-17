@@ -42,6 +42,33 @@ class TransitionError(RunError):
 
 class AgentRunService:
     @staticmethod
+    def start_document(request):
+        """Start a file task using the existing run, lease and snapshot contract."""
+        import uuid
+        from pwanimate.models import PwanimateConversation, PwanimateMessage
+        from pwanimate.services.run_snapshots import CURRENT_SNAPSHOT_VERSION
+        snapshot = {k: getattr(request, k) for k in SNAPSHOT_FIELDS}
+        snapshot['snapshot_version'] = CURRENT_SNAPSHOT_VERSION
+        snapshot['history'] = [m.to_dict() for m in request.history[-10:]]
+        snapshot['context_resources'] = list(snapshot.get('context_resources') or []) + [
+            {'type': 'attachment', 'attachment_id': str(a.pk)} for a in request.attachments if getattr(a, 'pk', None)]
+        snapshot = json.loads(json.dumps(snapshot, cls=DjangoJSONEncoder))
+        with transaction.atomic():
+            source = PwanimateMessage.objects.get(pk=request.user_message_id, role='user', conversation__user=request.user)
+            PwanimateConversation.objects.select_for_update().get(pk=source.conversation_id, user=request.user)
+            source = PwanimateMessage.objects.select_for_update(of=('self',)).get(pk=source.pk)
+            existing = SparkAgentRun.objects.filter(user=request.user, user_message=source).first()
+            if existing is not None:
+                return existing, False
+            now = timezone.now()
+            run = SparkAgentRun.objects.create(user=request.user, user_message=source,
+                snapshot=snapshot, state={'document_generation': True}, status='running',
+                continuation={'kind': 'document_generation'},
+                attempt_id=uuid.uuid4().hex, lease_expires_at=now + timedelta(seconds=RUN_LEASE_SECONDS),
+                expires_at=now + timedelta(hours=2))
+            return run, True
+
+    @staticmethod
     def transition(run, to_status, *, wait_reason=None, update_fields=None):
         """Move a run through the lifecycle, rejecting illegal reversals.
 

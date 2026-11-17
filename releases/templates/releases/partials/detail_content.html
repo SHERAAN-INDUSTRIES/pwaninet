@@ -8,7 +8,7 @@
            hx-push-url="true"
            hx-history="true"
            class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+            <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon me-2"></i>Back to Dashboard
         </a>
     </div>
 
@@ -49,14 +49,14 @@
 
             {% if release.mandatory_update %}
             <div class="alert alert-warning mt-3">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon me-2"></i>
                 This is a mandatory update. Users must update to continue using the app.
             </div>
             {% endif %}
 
             {% if release.minimum_supported_version %}
             <div class="alert alert-info mt-3">
-                <i class="bi bi-info-circle-fill me-2"></i>
+                <i aria-hidden="true" data-lucide="info" class="vasto-icon me-2"></i>
                 Minimum supported version: {{ release.minimum_supported_version }}
             </div>
             {% endif %}
@@ -71,7 +71,7 @@
                    hx-push-url="true"
                    hx-history="true"
                    class="btn btn-primary">
-                    <i class="bi bi-check-circle me-2"></i>Set as Current Release
+                    <i aria-hidden="true" data-lucide="circle-check" class="vasto-icon me-2"></i>Set as Current Release
                 </a>
                 {% endif %}
             </div>

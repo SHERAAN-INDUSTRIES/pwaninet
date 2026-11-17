@@ -343,11 +343,24 @@ class DocumentVersion(models.Model):
 
 def document_file_upload_path(instance, filename):
     """Store generated resources under a user-private, opaque storage key."""
+    import os
+    import re
+
+    base = str(filename or "upload").replace("\x00", "").replace("/", "_").replace("\\", "_").strip()
+    base = re.sub(r"[\r\n\t]", " ", base).strip(" .") or "upload"
+    root, ext = os.path.splitext(base)
+    max_name = 180
+    if len(ext) > max_name - 1:
+        ext = ext[: max_name - 1]
+    if len(base) > max_name:
+        base = f"{(root[: max(1, max_name - len(ext))].rstrip(' .') or 'upload')}{ext}"
+
     if instance.storage_private:
         document = instance.document_version.document
-        return f"private-documents/{document.share_id}/{instance.pk}/{os.path.basename(filename)}"
+        return f"private-documents/{document.share_id}/{instance.pk}/{base}"
     from django.utils import timezone
-    return f"documents/{timezone.now():%Y/%m/%d}/{filename}"
+
+    return f"documents/{timezone.now():%Y/%m/%d}/{base}"
 
 
 class DocumentFile(models.Model):
@@ -384,6 +397,7 @@ class DocumentFile(models.Model):
     # Actual file storage
     file = models.FileField(
         upload_to=document_file_upload_path,
+        max_length=1024,
         help_text="The actual file"
     )
     storage_private = models.BooleanField(default=False, db_index=True)

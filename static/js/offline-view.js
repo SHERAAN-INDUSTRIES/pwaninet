@@ -73,11 +73,11 @@
             const bubble=media.closest('.voice-note-bubble,.audio-track-bubble');
             if(bubble) {
                 const button=bubble.querySelector('.vn-play-btn,.audio-track-play-btn');
-                const icon=button?.querySelector('i');
+                const icon=button?.querySelector('i, [data-lucide]');
                 button?.classList.remove('vn-download-mode','audio-download-mode');
                 if(button){button.title='Play';button.setAttribute('aria-label','Play');}
                 bubble.querySelector('.audio-track-status')?.remove();
-                const update=()=>{if(icon)icon.className=(media.paused?'bi bi-play-fill ':'bi bi-pause-fill ')+(bubble.matches('.voice-note-bubble')?'vn-play-icon':'track-play-icon');};
+                const update=()=>{if(!icon)return;const isVoice=bubble.matches('.voice-note-bubble');if(window.VastoIcons&&icon.hasAttribute('data-lucide')){VastoIcons.setIcon(icon,media.paused?'play':'pause');icon.classList.toggle('vn-play-icon',isVoice);icon.classList.toggle('track-play-icon',!isVoice);}else{icon.className=(media.paused?'bi bi-play-fill ':'bi bi-pause-fill ')+(isVoice?'vn-play-icon':'track-play-icon');}};
                 ['play','pause','ended'].forEach(event=>media.addEventListener(event,update));update();
             } else media.controls=true;
         }

@@ -17,7 +17,7 @@
                  alt="{{ item.sender_avatar.username }}">
           {% else %}
             <div class="sender-avatar avatar-placeholder">
-              <i class="bi bi-person-fill"></i>
+              <i aria-hidden="true" data-lucide="user-round" class="vasto-icon"></i>
             </div>
           {% endif %}
           
@@ -44,7 +44,7 @@
         
         <!-- Expand Icon -->
         <div class="expand-icon">
-          <i class="bi bi-chevron-down" id="expand-icon-{{ item.sender.id }}"></i>
+          <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon" id="expand-icon-{{ item.sender.id }}"></i>
         </div>
         
         <!-- Time -->
@@ -61,13 +61,13 @@
             
             <!-- Activity Icon -->
             <div class="activity-icon {% if notif.notification_type == 'LIKE' %}icon-like{% elif notif.notification_type == 'FOLLOW' %}icon-follow{% elif notif.notification_type == 'INVITE' %}icon-invite{% elif notif.notification_type == 'GROUP_REQUEST' %}icon-alert{% elif notif.notification_type == 'GROUP_APPROVED' %}icon-invite{% else %}icon-alert{% endif %}">
-              {% if notif.notification_type == 'LIKE' %}<i class="bi bi-heart-fill"></i>
-              {% elif notif.notification_type == 'FOLLOW' %}<i class="bi bi-person-plus-fill"></i>
-              {% elif notif.notification_type == 'INVITE' %}<i class="bi bi-envelope-fill"></i>
-              {% elif notif.notification_type == 'GROUP_REQUEST' %}<i class="bi bi-clock-fill"></i>
-              {% elif notif.notification_type == 'GROUP_APPROVED' %}<i class="bi bi-check-circle-fill"></i>
-              {% elif notif.notification_type == 'COMMENT_REPLY' %}<i class="bi bi-chat-fill"></i>
-              {% else %}<i class="bi bi-bell-fill"></i>
+              {% if notif.notification_type == 'LIKE' %}<i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
+              {% elif notif.notification_type == 'FOLLOW' %}<i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon"></i>
+              {% elif notif.notification_type == 'INVITE' %}<i aria-hidden="true" data-lucide="mail" class="vasto-icon"></i>
+              {% elif notif.notification_type == 'GROUP_REQUEST' %}<i aria-hidden="true" data-lucide="clock" class="vasto-icon"></i>
+              {% elif notif.notification_type == 'GROUP_APPROVED' %}<i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon"></i>
+              {% elif notif.notification_type == 'COMMENT_REPLY' %}<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
+              {% else %}<i aria-hidden="true" data-lucide="bell" class="vasto-icon"></i>
               {% endif %}
             </div>
             
@@ -118,12 +118,12 @@
                   <a href="{% url 'groups:approve_from_notification' notif.group.id notif.sender.id %}" 
                      class="btn-action btn-accept"
                      onclick="markActivityAsRead({{ notif.id }}, event)">
-                    <i class="bi bi-check2"></i> Approve
+                    <i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Approve
                   </a>
                   <a href="{% url 'groups:reject_from_notification' notif.group.id notif.sender.id %}" 
                      class="btn-action btn-decline"
                      onclick="markActivityAsRead({{ notif.id }}, event)">
-                    <i class="bi bi-x2"></i> Reject
+                    <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i> Reject
                   </a>
                 </div>
               {% endif %}
@@ -141,7 +141,7 @@
           <div class="mark-all-read-container">
             <button class="btn-mark-all-read"
                     onclick="markSenderGroupAsRead({{ item.sender.id }}, event)">
-              <i class="bi bi-check2-all"></i> Mark all as read
+              <i aria-hidden="true" data-lucide="check-check" class="vasto-icon"></i> Mark all as read
             </button>
           </div>
         {% endif %}
@@ -193,7 +193,7 @@
             <img src="{{ avatar.profile_pic }}" class="avatar-stack-item" alt="{{ avatar.username }}">
           {% else %}
             <div class="avatar-stack-item avatar-placeholder">
-              <i class="bi bi-person-fill"></i>
+              <i aria-hidden="true" data-lucide="user-round" class="vasto-icon"></i>
             </div>
           {% endif %}
         {% endfor %}
@@ -222,23 +222,23 @@
                 {{ item.sender_avatars.0.username }}
               {% endif %}
               {% if item.notification_type == 'INVITE' %}
-                <span class="notif-badge badge-invite"><i class="bi bi-envelope-fill"></i> Invite</span>
+                <span class="notif-badge badge-invite"><i aria-hidden="true" data-lucide="mail" class="vasto-icon"></i> Invite</span>
               {% elif item.notification_type == 'FOLLOW' %}
-                <span class="notif-badge badge-follow"><i class="bi bi-person-plus-fill"></i> Follow</span>
+                <span class="notif-badge badge-follow"><i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon"></i> Follow</span>
               {% elif item.notification_type == 'LIKE' %}
-                <span class="notif-badge badge-like"><i class="bi bi-heart-fill"></i> Like</span>
+                <span class="notif-badge badge-like"><i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i> Like</span>
               {% elif item.notification_type == 'GROUP_REQUEST' %}
-                <span class="notif-badge badge-alert"><i class="bi bi-clock-fill"></i> Request</span>
+                <span class="notif-badge badge-alert"><i aria-hidden="true" data-lucide="clock" class="vasto-icon"></i> Request</span>
               {% elif item.notification_type == 'GROUP_APPROVED' %}
-                <span class="notif-badge badge-invite"><i class="bi bi-check-circle-fill"></i> Approved</span>
+                <span class="notif-badge badge-invite"><i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon"></i> Approved</span>
               {% else %}
-                <span class="notif-badge badge-alert"><i class="bi bi-bell-fill"></i> Alert</span>
+                <span class="notif-badge badge-alert"><i aria-hidden="true" data-lucide="bell" class="vasto-icon"></i> Alert</span>
               {% endif %}
             </h3>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span class="notif-time">
-              <i class="bi bi-clock-history"></i> {{ item.latest_timestamp|timesince }}
+              <i aria-hidden="true" data-lucide="history" class="vasto-icon"></i> {{ item.latest_timestamp|timesince }}
             </span>
           </div>
         </div>
@@ -274,7 +274,7 @@
             <button class="btn-action"
                     style="background: var(--brand-light); color: var(--brand); border: 1.5px solid var(--brand-mid);"
                     onclick="event.stopPropagation(); this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? 'block' : 'none';">
-              <i class="bi bi-chevron-down"></i> See all {{ item.count }}
+              <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon"></i> See all {{ item.count }}
             </button>
             <div style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);">
               {% for notif in item.notifications %}
@@ -289,22 +289,22 @@
         {% elif item.notification_type == 'GROUP_REQUEST' and item.group %}
           <div class="notif-actions">
             <a href="{% url 'groups:approve_from_notification' item.group.id item.notifications.0.sender.id %}" class="btn-action btn-accept" onclick="event.stopPropagation()">
-              <i class="bi bi-check2"></i> Approve
+              <i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Approve
             </a>
             <a href="{% url 'groups:reject_from_notification' item.group.id item.notifications.0.sender.id %}" class="btn-action btn-decline" onclick="event.stopPropagation()">
-              <i class="bi bi-x2"></i> Reject
+              <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i> Reject
             </a>
           </div>
         {% endif %}
       </div>
 
       <div class="notif-icon {% if item.notification_type == 'LIKE' %}icon-like{% elif item.notification_type == 'FOLLOW' %}icon-follow{% elif item.notification_type == 'INVITE' %}icon-invite{% elif item.notification_type == 'GROUP_REQUEST' %}icon-alert{% elif item.notification_type == 'GROUP_APPROVED' %}icon-invite{% else %}icon-alert{% endif %}">
-        {% if item.notification_type == 'LIKE' %}<i class="bi bi-heart-fill"></i>
-        {% elif item.notification_type == 'FOLLOW' %}<i class="bi bi-person-plus-fill"></i>
-        {% elif item.notification_type == 'INVITE' %}<i class="bi bi-envelope-fill"></i>
-        {% elif item.notification_type == 'GROUP_REQUEST' %}<i class="bi bi-clock-fill"></i>
-        {% elif item.notification_type == 'GROUP_APPROVED' %}<i class="bi bi-check-circle-fill"></i>
-        {% else %}<i class="bi bi-bell-fill"></i>
+        {% if item.notification_type == 'LIKE' %}<i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
+        {% elif item.notification_type == 'FOLLOW' %}<i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon"></i>
+        {% elif item.notification_type == 'INVITE' %}<i aria-hidden="true" data-lucide="mail" class="vasto-icon"></i>
+        {% elif item.notification_type == 'GROUP_REQUEST' %}<i aria-hidden="true" data-lucide="clock" class="vasto-icon"></i>
+        {% elif item.notification_type == 'GROUP_APPROVED' %}<i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon"></i>
+        {% else %}<i aria-hidden="true" data-lucide="bell" class="vasto-icon"></i>
         {% endif %}
       </div>
     {% if item.post or item.group or item.notification_type == 'FOLLOW' %}
@@ -315,7 +315,7 @@
   {% endif %}
 {% empty %}
   <div class="empty-state">
-    <div class="empty-icon"><i class="bi bi-bell-slash"></i></div>
+    <div class="empty-icon"><i aria-hidden="true" data-lucide="bell-off" class="vasto-icon"></i></div>
     <div class="empty-title">No notifications</div>
     <p class="empty-sub">You're all caught up!</p>
   </div>
@@ -329,12 +329,10 @@ function toggleSenderGroup(senderId) {
   
   if (activities.style.display === 'none') {
     activities.style.display = 'block';
-    expandIcon.classList.remove('bi-chevron-down');
-    expandIcon.classList.add('bi-chevron-up');
+    if (window.VastoIcons) { window.VastoIcons.setIcon(expandIcon, 'chevron-up'); }
   } else {
     activities.style.display = 'none';
-    expandIcon.classList.remove('bi-chevron-up');
-    expandIcon.classList.add('bi-chevron-down');
+    if (window.VastoIcons) { window.VastoIcons.setIcon(expandIcon, 'chevron-down'); }
   }
 }
 

@@ -267,7 +267,7 @@ class ChatThemeManager {
         if (chatHeader && !chatHeader.querySelector('.theme-btn')) {
             const themeBtn = document.createElement('button');
             themeBtn.className = 'theme-btn';
-            themeBtn.innerHTML = '<i class="bi bi-palette"></i>';
+            themeBtn.innerHTML = '<i aria-hidden="true" data-lucide="palette" class="vasto-icon"></i>';
             themeBtn.title = 'Chat Theme';
             themeBtn.addEventListener('click', () => this.showThemeSelector());
             

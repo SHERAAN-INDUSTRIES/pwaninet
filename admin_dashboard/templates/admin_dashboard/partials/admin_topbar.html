@@ -1,0 +1,34 @@
+{% load static %}
+{% comment %}
+  Lean workspace topbar. The workspace's exit paths live in the left rail, so
+  the header stays focused on identity + the two global toggles.
+{% endcomment %}
+<nav class="adw-topbar" aria-label="Admin workspace">
+  <div class="adw-topbar-start">
+    <button type="button" class="adw-icon-btn adw-nav-toggle" onclick="adwToggleNav()" title="Navigation" aria-label="Open navigation">
+      <i aria-hidden="true" data-lucide="menu" class="vasto-icon vasto-icon--sm"></i>
+    </button>
+    <a href="{% url 'admin_dashboard:dashboard_home' %}" class="adw-brand" title="Admin command center">
+      <img src="{% static 'vastologos/vasto_transparent.png' %}" class="adw-brand-logo" alt="vasto" width="28" height="28">
+      <span class="adw-brand-long">Vasto Admin Dashboard</span>
+      <span class="adw-brand-short">Admin</span>
+    </a>
+  </div>
+
+  <div class="adw-topbar-end">
+    <button type="button" class="adw-icon-btn d-none d-sm-inline-flex" onclick="adwThemeCycle()" title="Cycle theme: light / dark" aria-label="Cycle theme">
+      <i aria-hidden="true" data-lucide="contrast" class="vasto-icon vasto-icon--sm" id="adwThemeIcon"></i>
+    </button>
+    <button type="button" class="adw-icon-btn" id="adwCtxToggleBtn" onclick="adwToggleCtx()" title="Live operations panel" aria-label="Toggle live operations panel">
+      <i aria-hidden="true" data-lucide="activity" class="vasto-icon vasto-icon--sm"></i>
+    </button>
+    <a href="{% url 'users:profile' request.user.username %}" class="adw-avatar-link" data-bypass-htmx="true" hx-boost="false" title="My profile">
+      {% if request.user.profile_pic %}
+        <img src="{{ request.user.profile_pic.url }}" class="adw-avatar" alt="Profile">
+      {% else %}
+        <span class="adw-avatar adw-avatar-fallback"><i aria-hidden="true" data-lucide="user-round" class="vasto-icon vasto-icon--sm"></i></span>
+      {% endif %}
+    </a>
+  </div>
+</nav>
+<div class="adw-nav-backdrop" id="adwNavBackdrop" onclick="adwToggleNav(false)"></div>

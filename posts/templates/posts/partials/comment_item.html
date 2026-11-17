@@ -40,7 +40,7 @@
                     hx-target="#comment-{{ comment.id }}"
                     hx-swap="outerHTML"
                     style="font-size: 12px;">
-                <i class="bi {% if comment.id in liked_comment_ids %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
+                <i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if comment.id in liked_comment_ids %} vasto-icon--filled{% else %}{% endif %}"></i>
                 <span class="ms-1">{{ comment.likes.count }}</span>
             </button>
         </div>

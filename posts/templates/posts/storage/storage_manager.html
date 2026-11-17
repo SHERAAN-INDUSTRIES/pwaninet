@@ -332,7 +332,7 @@
   <div class="storage-card">
     <h2>Storage Overview</h2>
     <div id="storage-loading" class="storage-loading">
-      <i class="bi bi-arrow-repeat"></i>
+      <i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon"></i>
       <p>Loading storage information...</p>
     </div>
     <div id="storage-content" style="display: none;">
@@ -399,7 +399,7 @@
     </div>
     <div id="downloads-list" class="storage-list">
       <div class="storage-empty">
-        <i class="bi bi-download"></i>
+        <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i>
         <p>No downloads yet</p>
       </div>
     </div>
@@ -412,7 +412,7 @@
       <h3>Upload Queue</h3>
       <div id="upload-queue-list" class="storage-list">
         <div class="storage-empty">
-          <i class="bi bi-inbox"></i>
+          <i aria-hidden="true" data-lucide="inbox" class="vasto-icon"></i>
           <p>No pending uploads</p>
         </div>
       </div>
@@ -421,7 +421,7 @@
       <h3>Drafts</h3>
       <div id="drafts-list" class="storage-list">
         <div class="storage-empty">
-          <i class="bi bi-file-text"></i>
+          <i aria-hidden="true" data-lucide="file-text" class="vasto-icon"></i>
           <p>No saved drafts</p>
         </div>
       </div>
@@ -496,7 +496,7 @@
     } catch (error) {
       console.error('Failed to load storage information:', error);
       loading.innerHTML = `
-        <i class="bi bi-exclamation-triangle"></i>
+        <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon"></i>
         <p>Failed to load storage information: ${error.message}</p>
         <p style="font-size: 0.8rem; margin-top: 0.5rem;">Check browser console for details</p>
       `;
@@ -517,7 +517,7 @@
       if (downloads.length === 0) {
         list.innerHTML = `
           <div class="storage-empty">
-            <i class="bi bi-download"></i>
+            <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i>
             <p>No downloads yet</p>
           </div>
         `;
@@ -549,7 +549,7 @@
       console.error('Failed to load downloads:', error);
       list.innerHTML = `
         <div class="storage-empty">
-          <i class="bi bi-exclamation-triangle"></i>
+          <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon"></i>
           <p>Failed to load downloads: ${error.message}</p>
         </div>
       `;
@@ -590,7 +590,7 @@
       if (drafts.length === 0) {
         list.innerHTML = `
           <div class="storage-empty">
-            <i class="bi bi-file-text"></i>
+            <i aria-hidden="true" data-lucide="file-text" class="vasto-icon"></i>
             <p>No saved drafts</p>
           </div>
         `;
@@ -620,7 +620,7 @@
     } catch (error) {
       list.innerHTML = `
         <div class="storage-empty">
-          <i class="bi bi-exclamation-triangle"></i>
+          <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon"></i>
           <p>Failed to load drafts</p>
         </div>
       `;
@@ -663,7 +663,7 @@
     if (queueStats.total === 0) {
       list.innerHTML = `
         <div class="storage-empty">
-          <i class="bi bi-inbox"></i>
+          <i aria-hidden="true" data-lucide="inbox" class="vasto-icon"></i>
           <p>No pending uploads</p>
         </div>
       `;

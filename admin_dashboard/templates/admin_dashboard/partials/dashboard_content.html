@@ -1,111 +1,147 @@
-<style>
-  .admin-dashboard { --admin-ink: #172b4d; --admin-muted: #718096; --admin-line: #e8edf3; color: var(--admin-ink); }
-  .admin-dashboard .dashboard-heading { padding: 2rem clamp(1.25rem, 3vw, 2.5rem) 1.25rem; }
-  .admin-dashboard .dashboard-body { padding: 1rem clamp(1.25rem, 3vw, 2.5rem) 2.5rem; }
-  .admin-dashboard .eyebrow { color: #64748b; font-size: .72rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
-  .admin-dashboard .metric-card, .admin-dashboard .panel-card { background: var(--bs-body-bg, #fff); border: 1px solid var(--admin-line) !important; border-radius: 16px; box-shadow: 0 4px 16px rgba(23, 43, 77, .045) !important; }
-  .admin-dashboard .metric-card { min-height: 190px; transition: transform .18s ease, box-shadow .18s ease; }
-  .admin-dashboard .metric-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(23, 43, 77, .09) !important; }
-  .admin-dashboard .metric-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 13px; font-size: 1.2rem; }
-  .admin-dashboard .metric-value { color: var(--admin-ink); font-size: clamp(1.8rem, 3vw, 2.35rem); font-weight: 750; letter-spacing: -.045em; line-height: 1.1; }
-  .admin-dashboard .metric-label { color: var(--admin-muted); font-size: .78rem; font-weight: 600; }
-  .admin-dashboard .panel-card .card-body { padding: 1.35rem; }
-  .admin-dashboard .panel-title { color: var(--admin-ink); font-size: 1rem; font-weight: 700; }
-  .admin-dashboard .chart-wrap { position: relative; height: 270px; width: 100%; }
-  .admin-dashboard .feedback-row { color: inherit; border-color: var(--admin-line); padding: 1rem 1.25rem; transition: background-color .15s ease; }
-  .admin-dashboard .feedback-row:hover { background: rgba(37, 99, 235, .045); }
-  .admin-dashboard .feedback-avatar { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 12px; color: #2563eb; background: #eff6ff; }
-  .admin-dashboard .live-dot { display: inline-block; width: 8px; height: 8px; margin-right: .35rem; border-radius: 50%; background: #22a06b; box-shadow: 0 0 0 3px rgba(34, 160, 107, .12); }
-  html[data-theme="dark"] .admin-dashboard { --admin-ink: #e5eaf2; --admin-muted: #a4afbf; --admin-line: #303b4b; }
-  html[data-theme="dark"] .admin-dashboard .metric-card, html[data-theme="dark"] .admin-dashboard .panel-card { background: #1c2532; }
-  html[data-theme="dark"] .admin-dashboard .feedback-avatar { color: #93c5fd; background: #20334b; }
-  @media (max-width: 575.98px) { .admin-dashboard .dashboard-heading { padding-top: 1.35rem; } .admin-dashboard .metric-card { min-height: 170px; } .admin-dashboard .chart-wrap { height: 225px; } }
-</style>
+{% load static %}
+<main class="adw-page" data-adw-section="overview">
 
-<main class="admin-dashboard">
-  <header class="dashboard-heading d-flex flex-wrap justify-content-between align-items-end gap-3">
+  <header class="adw-page-head">
     <div>
-      <div class="eyebrow mb-2">Overview</div>
-      <h1 class="page-title mb-1" style="font-size:clamp(1.65rem, 3vw, 2rem);font-weight:750;letter-spacing:-.04em;">Admin dashboard</h1>
-      <p class="text-muted mb-0">A clear view of platform activity, support, and safety.</p>
+      <div class="adw-eyebrow">Command center</div>
+      <h1 class="adw-page-title">Overview</h1>
+      <p class="adw-page-sub">Platform activity, safety and support at a glance.</p>
     </div>
-    <div class="d-flex align-items-center gap-2">
-      <a href="{% url 'admin:index' %}" data-bypass-htmx="true" hx-boost="false" class="btn btn-outline-warning rounded-3 px-3 py-2 fw-semibold">
-        <i class="bi bi-database-fill-gear me-2"></i>Django Admin
+    <div class="adw-page-actions">
+      <a href="{% url 'admin_dashboard:ai_models' %}"
+         class="adw-btn" hx-get="{% url 'admin_dashboard:ai_models' %}"
+         hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i> Models
       </a>
-      <a href="{% url 'admin_dashboard:feedback_inbox' %}" hx-get="{% url 'admin_dashboard:feedback_inbox' %}" hx-target="#page-content-target" hx-push-url="true" class="btn btn-primary rounded-3 px-3 py-2">
-        <i class="bi bi-inbox me-2"></i>Open feedback inbox
+      <a href="{% url 'admin_dashboard:feedback_inbox' %}"
+         class="adw-btn adw-btn-primary" hx-get="{% url 'admin_dashboard:feedback_inbox' %}"
+         hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="inbox" class="vasto-icon vasto-icon--sm"></i> Inbox
+        {% if unread_feedback_count %}<span class="adw-btn-count">{{ unread_feedback_count }}</span>{% endif %}
       </a>
     </div>
   </header>
 
-  <div class="dashboard-body">
-    <div class="row g-3 g-xl-4 mb-4">
-      <div class="col-sm-6 col-xl-3">
-        <section class="card metric-card h-100"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start mb-4"><div><div class="eyebrow mb-1">Community</div><div class="fw-semibold">Registered users</div></div><span class="metric-icon text-primary" style="background:#eff6ff"><i class="bi bi-people-fill"></i></span></div>
-          <div class="metric-value">{{ total_users }}</div><div class="metric-label mt-2">Total accounts</div>
-        </div></section>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <section class="card metric-card h-100"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start mb-4"><div><div class="eyebrow mb-1">Engagement</div><div class="fw-semibold">Active today</div></div><span class="metric-icon text-success" style="background:#ecfdf3"><i class="bi bi-activity"></i></span></div>
-          <div class="metric-value">{{ daily_active_users }}</div><div class="metric-label mt-2">Unique users today</div>
-        </div></section>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <section class="card metric-card h-100"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start mb-4"><div><div class="eyebrow mb-1">Online</div><div class="fw-semibold">Live now</div></div><span class="metric-icon text-success" style="background:#ecfdf3"><i class="bi bi-broadcast"></i></span></div>
-          <div class="metric-value"><span class="live-dot"></span>{{ online_users }}</div><div class="metric-label mt-2">Seen in the last five minutes</div>
-        </div></section>
-      </div>
-      <div class="col-sm-6 col-xl-3">
-        <section class="card metric-card h-100"><div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-start mb-4"><div><div class="eyebrow mb-1">Needs attention</div><div class="fw-semibold">Pending reports</div></div><span class="metric-icon text-warning" style="background:#fff7e6"><i class="bi bi-shield-exclamation"></i></span></div>
-          <div class="metric-value">{{ pending_reports }}</div><div class="metric-label mt-2">Awaiting moderation</div>
-        </div></section>
-      </div>
+  {% if not registry.healthy %}
+  <div class="adw-flash is-warn">
+    <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon vasto-icon--sm"></i>
+    <div>
+      <strong>Model registry needs attention.</strong>
+      {% if not registry.offerings %}
+        No offerings are registered — model switches have no effect until you run
+        <code>python manage.py seed_model_registry</code>.
+      {% elif not registry.default_tier %}
+        There is no default tier, so tier gating is currently bypassed.
+      {% endif %}
     </div>
+  </div>
+  {% endif %}
 
-    <div class="row g-3 g-xl-4 mb-4">
-      <div class="col-12 col-xl-6"><section class="card panel-card h-100"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3"><div><h2 class="panel-title mb-1">User growth</h2><div class="text-muted small">New registrations over the last 14 days</div></div><span class="metric-icon text-primary" style="background:#eff6ff"><i class="bi bi-graph-up-arrow"></i></span></div>
-        <div class="chart-wrap"><canvas id="growthChart"></canvas><div class="text-muted small" data-chart-fallback aria-live="polite"></div></div>
-      </div></section></div>
-      <div class="col-12 col-xl-6"><section class="card panel-card h-100"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3"><div><h2 class="panel-title mb-1">Daily active users</h2><div class="text-muted small">Engagement over the last 14 days</div></div><span class="metric-icon text-success" style="background:#ecfdf3"><i class="bi bi-bar-chart-line"></i></span></div>
-        <div class="chart-wrap"><canvas id="activeChart"></canvas><div class="text-muted small" data-chart-fallback aria-live="polite"></div></div>
-      </div></section></div>
-    </div>
-
-    <section class="card panel-card overflow-hidden">
-      <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
-        <div><h2 class="panel-title mb-1">Recent unread feedback</h2><div class="text-muted small">The latest messages waiting for a response</div></div>
-        <div class="d-flex align-items-center gap-3"><span class="badge rounded-pill text-bg-primary">{{ unread_feedback_count }} unread</span><span class="text-muted small">{{ open_tickets_count }} open</span><a href="{% url 'admin_dashboard:feedback_inbox' %}" hx-get="{% url 'admin_dashboard:feedback_inbox' %}" hx-target="#page-content-target" hx-push-url="true" class="small fw-semibold text-decoration-none">View all <i class="bi bi-arrow-right ms-1"></i></a></div>
-      </div>
-      <div class="list-group list-group-flush">
-    {% for ticket in recent_feedback %}
-    <a href="{% url 'admin_dashboard:feedback_detail' ticket.id %}" 
-       hx-get="{% url 'admin_dashboard:feedback_detail' ticket.id %}" 
-       hx-target="#page-content-target" 
-       hx-push-url="true" 
-       class="list-group-item list-group-item-action feedback-row d-flex justify-content-between align-items-center gap-3">
-      <div class="d-flex align-items-center gap-3 min-w-0">
-        <span class="feedback-avatar"><i class="bi bi-chat-left-text"></i></span>
-        <div class="min-w-0"><h3 class="h6 mb-1 text-truncate">{{ ticket.subject }}</h3>
-        <p class="mb-0 text-muted small">{{ ticket.sender.username }} <span class="mx-1">·</span>{{ ticket.created_at|timesince }} ago</p></div>
-      </div>
-      <span class="d-flex align-items-center gap-2 flex-shrink-0"><span class="badge rounded-pill text-bg-light border">{{ ticket.get_category_display }}</span><i class="bi bi-chevron-right text-muted small"></i></span>
-    </a>
-    {% empty %}
-    <div class="list-group-item text-center text-muted py-5">
-      <i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>
-      <div class="fw-semibold">You’re all caught up</div><div class="small mt-1">There is no unread feedback right now.</div>
-    </div>
-    {% endfor %}
+  {# ── Headline metrics ── #}
+  <div class="adw-stat-grid">
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Registered users</span><i aria-hidden="true" data-lucide="users" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ total_users }}</div>
+      <div class="adw-stat-note">Total accounts</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Active today</span><i aria-hidden="true" data-lucide="activity" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ daily_active_users }}</div>
+      <div class="adw-stat-note">Unique users since midnight</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Live now</span><i aria-hidden="true" data-lucide="radio-tower" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value"><span class="adw-live-dot"></span>{{ online_users }}</div>
+      <div class="adw-stat-note">Seen in the last five minutes</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Pending reports</span><i aria-hidden="true" data-lucide="shield-alert" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ pending_reports }}</div>
+      <div class="adw-stat-note">Awaiting moderation</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Unread feedback</span><i aria-hidden="true" data-lucide="mail-warning" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ unread_feedback_count }}</div>
+      <div class="adw-stat-note">{{ open_tickets_count }} open tickets</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Model fleet</span><i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ ops.model_counts.active|default:0 }}<span class="adw-stat-denom">/{{ ops.model_total }}</span></div>
+      <div class="adw-stat-note">Active models
+        {% if ops.model_counts.rate_limited %}· {{ ops.model_counts.rate_limited }} limited{% endif %}
+        {% if ops.model_counts.disabled %}· {{ ops.model_counts.disabled }} off{% endif %}
       </div>
     </section>
   </div>
+
+  {# ── Charts ── #}
+  <div class="adw-grid-2">
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">User growth</h2>
+          <div class="adw-panel-sub">New registrations over the last 14 days</div>
+        </div>
+        <i aria-hidden="true" data-lucide="trending-up" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <div class="adw-chart"><canvas id="growthChart"></canvas><div class="adw-chart-fallback" data-chart-fallback aria-live="polite"></div></div>
+      </div>
+    </section>
+
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Daily active users</h2>
+          <div class="adw-panel-sub">Engagement over the last 14 days</div>
+        </div>
+        <i aria-hidden="true" data-lucide="chart-column" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <div class="adw-chart"><canvas id="activeChart"></canvas><div class="adw-chart-fallback" data-chart-fallback aria-live="polite"></div></div>
+      </div>
+    </section>
+  </div>
+
+  {# ── Support queue ── #}
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Recent unread feedback</h2>
+        <div class="adw-panel-sub">The latest messages waiting for a response</div>
+      </div>
+      <div class="adw-panel-actions">
+        <span class="adw-chip is-info">{{ unread_feedback_count }} unread</span>
+        <a href="{% url 'admin_dashboard:feedback_inbox' %}"
+           hx-get="{% url 'admin_dashboard:feedback_inbox' %}"
+           hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true"
+           class="adw-link">View all <i aria-hidden="true" data-lucide="arrow-right" class="vasto-icon vasto-icon--sm"></i></a>
+      </div>
+    </div>
+    <div class="adw-rows">
+      {% for ticket in recent_feedback %}
+      <a href="{% url 'admin_dashboard:feedback_detail' ticket.id %}"
+         hx-get="{% url 'admin_dashboard:feedback_detail' ticket.id %}"
+         hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true"
+         class="adw-row">
+        <span class="adw-row-icon"><i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon vasto-icon--sm"></i></span>
+        <span class="adw-row-main">
+          <strong>{{ ticket.subject }}</strong>
+          <small>{{ ticket.sender.username }} · {{ ticket.created_at|timesince }} ago</small>
+        </span>
+        <span class="adw-chip is-mute">{{ ticket.get_category_display }}</span>
+        <i aria-hidden="true" data-lucide="chevron-right" class="adw-row-chevron vasto-icon vasto-icon--sm"></i>
+      </a>
+      {% empty %}
+      <div class="adw-empty">
+        <i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i>
+        <strong>You're all caught up</strong>
+        <span>There is no unread feedback right now.</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
 </main>
 
 <script>
@@ -148,7 +184,7 @@
           type: 'line',
           data: { labels, datasets: [{
             label: 'New Registrations', data: growthData,
-            borderColor: '#0d6efd', backgroundColor: 'rgba(13, 110, 253, 0.1)',
+            borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.12)',
             tension: 0.3, fill: true
           }] },
           options: { responsive: true, maintainAspectRatio: false,
@@ -159,7 +195,7 @@
           type: 'bar',
           data: { labels, datasets: [{
             label: 'Active Users', data: activeData,
-            backgroundColor: '#198754', borderRadius: 4
+            backgroundColor: '#22a06b', borderRadius: 4
           }] },
           options: { responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
@@ -176,13 +212,13 @@
     renderDashboardCharts();
     if (!window.vastoDashboardChartEventsBound) {
       window.vastoDashboardChartEventsBound = true;
-      const renderCurrentDashboardCharts = () => {
+      const rerender = () => {
         if (typeof window.vastoRenderDashboardCharts === 'function') {
           window.vastoRenderDashboardCharts();
         }
       };
-      document.addEventListener('htmx:afterSwap', renderCurrentDashboardCharts);
-      document.addEventListener('themeChanged', renderCurrentDashboardCharts);
+      document.addEventListener('htmx:afterSwap', rerender);
+      document.addEventListener('themeChanged', rerender);
     }
   })();
 </script>

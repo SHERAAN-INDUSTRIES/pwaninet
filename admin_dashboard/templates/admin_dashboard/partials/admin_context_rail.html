@@ -1,0 +1,147 @@
+{% comment %}
+  Admin context rail — live operations. Collapsed by default (0px column);
+  the topbar's activity button opens it and the resizer widens it up to a
+  50/50 split with the centre panel. Width and open state persist per device.
+{% endcomment %}
+<div class="adw-ctx" id="adwCtx">
+  <div class="adw-ctx-resizer"
+       id="adwRailResizer"
+       role="separator"
+       aria-orientation="vertical"
+       aria-label="Resize operations panel"
+       aria-valuemin="280"
+       aria-valuemax="640"
+       aria-valuenow="420"
+       tabindex="0">
+    <span class="adw-ctx-resizer-grip" aria-hidden="true"></span>
+  </div>
+
+  <div class="adw-ctx-header">
+    <div class="adw-ctx-title">
+      <span class="adw-live-dot" aria-hidden="true"></span>
+      <strong>Live operations</strong>
+    </div>
+    <button type="button" class="adw-icon-btn" onclick="adwToggleCtx(false)" title="Close panel" aria-label="Close operations panel">
+      <i aria-hidden="true" data-lucide="x" class="vasto-icon vasto-icon--sm"></i>
+    </button>
+  </div>
+
+  <div class="adw-ctx-body" id="adwCtxBody">
+    {# ── Headline counters ── #}
+    <section class="adw-ctx-section">
+      <div class="adw-mini-stats">
+        <div class="adw-mini-stat">
+          <span class="adw-mini-value"><span class="adw-live-dot"></span>{{ ops.online_users|default:0 }}</span>
+          <span class="adw-mini-label">Online now</span>
+        </div>
+        <div class="adw-mini-stat">
+          <span class="adw-mini-value">{{ ops.unread_feedback|default:0 }}</span>
+          <span class="adw-mini-label">Unread</span>
+        </div>
+        <div class="adw-mini-stat">
+          <span class="adw-mini-value">{{ ops.open_tickets|default:0 }}</span>
+          <span class="adw-mini-label">Open tickets</span>
+        </div>
+      </div>
+    </section>
+
+    {# ── Engines ── #}
+    {% if engines %}
+    <section class="adw-ctx-section">
+      <h3 class="adw-ctx-heading">Spark engines</h3>
+      <ul class="adw-engine-list">
+        {% for engine in engines %}
+        <li class="adw-engine-row">
+          <span class="adw-state-dot {% if engine.primary_status == 'ready' %}is-ok{% elif engine.primary_status == 'rate_limited' %}is-warn{% else %}is-off{% endif %}"
+                title="{{ engine.primary_status }}"></span>
+          <span class="adw-engine-name">{{ engine.name }}</span>
+          <span class="adw-engine-meta">
+            {% if engine.primary_status == 'ready' %}
+              {{ engine.fallbacks_ready }} fallback{{ engine.fallbacks_ready|pluralize }} ready
+            {% elif engine.primary_status == 'rate_limited' %}
+              rate limited · {{ engine.cooldown_remaining|floatformat:0 }}s
+            {% else %}
+              primary unconfigured
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {# ── Rate limits + provider keys ── #}
+    {% if providers %}
+    <section class="adw-ctx-section">
+      <h3 class="adw-ctx-heading">Providers</h3>
+      <ul class="adw-provider-list">
+        {% for provider in providers %}
+        <li class="adw-provider-row">
+          <span class="adw-state-dot {% if provider.state == 'healthy' %}is-ok{% elif provider.state == 'rate_limited' or provider.state == 'not_configured' %}is-warn{% else %}is-off{% endif %}"></span>
+          <span class="adw-provider-name">{{ provider.label }}</span>
+          <span class="adw-provider-meta">
+            {% if provider.state == 'rate_limited' %}
+              {{ provider.rate_limited_models }} limited{% if provider.cooldown_remaining %} · {{ provider.cooldown_remaining|floatformat:0 }}s{% endif %}
+            {% elif provider.state == 'not_configured' %}
+              no key
+            {% elif provider.state == 'idle' %}
+              idle
+            {% else %}
+              ok
+            {% endif %}
+          </span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% for provider in providers %}
+        {% if provider.models %}
+          {% for model in provider.models %}
+            {% if model.rate_limited %}
+            <div class="adw-quota-line" title="{{ model.description|default:model.display_name }}">
+              <i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i>
+              <span class="adw-quota-name">{{ model.display_name }}</span>
+              <span class="adw-quota-time">{{ model.cooldown_remaining|floatformat:0 }}s</span>
+            </div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {# ── Registry health ── #}
+    {% if registry %}
+    <section class="adw-ctx-section">
+      <h3 class="adw-ctx-heading">Model registry</h3>
+      {% if registry.healthy %}
+      <p class="adw-ctx-note is-ok">
+        <i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i>
+        {{ registry.offerings }} offerings · default tier set
+        {% if registry.disabled %} · {{ registry.disabled }} disabled{% endif %}
+      </p>
+      {% else %}
+      <p class="adw-ctx-note is-warn">
+        <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon vasto-icon--sm"></i>
+        {% if not registry.offerings %}
+          Registry is empty — toggles need <code>seed_model_registry</code>.
+        {% elif not registry.default_tier %}
+          No default tier — tier gating is off.
+        {% endif %}
+      </p>
+      {% endif %}
+      <div class="adw-model-tally" id="adwModelTally">
+        <span class="adw-tally is-ok" title="Active">{{ ops.model_counts.active|default:0 }} active</span>
+        {% if ops.model_counts.rate_limited %}<span class="adw-tally is-warn" title="Rate limited">{{ ops.model_counts.rate_limited }} limited</span>{% endif %}
+        {% if ops.model_counts.disabled %}<span class="adw-tally is-off" title="Disabled">{{ ops.model_counts.disabled }} off</span>{% endif %}
+        {% if ops.model_counts.no_key %}<span class="adw-tally is-mute" title="Missing API key">{{ ops.model_counts.no_key }} no key</span>{% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <p class="adw-ctx-footnote">
+      Quota state is per worker process and refreshes on each request.
+      Model toggles take effect within 60s across workers.
+    </p>
+  </div>
+</div>
+<div class="adw-ctx-backdrop" id="adwCtxBackdrop" onclick="adwToggleCtx(false)"></div>

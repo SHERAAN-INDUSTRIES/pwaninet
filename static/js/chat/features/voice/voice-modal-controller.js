@@ -334,6 +334,13 @@ export class VoiceModalController {
       this.showLockedState();
     });
 
+    _setPlayIcon(name) {
+      if (!this.voicePlayIcon) return;
+      if (window.VastoIcons) { VastoIcons.setIcon(this.voicePlayIcon, name); return; }
+      this.voicePlayIcon.setAttribute('data-lucide', name);
+      this.voicePlayIcon.classList.add('vasto-icon');
+    }
+
     eventBus.on(EVENTS.VOICE_TIMER_UPDATE, (duration) => {
       if (!voiceService.isPlaying && this.voiceTimer) {
         this.voiceTimer.textContent = this._formatTime(duration);
@@ -342,21 +349,21 @@ export class VoiceModalController {
 
     eventBus.on(EVENTS.VOICE_PLAYING, () => {
       if (this.voicePlayIcon) {
-        this.voicePlayIcon.className = 'bi bi-pause-fill';
+        this._setPlayIcon('pause');
       }
       this.startPlaybackWaveformAnimation(this.currentDuration);
     });
 
     eventBus.on(EVENTS.VOICE_PAUSED, () => {
       if (this.voicePlayIcon) {
-        this.voicePlayIcon.className = 'bi bi-play-fill';
+        this._setPlayIcon('play');
       }
       this.renderStaticWaveformProfile(this.currentDuration);
     });
 
     eventBus.on(EVENTS.VOICE_PLAYBACK_ENDED, () => {
       if (this.voicePlayIcon) {
-        this.voicePlayIcon.className = 'bi bi-play-fill';
+        this._setPlayIcon('play');
       }
       this.renderStaticWaveformProfile(this.currentDuration);
     });
@@ -447,7 +454,7 @@ export class VoiceModalController {
     if (this.voiceCancelBtn) this.voiceCancelBtn.classList.remove('d-none');
     if (this.voiceStopBtn) this.voiceStopBtn.classList.add('d-none');
     if (this.voicePlayBtn) this.voicePlayBtn.classList.remove('d-none');
-    if (this.voicePlayIcon) this.voicePlayIcon.className = 'bi bi-play-fill';
+    if (this.voicePlayIcon) this._setPlayIcon('play');
     if (this.voiceSendBtn) {
       this.voiceSendBtn.classList.remove('d-none', 'is-loading');
       this.voiceSendBtn.removeAttribute('disabled');

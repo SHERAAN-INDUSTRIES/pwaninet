@@ -247,4 +247,33 @@ class DocumentUploadTests(TestCase):
         second = storage_path_for('notes.pdf')
         self.assertNotEqual(first, second)
         self.assertTrue(first.endswith('/notes.pdf'))
-        self.assertNotIn('..', storage_path_for('../../notes.pdf'))
+        traversal = storage_path_for('../../notes.pdf')
+        self.assertTrue(traversal.startswith('documents/'))
+        self.assertNotIn('/../', traversal)
+        self.assertFalse(traversal.endswith('/../notes.pdf'))
+
+
+class DirectUploadFilenameSafetyTests(TestCase):
+    def test_storage_path_for_long_unicode_and_special_filenames(self):
+        from documents.services.direct_upload_service import storage_path_for
+
+        names = [
+            "SMA B261 PROBABILITY AND STATISTICS I ASSIGNMENT 1 - SECOND SEMESTER 2025/2026 ACADEMIC YEAR FINAL SUBMISSION.pdf",
+            "Análisis estadístico – asignación №1 (versión final) [2026].pdf",
+            "report with spaces   and...dots...and#special!chars.pdf",
+        ]
+        for name in names:
+            path = storage_path_for(name)
+            self.assertTrue(path.startswith("documents/"))
+            self.assertTrue(path.endswith(".pdf"))
+            self.assertNotIn("/../", path)
+            self.assertFalse(path.split("/")[-1].startswith(".."))
+            self.assertLessEqual(len(path.rsplit("/", 1)[-1]), 180)
+
+    def test_safe_storage_basename_preserves_extension(self):
+        from documents.services.direct_upload_service import safe_storage_basename
+
+        long = "A" * 300 + ".pptx"
+        safe = safe_storage_basename(long)
+        self.assertTrue(safe.endswith(".pptx"))
+        self.assertLessEqual(len(safe), 180)

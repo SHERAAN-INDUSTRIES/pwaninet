@@ -4,7 +4,7 @@
 <div id="fb-repost-banner-{{ post.share_id }}"
      class="fb-repost-banner d-flex align-items-center px-3 pt-2 pb-1 text-muted {% if not r_header.show %}d-none{% endif %}"
      style="font-size: 13px;">
-    <i class="bi bi-repeat me-2 text-primary fs-6"></i>
+    <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon me-2 text-primary fs-6"></i>
     <span class="fb-repost-banner-text">
         {% if r_header.show %}
             {% if r_header.is_self %}

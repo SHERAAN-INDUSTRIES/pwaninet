@@ -177,10 +177,10 @@ export class PreviewCanvas {
         // Floating center tap indicator (pulse on pause/play)
         const tapIndicator = document.createElement('div');
         tapIndicator.className = 'media-video-tap-indicator';
-        tapIndicator.innerHTML = '<i class="bi bi-play-fill"></i>';
+        tapIndicator.innerHTML = '<i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>';
 
         const showPulse = (isPaused) => {
-            tapIndicator.innerHTML = isPaused ? '<i class="bi bi-pause-fill"></i>' : '<i class="bi bi-play-fill"></i>';
+            tapIndicator.innerHTML = isPaused ? '<i aria-hidden="true" data-lucide="pause" class="vasto-icon"></i>' : '<i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>';
             tapIndicator.classList.remove('pulse');
             void tapIndicator.offsetWidth;
             tapIndicator.classList.add('pulse');

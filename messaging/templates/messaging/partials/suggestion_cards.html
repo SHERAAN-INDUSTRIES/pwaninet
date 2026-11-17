@@ -11,12 +11,12 @@
                             <img src="{{ user.profile_picture.url }}" class="messaging-card-image" alt="{{ user.get_full_name }}">
                         {% else %}
                             <div class="messaging-card-image-placeholder">
-                                <i class="bi bi-person-circle"></i>
+                                <i aria-hidden="true" data-lucide="circle-user-round" class="vasto-icon"></i>
                             </div>
                         {% endif %}
                     </a>
                     <button class="messaging-card-dismiss" title="Dismiss suggestion">
-                        <i class="bi bi-x"></i>
+                        <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
                     </button>
                 </div>
                 <div class="messaging-card-info">
@@ -27,11 +27,11 @@
                     <div class="messaging-card-actions">
                         {% if user.id in following_ids %}
                             <button class="btn btn-primary btn-sm messaging-btn-primary start-conversation-btn w-100" data-user-id="{{ user.id }}">
-                                <i class="bi bi-chat-dots me-1"></i>Message
+                                <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon me-1"></i>Message
                             </button>
                         {% else %}
                             <button class="btn btn-primary btn-sm messaging-btn-primary w-100" data-user-id="{{ user.id }}">
-                                <i class="bi bi-person-plus me-1"></i>Add Friend
+                                <i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon me-1"></i>Add Friend
                             </button>
                         {% endif %}
                     </div>
@@ -40,7 +40,7 @@
         {% empty %}
             <div class="no-suggestions">
                 <div class="empty-state">
-                    <i class="bi bi-people"></i>
+                    <i aria-hidden="true" data-lucide="users" class="vasto-icon"></i>
                     <h3>No suggestions available</h3>
                     <p>Start following more users or join groups to get friend suggestions.</p>
                 </div>
@@ -422,7 +422,7 @@ function handleFollowAction(button, userId) {
     
     // Show loading state
     const originalContent = button.innerHTML;
-    button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Loading...';
+    button.innerHTML = '<i aria-hidden="true" data-lucide="hourglass" class="vasto-icon me-1"></i>Loading...';
     button.disabled = true;
     
     // Get username from the card
@@ -458,12 +458,12 @@ function handleFollowAction(button, userId) {
         
         if (data.is_following) {
             // Now following - show message button
-            button.innerHTML = '<i class="bi bi-chat-dots me-1"></i>Message';
+            button.innerHTML = '<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon me-1"></i>Message';
             button.classList.remove('btn-primary');
             button.classList.add('btn-secondary');
         } else {
             // Unfollowed - show add friend button
-            button.innerHTML = '<i class="bi bi-person-plus me-1"></i>Add Friend';
+            button.innerHTML = '<i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon me-1"></i>Add Friend';
             button.classList.remove('btn-secondary');
             button.classList.add('btn-primary');
         }

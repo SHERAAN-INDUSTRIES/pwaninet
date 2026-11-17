@@ -770,6 +770,7 @@ def create_document_chunks_from_data(
     from ..models import DocumentChunk
 
     doc = document or document_version.document
+    max_heading = DocumentChunk._meta.get_field("section_heading").max_length or 300
     records = [
         DocumentChunk(
             document=doc,
@@ -781,7 +782,7 @@ def create_document_chunks_from_data(
             page_number=chunk.page_number,
             page_end=chunk.page_end,
             slide_number=chunk.slide_number,
-            section_heading=chunk.section_heading,
+            section_heading=(chunk.section_heading or "")[:max_heading],
             metadata=chunk.metadata,
             is_active=False,
         )

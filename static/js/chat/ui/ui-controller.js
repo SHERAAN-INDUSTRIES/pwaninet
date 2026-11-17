@@ -639,7 +639,7 @@ export class UIController {
                 const nameEl = item.querySelector('.whatsapp-chat-name');
                 const name = nameEl ? nameEl.textContent.trim() : `Chat #${id}`;
                 const avatarEl = item.querySelector('.chat-avatar');
-                const avatarHtml = avatarEl ? avatarEl.outerHTML : `<div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;"><i class="bi bi-person-fill"></i></div>`;
+                const avatarHtml = avatarEl ? avatarEl.outerHTML : `<div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;"><i aria-hidden="true" data-lucide="user-round" class="vasto-icon"></i></div>`;
                 if (id) {
                     convs.push({ id, name, avatarHtml });
                 }
@@ -665,7 +665,7 @@ export class UIController {
                         return {
                             id: c.id,
                             name: name || `Chat #${c.id}`,
-                            avatarHtml: `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;"><i class="bi bi-chat-dots-fill"></i></div>`
+                            avatarHtml: `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;"><i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i></div>`
                         };
                     });
                     this._renderForwardConversationList(fetchedConvs, listContainer);

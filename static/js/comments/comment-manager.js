@@ -175,7 +175,7 @@ const CommentManager = {
           btn.classList.toggle('liked', likedState);
           btn.classList.toggle('text-danger', likedState);
           const ic = btn.querySelector('i');
-          if (ic) ic.className = likedState ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+          if (ic) ic.setAttribute('class', likedState ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
           const sp = btn.querySelector('span');
           if (sp) sp.textContent = countVal;
         });
@@ -452,8 +452,8 @@ const CommentManager = {
       const repliesContainer = document.getElementById(`replies-${commentId}`);
       if (repliesContainer) {
         toggle.classList.add('expanded');
-        toggle.querySelector('i').classList.remove('bi-chevron-down');
-        toggle.querySelector('i').classList.add('bi-chevron-up');
+        const tIcon = toggle.querySelector('[data-lucide]');
+        if (tIcon && window.VastoIcons) window.VastoIcons.setIcon(tIcon, 'chevron-up');
         toggle.querySelector('span').textContent = 'Hide replies';
         toggle.setAttribute('aria-expanded', 'true');
         this.expandedReplies.add(commentId);
@@ -486,8 +486,8 @@ const CommentManager = {
         repliesContainer.classList.add('collapsed');
       }
       button.classList.remove('expanded');
-      button.querySelector('i')?.classList.remove('bi-chevron-up');
-      button.querySelector('i')?.classList.add('bi-chevron-down');
+      const cIcon = button.querySelector('[data-lucide]');
+      if (cIcon && window.VastoIcons) window.VastoIcons.setIcon(cIcon, 'chevron-down');
       const span = button.querySelector('span');
       if (span) span.textContent = `View ${button.dataset.replyCount || ''} replies`;
       button.setAttribute('aria-expanded', 'false');
@@ -506,8 +506,8 @@ const CommentManager = {
         }
         
         button.classList.add('expanded');
-        button.querySelector('i')?.classList.remove('bi-chevron-down');
-        button.querySelector('i')?.classList.add('bi-chevron-up');
+        const eIcon = button.querySelector('[data-lucide]');
+        if (eIcon && window.VastoIcons) window.VastoIcons.setIcon(eIcon, 'chevron-up');
         const span = button.querySelector('span');
         if (span) span.textContent = 'Hide replies';
         button.setAttribute('aria-expanded', 'true');

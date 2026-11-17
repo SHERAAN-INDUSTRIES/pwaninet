@@ -47,10 +47,10 @@ class DownloadUI {
                 </div>
                 <div class="download-header-actions">
                     <button class="download-action-btn download-minimize-btn" id="download-banner-minimize" title="Minimize / Expand">
-                        <i class="bi bi-dash-lg" id="download-minimize-icon"></i>
+                        <i aria-hidden="true" data-lucide="minus" class="vasto-icon" id="download-minimize-icon"></i>
                     </button>
                     <button class="download-action-btn download-cancel-btn" id="download-banner-cancel" title="Cancel">
-                        <i class="bi bi-x-lg" id="download-cancel-icon"></i>
+                        <i aria-hidden="true" data-lucide="x" class="vasto-icon" id="download-cancel-icon"></i>
                     </button>
                 </div>
             </div>
@@ -59,7 +59,7 @@ class DownloadUI {
             <div class="download-banner-body" id="download-banner-body">
                 <div class="download-banner-thumb-box" id="download-banner-thumb-box">
                     <div class="download-banner-thumb" id="download-banner-thumb">
-                        <i class="bi bi-cloud-arrow-down" id="download-thumb-fallback"></i>
+                        <i aria-hidden="true" data-lucide="cloud-download" class="vasto-icon" id="download-thumb-fallback"></i>
                     </div>
                 </div>
                 <div class="download-banner-info-col">
@@ -82,12 +82,12 @@ class DownloadUI {
             <div class="download-mini-content" id="download-mini-content" style="display: none;">
                 <div class="download-mini-left">
                     <span class="download-mini-icon" id="download-mini-icon">
-                        <i class="bi bi-arrow-down-circle spin-icon"></i>
+                        <i aria-hidden="true" data-lucide="circle-arrow-down" class="vasto-icon spin-icon"></i>
                     </span>
                     <span class="download-mini-text" id="download-mini-text">Downloading (0%)</span>
                 </div>
                 <button class="download-action-btn download-mini-expand-btn" id="download-mini-expand" title="Expand">
-                    <i class="bi bi-chevron-up"></i>
+                    <i aria-hidden="true" data-lucide="chevron-up" class="vasto-icon"></i>
                 </button>
             </div>
         `;
@@ -320,11 +320,11 @@ class DownloadUI {
             if (item.thumbnail) {
                 thumbBox.innerHTML = `<img src="${item.thumbnail}" alt="" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">`;
             } else {
-                let icon = 'bi-file-earmark';
-                if (item.category === 'video') icon = 'bi-camera-video';
-                else if (item.category === 'audio') icon = 'bi-music-note-beamed';
-                else if (item.category === 'image') icon = 'bi-image';
-                thumbBox.innerHTML = `<i class="bi ${icon}"></i>`;
+                let icon = 'file';
+                if (item.category === 'video') icon = 'video';
+                else if (item.category === 'audio') icon = 'music';
+                else if (item.category === 'image') icon = 'image';
+                thumbBox.innerHTML = `<i aria-hidden="true" data-lucide="${icon}" class="vasto-icon"></i>`;
             }
         }
     }

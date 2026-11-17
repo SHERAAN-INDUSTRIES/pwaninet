@@ -1,0 +1,108 @@
+<main class="adw-page" data-adw-section="admins">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">Governance</div>
+      <h1 class="adw-page-title">Admin manager</h1>
+      <p class="adw-page-sub">Every staff account, their identity and devices, and revokes.</p>
+    </div>
+    <div class="adw-page-actions">
+      <a href="{% url 'admin_dashboard:user_logins' %}" class="adw-btn"
+         hx-get="{% url 'admin_dashboard:user_logins' %}" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i> User logins
+      </a>
+    </div>
+  </header>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="adw-flash is-{{ message.tags|default:'info' }}">
+    <i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i>
+    <div>{{ message }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Administrators</h2>
+        <div class="adw-panel-sub">{{ admins|length }} staff account{{ admins|length|pluralize }}. Revoke controls are superuser-only.</div>
+      </div>
+      <i aria-hidden="true" data-lucide="shield-check" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <div class="adw-table-wrap">
+        <table class="adw-table">
+          <thead>
+            <tr>
+              <th>Admin</th>
+              <th>Status</th>
+              <th class="adw-num">Sessions</th>
+              <th>Latest device</th>
+              <th>2FA</th>
+              {% if request.user.is_superuser %}<th>Revoke</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for admin in admins %}
+            <tr class="{% if admin.online %}adw-row-live{% endif %}">
+              <td>
+                <div class="adw-admin-cell">
+                  <span class="adw-avatar">
+                    {% if admin.profile_pic %}
+                      <img class="adw-avatar-img" src="{{ admin.profile_pic }}" alt="">
+                    {% else %}
+                      <span class="adw-avatar-fallback"><i aria-hidden="true" data-lucide="user-round" class="vasto-icon vasto-icon--sm"></i></span>
+                    {% endif %}
+                  </span>
+                  <span>
+                    <div class="adw-cell-strong">{{ admin.username }}</div>
+                    <div class="adw-cell-sub">{{ admin.email }}{% if admin.is_superuser %} · superuser{% endif %}</div>
+                  </span>
+                </div>
+              </td>
+              <td>
+                {% if admin.online %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="radio-tower" class="vasto-icon vasto-icon--sm"></i> Online</span>
+                {% elif admin.last_seen %}
+                  <span class="adw-chip is-mute">{{ admin.last_seen|timesince }} ago</span>
+                {% elif admin.last_login %}
+                  <span class="adw-chip is-mute">{{ admin.last_login|timesince }} ago</span>
+                {% else %}
+                  <span class="adw-chip is-mute">Offline</span>
+                {% endif %}
+              </td>
+              <td class="adw-num">{{ admin.sessions }}</td>
+              <td>
+                <div class="adw-cell-strong">{{ admin.current_browser|default:"Unknown browser" }}</div>
+                <div class="adw-cell-sub">{{ admin.current_os|default:"Unknown OS" }}{% if admin.current_device %} · {{ admin.current_device }}{% endif %}{% if admin.current_location %} · {{ admin.current_location }}{% endif %}</div>
+              </td>
+              <td>
+                {% if admin.two_factor %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="shield-check" class="vasto-icon vasto-icon--sm"></i> On</span>
+                {% else %}
+                  <span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="shield-alert" class="vasto-icon vasto-icon--sm"></i> Off</span>
+                {% endif %}
+              </td>
+              {% if request.user.is_superuser %}
+              <td>
+                <form class="m-0" method="post" action="{% url 'admin_dashboard:revoke_user_sessions' admin.user.id %}" onsubmit="return confirm('Revoke all sessions for {{ admin.username }}? They will be signed out everywhere.');">
+                  {% csrf_token %}
+                  <button type="submit" class="adw-btn adw-btn-danger" {% if admin.user.id == request.user.id %}disabled{% endif %}>Revoke sessions</button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="adw-empty"><i aria-hidden="true" data-lucide="users" class="vasto-icon vasto-icon--sm"></i><strong>No administrators found</strong></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="adw-panel-note"><i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i>Profile pic comes from <code>User.profile_pic</code>. Browser and OS are parsed from the most recent stored session (<code>UserSession.browser</code> / <code>operating_system</code>) — the same fields your login-details service records.</p>
+    </div>
+  </section>
+
+</main>

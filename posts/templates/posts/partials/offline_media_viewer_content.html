@@ -5,7 +5,7 @@
     <div class="d-flex align-items-center justify-content-between mb-3">
         <div class="d-flex align-items-center gap-3">
             <button type="button" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href = '/'; }" class="btn btn-outline-secondary btn-sm rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;" title="Back">
-                <i class="bi bi-arrow-left fs-5"></i>
+                <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon fs-5"></i>
             </button>
             <div>
                 <h1 class="h4 mb-0 fw-bold">{% trans "Offline Media Library" %}</h1>
@@ -14,11 +14,11 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <button id="btn-watch-reels-header" class="btn btn-sm btn-primary rounded-pill px-3 py-1 d-none align-items-center gap-1 shadow-sm">
-                <i class="bi bi-play-circle-fill"></i>
+                <i aria-hidden="true" data-lucide="circle-play" class="vasto-icon"></i>
                 <span>{% trans "Watch Reels" %}</span>
             </button>
             <button id="btn-clear-all-downloads" class="btn btn-sm btn-outline-danger d-none">
-                <i class="bi bi-trash me-1"></i>{% trans "Clear All" %}
+                <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon me-1"></i>{% trans "Clear All" %}
             </button>
         </div>
     </div>
@@ -70,34 +70,34 @@
         <ul class="nav nav-pills gap-1" id="offlineCategoryTabs">
             <li class="nav-item">
                 <button class="nav-link active rounded-pill px-3 py-1 btn-sm" data-category="all">
-                    <i class="bi bi-grid-fill me-1"></i>{% trans "All" %}
+                    <i aria-hidden="true" data-lucide="grid-2x2" class="vasto-icon me-1"></i>{% trans "All" %}
                 </button>
             </li>
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-3 py-1 btn-sm" data-category="video">
-                    <i class="bi bi-camera-video me-1"></i>{% trans "Videos" %}
+                    <i aria-hidden="true" data-lucide="video" class="vasto-icon me-1"></i>{% trans "Videos" %}
                 </button>
             </li>
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-3 py-1 btn-sm" data-category="image">
-                    <i class="bi bi-image me-1"></i>{% trans "Photos" %}
+                    <i aria-hidden="true" data-lucide="image" class="vasto-icon me-1"></i>{% trans "Photos" %}
                 </button>
             </li>
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-3 py-1 btn-sm" data-category="audio">
-                    <i class="bi bi-music-note-beamed me-1"></i>{% trans "Audio" %}
+                    <i aria-hidden="true" data-lucide="music" class="vasto-icon me-1"></i>{% trans "Audio" %}
                 </button>
             </li>
             <li class="nav-item">
                 <button class="nav-link rounded-pill px-3 py-1 btn-sm" data-category="document">
-                    <i class="bi bi-file-earmark-text me-1"></i>{% trans "Docs" %}
+                    <i aria-hidden="true" data-lucide="file-text" class="vasto-icon me-1"></i>{% trans "Docs" %}
                 </button>
             </li>
         </ul>
 
         <div class="d-flex gap-2 flex-grow-1 flex-md-grow-0">
             <div class="input-group input-group-sm flex-grow-1" style="min-width: 160px;">
-                <span class="input-group-text bg-body border-end-0"><i class="bi bi-search"></i></span>
+                <span class="input-group-text bg-body border-end-0"><i aria-hidden="true" data-lucide="search" class="vasto-icon"></i></span>
                 <input type="text" id="offline-search-input" class="form-control border-start-0" placeholder="{% trans 'Search downloads…' %}">
             </div>
             <select id="offline-sort-select" class="form-select form-select-sm" style="width: auto;">
@@ -118,14 +118,14 @@
     <!-- Empty State -->
     <div id="offline-empty-state" class="text-center py-5 d-none">
         <div class="mb-3 text-muted" style="font-size: 54px; opacity: 0.5;">
-            <i class="bi bi-cloud-arrow-down" id="empty-icon"></i>
+            <i aria-hidden="true" data-lucide="cloud-download" class="vasto-icon" id="empty-icon"></i>
         </div>
         <h5 class="fw-bold" id="empty-title">{% trans "No downloaded media yet" %}</h5>
         <p class="text-muted small mx-auto" style="max-width: 320px;" id="empty-desc">
             {% trans "Files you download while browsing vasto will automatically be saved here for full offline streaming and viewing." %}
         </p>
         <a href="/" class="btn btn-primary btn-sm rounded-pill px-4 mt-2">
-            <i class="bi bi-house me-1"></i>{% trans "Browse Feed" %}
+            <i aria-hidden="true" data-lucide="house" class="vasto-icon me-1"></i>{% trans "Browse Feed" %}
         </a>
     </div>
 </div>
@@ -138,7 +138,7 @@
     <div class="offline-reels-top-bar d-flex align-items-center justify-content-between px-3">
         <div class="d-flex align-items-center">
             <button id="btn-close-reels" class="btn btn-sm rounded-circle d-flex align-items-center justify-content-center reels-icon-btn" title="Exit Reels">
-                <i class="bi bi-x-lg fs-5"></i>
+                <i aria-hidden="true" data-lucide="x" class="vasto-icon fs-5"></i>
             </button>
         </div>
         <!-- Centered Counter -->
@@ -162,12 +162,12 @@
         <div class="modal-content bg-body border-0 rounded-4 shadow overflow-hidden" style="height: 88vh;">
             <div class="modal-header py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
-                    <i class="bi bi-file-earmark-pdf text-danger fs-5 flex-shrink-0"></i>
+                    <i aria-hidden="true" data-lucide="file-text" class="vasto-icon text-danger fs-5 flex-shrink-0"></i>
                     <h6 class="modal-title text-truncate fw-semibold mb-0" id="offlineDocTitle">Document</h6>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-shrink-0">
                     <button id="offlineDocExportBtn" class="btn btn-sm btn-primary rounded-pill px-3 d-flex align-items-center gap-1">
-                        <i class="bi bi-phone-arrow-down"></i> <span>{% trans "Save to Phone" %}</span>
+                        <i aria-hidden="true" data-lucide="smartphone" class="vasto-icon"></i> <span>{% trans "Save to Phone" %}</span>
                     </button>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -226,7 +226,7 @@
             </div>
             <div class="modal-body text-center py-4">
                 <div class="mb-3 text-warning fs-1">
-                    <i class="bi bi-music-note-beamed"></i>
+                    <i aria-hidden="true" data-lucide="music" class="vasto-icon"></i>
                 </div>
                 <audio id="offlinePlayerAudio" class="w-100" controls preload="auto"></audio>
             </div>

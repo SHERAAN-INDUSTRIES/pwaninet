@@ -6,7 +6,7 @@ Optional: 'input_class' for additional classes on the input element.
 
 <div class="mb-4">
     <label class="form-label fw-bold small text-uppercase text-muted mb-1" for="{{ field.id_for_label }}">
-        <i class="bi bi-chevron-right text-primary small"></i> {{ field.label }}
+        <i aria-hidden="true" data-lucide="chevron-right" class="text-primary small vasto-icon vasto-icon--sm"></i> {{ field.label }}
     </label>
 
     {% if field.field.widget.input_type == 'checkbox' %}
@@ -64,7 +64,7 @@ Optional: 'input_class' for additional classes on the input element.
 
     {% for error in field.errors %}
         <div class="invalid-feedback d-block">
-            <i class="bi bi-exclamation-triangle-fill me-1"></i> {{ error }}
+            <i aria-hidden="true" data-lucide="triangle-alert" class="me-1 vasto-icon vasto-icon--sm"></i> {{ error }}
         </div>
     {% endfor %}
 </div>

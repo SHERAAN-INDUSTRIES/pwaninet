@@ -1,6 +1,8 @@
 """Render Pwanimate answers as DOCX/PDF resources in a student's library."""
 
 import hashlib
+import json
+import logging
 import base64
 import io
 import mimetypes
@@ -9,14 +11,16 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.conf import settings
+from pwanimate.services.export_formats import FORMATS, stamp, render_doc, render_pptx
 from django.utils.text import slugify
 
 from documents.documents.models import Category, Document, DocumentFile, DocumentVersion
 from documents.private_storage import get_private_resource_storage
 
 
-MAX_RESOURCE_CHARACTERS = 180_000
-GENERATED_RENDERER_VERSION = 3
+MAX_RESOURCE_CHARACTERS = 1_000_000
+GENERATED_RENDERER_VERSION = 4
 GENERATED_RESOURCE_DESCRIPTION = (
     "A private resource generated from a Pwanimate response. "
     f"Renderer version {GENERATED_RENDERER_VERSION}."
@@ -197,6 +201,8 @@ def _message_math_expressions(title, message):
 def _render_math_images(expressions):
     if not expressions:
         return {}
+    if len(expressions) > max(20, min(int(getattr(settings, "SPARK_EXPORT_MAX_EQUATIONS", 200)), 500)):
+        raise ValueError("This export contains too many equations. Choose a chapter or smaller scope.")
     from playwright.sync_api import sync_playwright
 
     katex_js = _static_asset("vendor/katex/katex.min.js").read_text(encoding="utf-8")
@@ -378,7 +384,8 @@ def _render_markdown_html(title, message):
         :root { color-scheme: light; --primary:#2563eb; --pwanimate-asst-text:#0f172a; --pwanimate-muted:#64748b; --pwanimate-card-bg:#fff; --pwanimate-border:#cbd5e1; --pwanimate-hover-bg:#f1f5f9; }
         html, body { margin:0; padding:0; background:#fff; color:#0f172a; }
         body { font-family: Inter, Aptos, Arial, sans-serif; font-size:10.5pt; line-height:1.58; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-        .export-shell { max-width:72ch; margin:0 auto; }
+        .export-watermark { position:fixed; top:45%; left:15%; transform:rotate(-30deg); font:72pt Arial,sans-serif; color:rgba(100,116,139,.08); pointer-events:none; z-index:0; }
+        .export-shell { position:relative; z-index:1; max-width:72ch; margin:0 auto; }
         .export-title { margin:0 0 1.15em; color:#194a89; font-size:22pt; line-height:1.2; font-weight:700; }
         .pwanimate-markdown-body [align="right"], .pwanimate-markdown-body .text-end { text-align:right; }
         .pwanimate-markdown-body [align="center"], .pwanimate-markdown-body .text-center { text-align:center; }
@@ -398,13 +405,14 @@ def _render_markdown_html(title, message):
         @page { size:A4 portrait; margin:18mm 19mm 23mm; }
         @page wide-table { size:A4 landscape; margin:15mm 15mm 22mm; }
         @media print {
-            .export-shell { max-width:none; }
+            .export-watermark { position:fixed; top:45%; left:15%; transform:rotate(-30deg); font:72pt Arial,sans-serif; color:rgba(100,116,139,.08); pointer-events:none; z-index:0; }
+        .export-shell { position:relative; z-index:1; max-width:none; }
             .wide-table-page table { font-size:8pt; }
             .wide-table-page.dense-wide-table table { font-size:6.5pt; }
             .wide-table-page th, .wide-table-page td { padding:4pt 5pt; }
         }
     """
-    page_html = f"<!doctype html><html><head><meta charset=\"utf-8\"><title></title>{styles}<style>{custom_css}</style></head><body><main class=\"export-shell\"><h1 class=\"export-title\"></h1><article id=\"answer\" class=\"pwanimate-markdown-body\"></article></main></body></html>"
+    page_html = f"<!doctype html><html><head><meta charset=\"utf-8\"><title></title>{styles}<style>{custom_css}</style></head><body><div class=\"export-watermark\">spark.vasto</div><main class=\"export-shell\"><h1 class=\"export-title\"></h1><article id=\"answer\" class=\"pwanimate-markdown-body\"></article></main></body></html>"
     return page_html, markdown, diagram_replacements
 
 
@@ -435,22 +443,23 @@ def _render_docx(title, message):
 
     doc = WordDocument()
     doc.core_properties.title = title
-    doc.core_properties.author = "Pwanimate"
+    doc.core_properties.author = "spark.vasto"
     section = doc.sections[0]
+    section.page_width, section.page_height = Inches(8.27), Inches(11.69)
     section.top_margin = Inches(0.72)
     section.bottom_margin = Inches(0.72)
     section.left_margin = Inches(0.85)
     section.right_margin = Inches(0.85)
 
     normal = doc.styles["Normal"]
-    normal.font.name = "Aptos"
-    normal.font.size = Pt(10.5)
+    normal.font.name = "Liberation Serif"
+    normal.font.size = Pt(11)
     normal.font.color.rgb = RGBColor(40, 48, 60)
     normal.paragraph_format.space_after = Pt(8)
-    normal.paragraph_format.line_spacing = 1.12
+    normal.paragraph_format.line_spacing = 1.2
     for style_name, size in (("Heading 1", 16), ("Heading 2", 13), ("Heading 3", 11)):
         style = doc.styles[style_name]
-        style.font.name = "Aptos Display"
+        style.font.name = "Liberation Sans"
         style.font.size = Pt(size)
         style.font.bold = True
         style.font.color.rgb = RGBColor(25, 74, 137)
@@ -458,10 +467,25 @@ def _render_docx(title, message):
         style.paragraph_format.space_before = Pt(11)
         style.paragraph_format.space_after = Pt(5)
 
+    header = section.header.paragraphs[0]
+    watermark = header.add_run("spark.vasto")
+    watermark.font.name, watermark.font.size = "Liberation Sans", Pt(22)
+    watermark.font.color.rgb = RGBColor(210, 218, 228)
+    header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    title_style = doc.styles['Title']
+    title_style.font.name, title_style.font.size = 'Liberation Serif', Pt(26)
+    title_style.font.color.rgb = RGBColor(23, 50, 77)
+    title_style.font.underline = False
+    ppr = title_style.element.find(qn('w:pPr'))
+    if ppr is not None:
+        for border in list(ppr.findall(qn('w:pBdr'))): ppr.remove(border)
+    doc.styles['Subtitle'].font.name = 'Liberation Serif'
+    doc.styles['Subtitle'].font.size = Pt(11)
+    doc.styles['Subtitle'].font.color.rgb = RGBColor(100, 116, 139)
     math_images = _render_math_images(_message_math_expressions(title, message))
     title_paragraph = doc.add_paragraph(style="Title")
     title_paragraph.add_run(title)
-    subtitle = doc.add_paragraph("Prepared with Pwanimate")
+    subtitle = doc.add_paragraph(stamp())
     subtitle.style = "Subtitle"
 
     def shade(cell, fill):
@@ -578,11 +602,14 @@ def _render_docx(title, message):
 
     footer = section.footer.paragraphs[0]
     footer.style = "Caption"
+    footer.paragraph_format.space_before = Pt(4)
+    doc.styles["Caption"].font.name = "Liberation Sans"
+    doc.styles["Caption"].font.size = Pt(8)
     footer.paragraph_format.tab_stops.add_tab_stop(
         section.page_width - section.left_margin - section.right_margin,
         WD_TAB_ALIGNMENT.RIGHT,
     )
-    brand_run = footer.add_run("vasto  ·  Pwanimate")
+    brand_run = footer.add_run(stamp())
     brand_run.font.color.rgb = RGBColor(100, 116, 139)
     footer.add_run("\t")
     footer.add_run("Page ")
@@ -611,6 +638,7 @@ def _render_pdf(title, message):
 
         try:
             page = browser.new_page(viewport={"width": 1240, "height": 1754}, color_scheme="light")
+            page.set_default_timeout(max(10000, min(int(getattr(settings, "SPARK_PDF_EXPORT_TIMEOUT_MS", 90000)), 180000)))
             page.route("https://**/*", lambda route: route.abort())
             page.route("http://**/*", lambda route: route.abort())
             page.set_content(page_html, wait_until="load")
@@ -682,10 +710,11 @@ def _render_pdf(title, message):
                 raise RuntimeError("The response could not be rendered for PDF export.")
             page.evaluate("async () => { await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); }")
             page.emulate_media(media="print")
-            footer = """<div style='width:100%;box-sizing:border-box;padding:0 19mm;font-family:Arial,sans-serif;font-size:8pt;color:#64748b;display:flex;justify-content:space-between;align-items:center;'><span>vasto · Pwanimate</span><span>Page <span class='pageNumber'></span></span></div>"""
+            footer = """<div style='width:100%;box-sizing:border-box;padding:0 19mm;font-family:Arial,sans-serif;font-size:8pt;color:#64748b;display:flex;justify-content:space-between;align-items:center;'><span>SPARK_EXPORT_STAMP</span><span>Page <span class='pageNumber'></span></span></div>"""
+            footer = footer.replace("SPARK_EXPORT_STAMP", stamp())
             return page.pdf(
                 format="A4", prefer_css_page_size=True, print_background=True,
-                display_header_footer=True, footer_template=footer,
+                display_header_footer=True, header_template="<span></span>", footer_template=footer,
                 margin={"top": "18mm", "right": "19mm", "bottom": "23mm", "left": "19mm"},
             )
         finally:
@@ -718,16 +747,23 @@ def _document_title(message):
     return title[:180] or "Study Notes"
 
 
-@transaction.atomic
 def create_generated_resource(message, user, file_format):
-    if file_format not in {"pdf", "docx"}:
-        raise ValueError("Choose PDF or Word format.")
-    content = (message.content or "").strip()
+    from pwanimate.models import PwanimateMessage
+    if file_format not in FORMATS:
+        raise ValueError("Choose PDF, DOCX, DOC or PPTX format.")
+    message = PwanimateMessage.objects.select_related('conversation').filter(
+        pk=message.pk, role='assistant', conversation__user=user).first()
+    if message is None:
+        raise ValueError('The response does not belong to this student.')
+    content = (message.content or '').strip()
+    limit = max(1000, min(int(getattr(settings, 'SPARK_EXPORT_MAX_CHARACTERS', MAX_RESOURCE_CHARACTERS)), 4_000_000))
     if not content:
-        raise ValueError("There is no response content to save.")
-    if len(content) > MAX_RESOURCE_CHARACTERS:
-        raise ValueError("This response is too long to export as one document.")
-
+        raise ValueError('There is no response content to save.')
+    if len(content) > limit:
+        raise ValueError(f'This response exceeds the {limit:,}-character export limit. Choose a smaller scope.')
+    digest = hashlib.sha256(json.dumps([content, message.sources, message.citations],
+        sort_keys=True, default=str).encode()).hexdigest()
+    signature = GENERATED_RESOURCE_DESCRIPTION + ' Source ' + digest
     existing = Document.objects.filter(
         uploaded_by=user,
         is_ai_generated=True,
@@ -736,105 +772,136 @@ def create_generated_resource(message, user, file_format):
     ).select_related("category").first()
     if existing:
         existing_file = existing.latest_version.files.first()
-        if existing.description == GENERATED_RESOURCE_DESCRIPTION and existing_file:
+        if existing.description == signature and existing_file:
             return existing, existing_file, False
 
+
     title = _document_title(message)
-    category, _ = Category.objects.get_or_create(
-        code="ai_generated",
-        defaults={"name": "AI Generated Resource", "icon": "bi-stars"},
-    )
-    base_slug = slugify(title)[:500] or "pwanimate-resource"
-    slug = base_slug
-    suffix = 2
-    while Document.objects.filter(slug=slug).exists():
-        slug = f"{base_slug[:480]}-{suffix}"
-        suffix += 1
+    if file_format == 'pdf':
+        data = _render_pdf(title, message)
+    elif file_format == 'pptx':
+        data = render_pptx(title, message)
+    else:
+        data = _render_docx(title, message)
+        if file_format == 'doc':
+            data = render_doc(data)
+    with transaction.atomic():
+        locked = PwanimateMessage.objects.select_for_update(of=('self',)).get(pk=message.pk, conversation__user=user)
+        if locked.content != message.content or locked.sources != message.sources or locked.citations != message.citations:
+            raise ValueError('The source response changed while exporting. Retry the export.')
+        existing = Document.objects.filter(
+            uploaded_by=user,
+            is_ai_generated=True,
+            generated_from_message_id=message.id,
+            generated_format=file_format,
+        ).select_related("category").first()
+        if existing:
+            existing_file = existing.latest_version.files.first()
+            if existing.description == signature and existing_file:
+                return existing, existing_file, False
 
-    document = Document.objects.create(
-        title=title,
-        slug=slug,
-        description=GENERATED_RESOURCE_DESCRIPTION,
-        category=category,
-        uploaded_by=user,
-        visibility="private",
-        status="processing",
-        is_available=True,
-        is_ai_generated=True,
-        generated_from_message_id=message.id,
-        generated_format=file_format,
-    )
-    version = DocumentVersion.objects.create(
-        document=document,
-        version_number=1,
-        change_notes="Generated by Pwanimate",
-        created_by=user,
-        is_latest=True,
-    )
+        title = _document_title(message)
+        category, _ = Category.objects.get_or_create(
+            code="ai_generated",
+            defaults={"name": "AI Generated Resource", "icon": "bi-stars"},
+        )
+        base_slug = slugify(title)[:500] or "pwanimate-resource"
+        slug = base_slug
+        suffix = 2
+        while Document.objects.filter(slug=slug).exists():
+            slug = f"{base_slug[:480]}-{suffix}"
+            suffix += 1
 
-    data = _render_pdf(title, message) if file_format == "pdf" else _render_docx(title, message)
-    extension = "pdf" if file_format == "pdf" else "docx"
-    mime_type = "application/pdf" if extension == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    filename = f"{slug[:160]}.{extension}"
-    private_storage = get_private_resource_storage()
-    if existing:
-        resource_file = existing.latest_version.files.first()
-        if not resource_file:
-            raise RuntimeError("The existing generated resource has no stored file to refresh.")
-        old_storage_path = resource_file.file.name
-        checksum = hashlib.sha256(data).hexdigest()
-        versioned_filename = f"{slug[:140]}-{checksum[:12]}.{extension}"
+        if not existing:
+            document = Document.objects.create(
+                title=title,
+                slug=slug,
+                description=signature,
+                category=category,
+                uploaded_by=user,
+                visibility="private",
+                status="processing",
+                is_available=True,
+                is_ai_generated=True,
+                generated_from_message_id=message.id,
+                generated_format=file_format,
+            )
+            version = DocumentVersion.objects.create(
+                document=document,
+                version_number=1,
+                change_notes="Generated by Pwanimate",
+                created_by=user,
+                is_latest=True,
+            )
+
+        extension = file_format
+        mime_type = FORMATS[file_format]
+        filename = f"{slug[:160]}.{extension}"
+        private_storage = get_private_resource_storage()
+        if existing:
+            resource_file = existing.latest_version.files.first()
+            if not resource_file:
+                raise RuntimeError("The existing generated resource has no stored file to refresh.")
+            old_storage_path = resource_file.file.name
+            checksum = hashlib.sha256(data).hexdigest()
+            versioned_filename = f"{slug[:140]}-{checksum[:12]}.{extension}"
+            resource_file.file.storage = private_storage
+            resource_file.file.save(versioned_filename, ContentFile(data), save=False)
+            resource_file.storage_path = resource_file.file.name
+            resource_file.original_filename = filename
+            resource_file.mime_type = mime_type
+            resource_file.extension = extension
+            resource_file.size_bytes = len(data)
+            resource_file.checksum = checksum
+            resource_file.storage_provider = "r2" if private_storage.uses_s3 else "local"
+            resource_file.processing_status = "pending"
+            resource_file.storage_private = True
+            resource_file.save(update_fields=[
+                "file", "storage_path", "original_filename", "mime_type", "extension",
+                "size_bytes", "checksum", "storage_provider", "processing_status", "storage_private",
+            ])
+            existing.description = signature
+            existing.save(update_fields=["description"])
+
+            def cleanup_old_file():
+                if old_storage_path and old_storage_path != resource_file.file.name:
+                    private_storage.delete(old_storage_path)
+
+            def queue_refresh():
+                from documents.tasks.processing import process_document
+                try:
+                    process_document.delay(existing.id)
+                except Exception:
+                    logging.getLogger(__name__).warning("Generated document indexing dispatch failed", exc_info=False)
+
+            transaction.on_commit(cleanup_old_file)
+            transaction.on_commit(queue_refresh)
+            return existing, resource_file, True
+
+        resource_file = DocumentFile.objects.create(
+            document_version=version,
+            original_filename=filename,
+            storage_path="",
+            mime_type=mime_type,
+            extension=extension,
+            size_bytes=len(data),
+            checksum=hashlib.sha256(data).hexdigest(),
+            storage_provider="r2" if private_storage.uses_s3 else "local",
+            processing_status="pending",
+            uploaded_by=user,
+            storage_private=True,
+        )
         resource_file.file.storage = private_storage
-        resource_file.file.save(versioned_filename, ContentFile(data), save=False)
+        resource_file.file.save(filename, ContentFile(data), save=False)
         resource_file.storage_path = resource_file.file.name
-        resource_file.original_filename = filename
-        resource_file.mime_type = mime_type
-        resource_file.extension = extension
-        resource_file.size_bytes = len(data)
-        resource_file.checksum = checksum
-        resource_file.storage_provider = "r2" if private_storage.uses_s3 else "local"
-        resource_file.processing_status = "pending"
-        resource_file.storage_private = True
-        resource_file.save(update_fields=[
-            "file", "storage_path", "original_filename", "mime_type", "extension",
-            "size_bytes", "checksum", "storage_provider", "processing_status", "storage_private",
-        ])
-        existing.description = GENERATED_RESOURCE_DESCRIPTION
-        existing.save(update_fields=["description"])
+        resource_file.save(update_fields=["file", "storage_path"])
 
-        def cleanup_old_file():
-            if old_storage_path and old_storage_path != resource_file.file.name:
-                private_storage.delete(old_storage_path)
-
-        def queue_refresh():
+        def queue_processing():
             from documents.tasks.processing import process_document
-            process_document.delay(existing.id)
+            try:
+                process_document.delay(document.id)
+            except Exception:
+                logging.getLogger(__name__).warning("Generated document indexing dispatch failed", exc_info=False)
 
-        transaction.on_commit(cleanup_old_file)
-        transaction.on_commit(queue_refresh)
-        return existing, resource_file, True
-
-    resource_file = DocumentFile.objects.create(
-        document_version=version,
-        original_filename=filename,
-        storage_path="",
-        mime_type=mime_type,
-        extension=extension,
-        size_bytes=len(data),
-        checksum=hashlib.sha256(data).hexdigest(),
-        storage_provider="r2" if private_storage.uses_s3 else "local",
-        processing_status="pending",
-        uploaded_by=user,
-        storage_private=True,
-    )
-    resource_file.file.storage = private_storage
-    resource_file.file.save(filename, ContentFile(data), save=False)
-    resource_file.storage_path = resource_file.file.name
-    resource_file.save(update_fields=["file", "storage_path"])
-
-    def queue_processing():
-        from documents.tasks.processing import process_document
-        process_document.delay(document.id)
-
-    transaction.on_commit(queue_processing)
-    return document, resource_file, True
+        transaction.on_commit(queue_processing)
+        return document, resource_file, True

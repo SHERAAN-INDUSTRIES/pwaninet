@@ -64,7 +64,7 @@
   {% if active_tab == 'documents' and did_you_mean %}
     <div class="search-did-you-mean d-flex align-items-center gap-2 px-3 py-2 mb-3"
          style="background: var(--primary-light); border: 1px solid var(--primary); border-radius: 12px;">
-      <i class="bi bi-lightbulb-fill" style="color: var(--primary); font-size: 1.1rem;"></i>
+      <i aria-hidden="true" data-lucide="lightbulb" class="vasto-icon vasto-icon--sm" style="color: var(--primary); font-size: 1.1rem;"></i>
       <span style="font-size: 0.95rem; color: var(--text-main);">
         Did you mean: 
         <a href="{% url 'search:unified_search' %}?q={{ did_you_mean|urlencode }}&tab={{ active_tab }}"
@@ -83,7 +83,7 @@
     <!-- ==================== ALL TAB COMPOSITE VIEW ==================== -->
     {% if not results.people and not results.documents and not results.posts and not results.groups %}
       <div class="p-5 text-center text-muted my-4">
-        <i class="bi bi-search display-5 d-block mb-3 opacity-50"></i>
+        <i aria-hidden="true" data-lucide="search" class="display-5 d-block mb-3 opacity-50 vasto-icon vasto-icon--lg"></i>
         <h5 class="fw-bold" style="color: var(--text-main);">No results found for "{{ query }}"</h5>
         <p class="small mb-0">Try searching with different keywords or check spelling.</p>
       </div>
@@ -94,7 +94,7 @@
         <div class="mb-4">
           <div class="d-flex align-items-center justify-content-between mb-2 px-1">
             <h6 class="fw-bold text-uppercase small mb-0" style="color: var(--text-muted); letter-spacing: 0.5px;">
-              <i class="bi bi-people me-1"></i> People ({{ counts.people }})
+              <i aria-hidden="true" data-lucide="users" class="me-1 vasto-icon vasto-icon--sm"></i> People ({{ counts.people }})
             </h6>
             {% if counts.people > 4 %}
               <a hx-get="{% url 'search:unified_search' %}?q={{ query|urlencode }}&tab=people"
@@ -130,9 +130,9 @@
                        style="color: var(--text-main);">
                       {{ item.title }}
                       {% if item.global_role == 'VERIFIED' %}
-                        <i class="bi bi-patch-check-fill text-primary ms-1" style="font-size: 0.85rem;"></i>
+                        <i aria-hidden="true" data-lucide="badge-check" class="text-primary ms-1 vasto-icon vasto-icon--sm" style="font-size: 0.85rem;"></i>
                       {% elif item.global_role == 'PRESIDENT' or item.global_role == 'DELEGATE' %}
-                        <i class="bi bi-star-fill text-warning ms-1" style="font-size: 0.85rem;"></i>
+                        <i aria-hidden="true" data-lucide="star" class="text-warning ms-1 vasto-icon vasto-icon--sm vasto-icon--filled" style="font-size: 0.85rem;"></i>
                       {% endif %}
                     </a>
                     <div class="small text-truncate" style="color: var(--text-muted);">
@@ -161,7 +161,7 @@
         <div class="mb-4">
           <div class="d-flex align-items-center justify-content-between mb-3 px-1">
             <h6 class="fw-bold text-uppercase small mb-0" style="color: var(--text-muted); letter-spacing: 0.5px;">
-              <i class="bi bi-file-earmark-text me-1"></i> Documents ({{ counts.documents }})
+              <i aria-hidden="true" data-lucide="file-text" class="me-1 vasto-icon vasto-icon--sm"></i> Documents ({{ counts.documents }})
             </h6>
             {% if counts.documents > 4 %}
               <a hx-get="{% url 'search:unified_search' %}?q={{ query|urlencode }}&tab=documents"
@@ -189,7 +189,7 @@
         <div class="mb-4">
           <div class="d-flex align-items-center justify-content-between mb-3 px-1">
             <h6 class="fw-bold text-uppercase small mb-0" style="color: var(--text-muted); letter-spacing: 0.5px;">
-              <i class="bi bi-chat-square-text me-1"></i> Posts ({{ counts.posts }})
+              <i aria-hidden="true" data-lucide="message-square-text" class="me-1 vasto-icon vasto-icon--sm"></i> Posts ({{ counts.posts }})
             </h6>
             {% if counts.posts > 4 %}
               <a hx-get="{% url 'search:unified_search' %}?q={{ query|urlencode }}&tab=posts"
@@ -215,7 +215,7 @@
         <div class="mb-4">
           <div class="d-flex align-items-center justify-content-between mb-2 px-1">
             <h6 class="fw-bold text-uppercase small mb-0" style="color: var(--text-muted); letter-spacing: 0.5px;">
-              <i class="bi bi-shield me-1"></i> Groups ({{ counts.groups }})
+              <i aria-hidden="true" data-lucide="shield" class="me-1 vasto-icon vasto-icon--sm"></i> Groups ({{ counts.groups }})
             </h6>
             {% if counts.groups > 4 %}
               <a hx-get="{% url 'search:unified_search' %}?q={{ query|urlencode }}&tab=groups"
@@ -251,7 +251,7 @@
                        style="color: var(--text-main);">
                       {{ item.title }}
                       {% if item.is_official %}
-                        <i class="bi bi-patch-check-fill text-primary ms-1" style="font-size: 0.85rem;"></i>
+                        <i aria-hidden="true" data-lucide="badge-check" class="text-primary ms-1 vasto-icon vasto-icon--sm" style="font-size: 0.85rem;"></i>
                       {% endif %}
                     </a>
                     <div class="small text-truncate" style="color: var(--text-muted);">
@@ -304,9 +304,9 @@
                  style="color: var(--text-main);">
                 {{ item.title }}
                 {% if item.global_role == 'VERIFIED' %}
-                  <i class="bi bi-patch-check-fill text-primary ms-1" style="font-size: 0.85rem;"></i>
+                  <i aria-hidden="true" data-lucide="badge-check" class="text-primary ms-1 vasto-icon vasto-icon--sm" style="font-size: 0.85rem;"></i>
                 {% elif item.global_role == 'PRESIDENT' or item.global_role == 'DELEGATE' %}
-                  <i class="bi bi-star-fill text-warning ms-1" style="font-size: 0.85rem;"></i>
+                  <i aria-hidden="true" data-lucide="star" class="text-warning ms-1 vasto-icon vasto-icon--sm vasto-icon--filled" style="font-size: 0.85rem;"></i>
                 {% endif %}
               </a>
               <div class="small text-truncate" style="color: var(--text-muted);">
@@ -327,7 +327,7 @@
         </div>
       {% empty %}
         <div class="p-5 text-center text-muted">
-          <i class="bi bi-person-x display-6 d-block mb-2 opacity-50"></i>
+          <i aria-hidden="true" data-lucide="user-round-x" class="display-6 d-block mb-2 opacity-50 vasto-icon vasto-icon--lg"></i>
           <p class="mb-0">No people found matching "{{ query }}"</p>
         </div>
       {% endfor %}
@@ -345,7 +345,7 @@
       {% empty %}
         <div class="col-12">
           <div class="p-5 text-center text-muted">
-            <i class="bi bi-file-earmark-x display-6 d-block mb-2 opacity-50"></i>
+            <i aria-hidden="true" data-lucide="file-x" class="display-6 d-block mb-2 opacity-50 vasto-icon vasto-icon--lg"></i>
             <p class="mb-0">No documents found matching "{{ query }}"</p>
           </div>
         </div>
@@ -361,7 +361,7 @@
         {% endwith %}
       {% empty %}
         <div class="p-5 text-center text-muted">
-          <i class="bi bi-chat-square-x display-6 d-block mb-2 opacity-50"></i>
+          <i aria-hidden="true" data-lucide="message-square-x" class="display-6 d-block mb-2 opacity-50 vasto-icon vasto-icon--lg"></i>
           <p class="mb-0">No posts found matching "{{ query }}"</p>
         </div>
       {% endfor %}
@@ -394,7 +394,7 @@
                  style="color: var(--text-main);">
                 {{ item.title }}
                 {% if item.is_official %}
-                  <i class="bi bi-patch-check-fill text-primary ms-1" style="font-size: 0.85rem;"></i>
+                  <i aria-hidden="true" data-lucide="badge-check" class="text-primary ms-1 vasto-icon vasto-icon--sm" style="font-size: 0.85rem;"></i>
                 {% endif %}
               </a>
               <div class="small text-truncate" style="color: var(--text-muted);">
@@ -415,7 +415,7 @@
         </div>
       {% empty %}
         <div class="p-5 text-center text-muted">
-          <i class="bi bi-shield-x display-6 d-block mb-2 opacity-50"></i>
+          <i aria-hidden="true" data-lucide="shield-x" class="display-6 d-block mb-2 opacity-50 vasto-icon vasto-icon--lg"></i>
           <p class="mb-0">No groups found matching "{{ query }}"</p>
         </div>
       {% endfor %}
@@ -449,7 +449,7 @@
 
 {% else %}
   <div class="p-5 text-center text-muted my-4">
-    <i class="bi bi-search display-5 d-block mb-3 opacity-50"></i>
+    <i aria-hidden="true" data-lucide="search" class="display-5 d-block mb-3 opacity-50 vasto-icon vasto-icon--lg"></i>
     <h5 class="fw-bold" style="color: var(--text-main);">Search vasto</h5>
     <p class="small mb-0">Search across classmates, study documents, discussions, and student groups.</p>
   </div>

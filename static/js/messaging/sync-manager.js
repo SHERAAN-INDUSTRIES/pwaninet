@@ -295,7 +295,7 @@ class SyncManager {
                 <div class="message-text">${this.escapeHtml(outboxMessage.content)}</div>
                 <div class="message-time">
                     <span class="pending-indicator">
-                        <i class="bi bi-clock"></i> Sending when connection returns...
+                        <i aria-hidden="true" data-lucide="clock" class="vasto-icon"></i> Sending when connection returns...
                     </span>
                 </div>
             </div>

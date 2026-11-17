@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def claim_run(user, run, *, interaction=None, raw_answer=None, legacy_text='',
-              note='', kind='clarification', via='embedded', attempt_id=None):
+              note='', kind='clarification', via='embedded', attempt_id=None, context_resources=None):
     """Atomically resolve input and move a waiting run to running.
 
     One short transaction does all of: run lock + ownership/status/expiry
@@ -50,6 +50,28 @@ def claim_run(user, run, *, interaction=None, raw_answer=None, legacy_text='',
         if locked.expires_at <= timezone.now():
             AgentRunService.transition(locked, SparkAgentRun.STATUS_EXPIRED)
             raise RunError('This task expired. Ask Spark again to get a fresh answer.')
+
+        from pwanimate.services.document_exports import requested_formats
+        if context_resources and requested_formats((locked.snapshot or {}).get('query', '')):
+            # An explicit source-selection answer may update this document task;
+            # identities are normalized through current access checks, never raw text.
+            from pwanimate.orchestrator.document_context import DocumentTurnContext
+            from pwanimate.services.attachment import AttachmentService
+            if not isinstance(context_resources, list) or len(context_resources) > 10:
+                raise RunError('Select at most ten source references.')
+            selected = DocumentTurnContext.resolve(user, context_resources, locked.snapshot['query'])
+            safe = [{'type': 'document', 'document_id': pk} for pk in selected.filter_document_ids]
+            for resource in context_resources:
+                if not isinstance(resource, dict): continue
+                aid = resource.get('attachment_id') or resource.get('attachmentId')
+                if not aid and resource.get('type') == 'attachment': aid = resource.get('id')
+                if aid:
+                    attachment = AttachmentService.get_authorized_attachment(user=user, attachment_id=aid)
+                    if attachment: safe.append({'type': 'attachment', 'attachment_id': str(attachment.pk)})
+            if not safe:
+                raise RunError('The selected source is unavailable to this student.')
+            locked.snapshot = {**locked.snapshot, 'context_resources': safe}
+            locked.save(update_fields=['snapshot', 'updated_at'])
 
         resolved = None
         answer_text = ''
@@ -213,10 +235,34 @@ def execute_claimed(run, *, progress=None, token_callback=None):
         except Exception:
             logger.warning('Could not sync plan steps for run %s', run.id, exc_info=True)
 
-    prepared = StudyAgent(orchestrator.gateway, orchestrator.tool_registry).run(
-        req, orchestrator._request_metadata(req), record,
-        resume_state=run.state, cancel_check=cancel_check,
-        run=run, on_checklist=on_checklist)
+    from pwanimate.services.document_exports import requested_formats, publish_requested_documents
+    exporting_formats = requested_formats(req.query)
+    if exporting_formats and req.context_resources:
+        req.attachments, _ = orchestrator._resolve_context_attachments(req.user, req.context_resources)
+    saved_export = (run.state or {}).get('document_exports') or {}
+    saved_message = None
+    response = None
+    if saved_export.get('message_id') == run.result_message_id and saved_export.get('errors'):
+        from pwanimate.models import PwanimateMessage
+        completion = (run.state or {}).get('result_completion') or {}
+        if completion.get('message_id') == run.result_message_id and completion.get('response_complete') is True:
+            saved_message = PwanimateMessage.objects.filter(pk=run.result_message_id,
+                role='assistant', conversation=conversation, conversation__user=run.user).first()
+            if saved_message:
+                from pwanimate.orchestrator.types import OrchestrationResponse
+                response = OrchestrationResponse(answer=saved_message.content, sources=saved_message.sources,
+                    citations=saved_message.citations, finish_reason='stop',
+                    metadata={'intent': 'document_generation', 'source_coverage': saved_export.get('source_coverage')})
+    prepared = None
+    if response is None and exporting_formats:
+        from pwanimate.services.document_summary import prepare_source_document
+        response, prepared = prepare_source_document(req, run, orchestrator, record, cancel_check)
+    if response is None and prepared is None:
+        prepared = StudyAgent(orchestrator.gateway, orchestrator.tool_registry).run(
+            req, orchestrator._request_metadata(req), record,
+            resume_state=run.state, cancel_check=cancel_check,
+            run=run, on_checklist=on_checklist)
+    prepared = prepared or ({'tokens': {}, 'items': []} if response is not None else None)
 
     fresh = SparkAgentRun.objects.get(pk=run.pk)
     if fresh.cancel_requested or (prepared or {}).get('cancelled'):
@@ -225,7 +271,9 @@ def execute_claimed(run, *, progress=None, token_callback=None):
     if not prepared:
         raise RunError('Could not continue this task. Your approval outcomes are saved; no action will be repeated automatically.')
 
-    response = orchestrator.finish_agent(req, prepared, start, record, token_callback)
+    if response is not None and token_callback:
+        token_callback(response.answer)
+    response = response or orchestrator.finish_agent(req, prepared, start, record, token_callback)
 
     # Cancellation may arrive during final generation, after the earlier check.
     fresh = SparkAgentRun.objects.get(pk=run.pk)
@@ -250,7 +298,7 @@ def execute_claimed(run, *, progress=None, token_callback=None):
         if current.cancel_requested:
             _finish_cancelled(run, activity, record)
             return {'cancelled': True, 'run_id': str(run.id)}
-        message = ConversationService.persist_assistant_message(
+        message = saved_message or ConversationService.persist_assistant_message(
             conversation=run.user_message.conversation, content=response.answer,
             citations=response.citations, sources=response.sources,
             provider=response.provider, model_id=response.model,
@@ -276,8 +324,13 @@ def execute_claimed(run, *, progress=None, token_callback=None):
         # must never observe "completed" without its durable answer.
         with transaction.atomic():
             locked = SparkAgentRun.objects.select_for_update().get(pk=run.pk)
-            if not awaiting and locked.status == SparkAgentRun.STATUS_RUNNING:
+            if not awaiting and locked.status == SparkAgentRun.STATUS_RUNNING and not (exporting_formats and completed):
                 AgentRunService.transition(locked, SparkAgentRun.STATUS_COMPLETED if completed else SparkAgentRun.STATUS_INTERRUPTED)
+            if exporting_formats and completed and not awaiting:
+                locked.state = {**(locked.state or {}), 'document_exports': {
+                    'message_id': message.pk, 'formats': exporting_formats, 'pending': True,
+                    'errors': [{'format': f, 'message': 'Export was not published yet. Retry this saved request.'} for f in exporting_formats],
+                    'complete': False, 'source_coverage': response.metadata.get('source_coverage')}}
             locked.state = {**(locked.state or {}), 'result_completion': {
                 'message_id': message.pk, 'finish_reason': response.finish_reason,
                 'response_complete': completed}, 'result_teaching': {
@@ -285,7 +338,40 @@ def execute_claimed(run, *, progress=None, token_callback=None):
             locked.save(update_fields=['state', 'updated_at'])
             SparkAgentRun.objects.filter(pk=run.pk).update(activity=activity, result_message=message)
 
+    if exporting_formats and completed and not awaiting:
+        def export_cancelled():
+            fresh = SparkAgentRun.objects.get(pk=run.pk)
+            if fresh.attempt_id != run.attempt_id or fresh.status != 'running':
+                raise RunError('This document attempt is no longer current.')
+            return bool(fresh.cancel_requested)
+        publish_requested_documents(req, response, message, on_progress=record, cancel_check=export_cancelled)
+        from pwanimate.orchestrator.activity import event
+        record(event('tool', '', event_id='document-start', tool='generate_document', run_id=str(run.pk),
+            status='completed' if response.metadata.get('artifacts_complete') else 'failed'))
+        with transaction.atomic():
+            locked = SparkAgentRun.objects.select_for_update().get(pk=run.pk)
+            if locked.attempt_id != run.attempt_id or locked.status != 'running':
+                raise RunError('This document attempt is no longer current.')
+            state = dict(locked.state or {})
+            state['document_exports'] = {'message_id': message.pk, 'formats': exporting_formats,
+                'errors': response.metadata.get('export_errors', []),
+                'complete': response.metadata.get('artifacts_complete') is True,
+                'document_ids': [f['document_id'] for f in response.metadata.get('generated_documents', [])],
+                'source_coverage': response.metadata.get('source_coverage')}
+            locked.state = state
+            locked.save(update_fields=['state', 'updated_at'])
+            AgentRunService.transition(locked, 'cancelled' if locked.cancel_requested else
+                'completed' if response.metadata.get('artifacts_complete') else 'failed')
+            if locked.cancel_requested:
+                response.metadata['generated_documents'] = []
+                return {'cancelled': True, 'run_id': str(run.pk)}
+            agent_journal.sync_activity(locked, activity)
+            locked.activity = activity
+            locked.save(update_fields=['activity', 'updated_at'])
+
     payload = response.to_dict()
+    if exporting_formats:
+        payload['application_success'] = bool(response.metadata.get('artifacts_complete') and completed and not awaiting)
     payload.update({'message_id': message.id,
                     'conversation_id': str(message.conversation_id),
                     'activity': activity, 'run_id': str(run.id)})

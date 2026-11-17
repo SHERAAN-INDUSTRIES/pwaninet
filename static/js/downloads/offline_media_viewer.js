@@ -388,53 +388,53 @@
                 thumbMarkup = `
                     <img src="${item.thumbnail}" class="offline-thumb-img" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div class="offline-video-fallback d-none flex-column align-items-center justify-content-center w-100 h-100 text-primary" style="background: radial-gradient(circle, rgba(37,99,235,0.2) 0%, rgba(0,0,0,0.8) 100%);">
-                        <i class="bi bi-camera-video fs-1"></i>
+                        <i aria-hidden="true" data-lucide="video" class="vasto-icon fs-1"></i>
                     </div>
                 `;
             } else {
                 thumbMarkup = `
                     <div class="offline-video-fallback d-flex flex-column align-items-center justify-content-center w-100 h-100 text-primary" style="background: radial-gradient(circle, rgba(37,99,235,0.2) 0%, rgba(0,0,0,0.8) 100%);">
-                        <i class="bi bi-camera-video fs-1"></i>
+                        <i aria-hidden="true" data-lucide="video" class="vasto-icon fs-1"></i>
                     </div>
                 `;
             }
-            playButton = `<div class="offline-play-overlay"><i class="bi bi-play-fill"></i></div>`;
+            playButton = `<div class="offline-play-overlay"><i aria-hidden="true" data-lucide="play" class="vasto-icon"></i></div>`;
         } else if (item.category === 'image') {
             thumbMarkup = `
                 <img data-thumb-lazy="${item.id}" src="${item.thumbnail || ''}" class="offline-thumb-img" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                 <div class="d-none w-100 h-100 align-items-center justify-content-center text-info fs-1 bg-dark">
-                    <i class="bi bi-image"></i>
+                    <i aria-hidden="true" data-lucide="image" class="vasto-icon"></i>
                 </div>
             `;
         } else if (item.category === 'audio') {
             thumbMarkup = `
                 <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-center p-2" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);">
                     <div class="rounded-circle bg-warning bg-opacity-25 p-3 mb-1">
-                        <i class="bi bi-music-note-beamed fs-2 text-warning"></i>
+                        <i aria-hidden="true" data-lucide="music" class="vasto-icon fs-2 text-warning"></i>
                     </div>
                     <span class="text-white-50 fw-semibold text-uppercase tracking-wider" style="font-size: 10px;">Offline Audio</span>
                 </div>
             `;
-            playButton = `<div class="offline-play-overlay bg-warning"><i class="bi bi-play-fill"></i></div>`;
+            playButton = `<div class="offline-play-overlay bg-warning"><i aria-hidden="true" data-lucide="play" class="vasto-icon"></i></div>`;
         } else {
             // Document
             const ext = (item.filename?.split('.').pop() || 'doc').toLowerCase();
             let docColor = '#dc2626';
             let docBg = 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 60%, #991b1b 100%)';
-            let docIcon = 'bi-file-earmark-pdf-fill';
+            let docIcon = 'file-text';
 
             if (ext === 'doc' || ext === 'docx') {
                 docColor = '#2563eb';
                 docBg = 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%)';
-                docIcon = 'bi-file-earmark-word-fill';
+                docIcon = 'file-text';
             } else if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') {
                 docColor = '#16a34a';
                 docBg = 'linear-gradient(135deg, #022c22 0%, #064e3b 60%, #047857 100%)';
-                docIcon = 'bi-file-earmark-excel-fill';
+                docIcon = 'file-spreadsheet';
             } else if (ext === 'ppt' || ext === 'pptx') {
                 docColor = '#ea580c';
                 docBg = 'linear-gradient(135deg, #431407 0%, #7c2d12 60%, #c2410c 100%)';
-                docIcon = 'bi-file-earmark-ppt-fill';
+                docIcon = 'file-text';
             }
 
             if (item.thumbnail) {
@@ -442,14 +442,14 @@
                     <img src="${item.thumbnail}" class="offline-thumb-img" style="object-position: top;" alt="" onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='none'; this.parentElement.querySelector('.doc-fallback-cover').style.display='flex';">
                     <span class="badge position-absolute top-0 end-0 m-2 bg-dark bg-opacity-75 text-white" style="font-size: 10px; font-weight: 600; z-index: 2;">${ext.toUpperCase()}</span>
                     <div class="doc-fallback-cover w-100 h-100 d-flex flex-column align-items-center justify-content-center text-center p-2" style="background: ${docBg}; display: none;">
-                        <i class="bi ${docIcon} fs-1" style="color: ${docColor};"></i>
+                        <i aria-hidden="true" data-lucide="${docIcon}" class="vasto-icon vasto-icon--lg" style="color: ${docColor}; --vasto-icon-size: 2.5rem;"></i>
                         <span class="badge text-white mt-1" style="background: ${docColor}; font-size: 10px;">${ext.toUpperCase()}</span>
                     </div>
                 `;
             } else {
                 thumbMarkup = `
                     <div class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-center p-2" style="background: ${docBg};">
-                        <i class="bi ${docIcon} fs-1" style="color: ${docColor};"></i>
+                        <i aria-hidden="true" data-lucide="${docIcon}" class="vasto-icon vasto-icon--lg" style="color: ${docColor}; --vasto-icon-size: 2.5rem;"></i>
                         <span class="badge text-white mt-1" style="background: ${docColor}; font-size: 10px;">${ext.toUpperCase()}</span>
                     </div>
                 `;
@@ -477,16 +477,16 @@
                         <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top border-secondary-subtle">
                             ${item.category === 'document' ? `
                                 <button class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill d-flex align-items-center gap-1" data-action="export-doc" data-id="${item.id}" title="Save to Phone">
-                                    <i class="bi bi-phone-arrow-down" style="font-size: 11px;"></i>
+                                    <i aria-hidden="true" data-lucide="smartphone" class="vasto-icon" style="font-size: 11px;"></i>
                                     <span style="font-size: 11px;">Phone</span>
                                 </button>
                             ` : `<span></span>`}
                             <div class="d-flex gap-1">
                                 <button class="btn btn-sm btn-ghost p-1 text-muted" data-action="share-media" data-id="${item.id}" title="Share">
-                                    <i class="bi bi-share"></i>
+                                    <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i>
                                 </button>
                                 <button class="btn btn-sm btn-ghost p-1 text-danger" data-action="delete-media" data-id="${item.id}" title="Delete">
-                                    <i class="bi bi-trash"></i>
+                                    <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i>
                                 </button>
                             </div>
                         </div>
@@ -507,12 +507,12 @@
             btn.onclick = async (e) => {
                 e.stopPropagation();
                 const orig = btn.innerHTML;
-                btn.innerHTML = '<i class="bi bi-arrow-repeat spin-icon"></i>';
+                btn.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon spin-icon"></i>';
                 try {
                     const { downloadManager } = await getServices();
                     if (!downloadManager) throw new Error('Download manager unavailable');
                     await downloadManager.exportToDevice(btn.dataset.id);
-                    btn.innerHTML = '<i class="bi bi-check2 text-success"></i> Saved';
+                    btn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i> Saved';
                     setTimeout(() => { btn.innerHTML = orig; }, 2000);
                 } catch (err) {
                     console.error('[Export Doc] Failed:', err);
@@ -599,10 +599,10 @@
                 if (exportBtn) {
                     exportBtn.onclick = async () => {
                         const orig = exportBtn.innerHTML;
-                        exportBtn.innerHTML = '<i class="bi bi-arrow-repeat spin-icon"></i> Saving…';
+                        exportBtn.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon spin-icon"></i> Saving…';
                         try {
                             await downloadManager.exportToDevice(item.id);
-                            exportBtn.innerHTML = '<i class="bi bi-check2"></i> Saved to Phone!';
+                            exportBtn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Saved to Phone!';
                             setTimeout(() => { exportBtn.innerHTML = orig; }, 2000);
                         } catch (err) {
                             console.error('Export failed:', err);
@@ -690,28 +690,28 @@
             <video class="offline-reel-video" src="${src}" poster="${item.thumbnail || ''}" loop playsinline webkit-playsinline disablePictureInPicture controlsList="nodownload nofullscreen noremoteplayback" preload="auto" ${isReelsMuted ? 'muted' : ''}></video>
             
             <div class="offline-reel-tap-indicator">
-                <i class="bi bi-play-fill"></i>
+                <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
             </div>
 
             <!-- Continuous borderless action panel -->
             <div class="offline-reels-right-rail">
                 <button class="reels-rail-btn reel-sound-btn" title="Toggle Sound">
-                    <i class="bi ${isReelsMuted ? 'bi-volume-mute-fill' : 'bi-volume-up-fill'}"></i>
+                    <i aria-hidden="true" data-lucide="${isReelsMuted ? 'volume-x' : 'volume-2'}" class="vasto-icon"></i>
                     <span class="rail-label">${isReelsMuted ? 'Muted' : 'Sound'}</span>
                 </button>
 
                 <button class="reels-rail-btn reel-export-btn" title="Save to Phone">
-                    <i class="bi bi-phone-arrow-down"></i>
+                    <i aria-hidden="true" data-lucide="smartphone" class="vasto-icon"></i>
                     <span class="rail-label">Save</span>
                 </button>
 
                 <button class="reels-rail-btn reel-share-btn" title="Share">
-                    <i class="bi bi-share-fill"></i>
+                    <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i>
                     <span class="rail-label">Share</span>
                 </button>
 
                 <button class="reels-rail-btn reel-delete-btn" title="Delete">
-                    <i class="bi bi-trash3"></i>
+                    <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i>
                     <span class="rail-label">Delete</span>
                 </button>
             </div>
@@ -720,9 +720,9 @@
             <div class="offline-reels-bottom-info">
                 <div class="fw-bold text-white text-truncate mb-1" style="font-size: 15px;">${item.filename}</div>
                 <div class="text-white-50 small d-flex align-items-center gap-2">
-                    <span><i class="bi bi-hdd me-1"></i>${sizeStr}</span>
+                    <span><i aria-hidden="true" data-lucide="hard-drive" class="vasto-icon me-1"></i>${sizeStr}</span>
                     <span>•</span>
-                    <span><i class="bi bi-calendar-check me-1"></i>${dateStr}</span>
+                    <span><i aria-hidden="true" data-lucide="calendar-check" class="vasto-icon me-1"></i>${dateStr}</span>
                 </div>
                 <div class="reels-progress-bar-container">
                     <div class="reels-progress-bar-track">
@@ -752,10 +752,10 @@
         video.onclick = () => {
             if (video.paused) {
                 video.play();
-                tapIndicator.querySelector('i').className = 'bi bi-play-fill';
+                if (window.VastoIcons) { const pi = tapIndicator.querySelector('[data-lucide]'); if (pi) VastoIcons.setIcon(pi, 'play'); }
             } else {
                 video.pause();
-                tapIndicator.querySelector('i').className = 'bi bi-pause-fill';
+                if(window.VastoIcons){const pi=tapIndicator.querySelector('[data-lucide]');if(pi)VastoIcons.setIcon(pi,'pause');}else{tapIndicator.querySelector('[data-lucide]')?.setAttribute('data-lucide','pause');}
             }
             tapIndicator.classList.add('active');
             setTimeout(() => tapIndicator.classList.remove('active'), 400);
@@ -826,7 +826,7 @@
             isReelsMuted = video.muted;
             document.querySelectorAll('.reel-sound-btn').forEach(btn => {
                 const icon = btn.querySelector('i');
-                if (icon) icon.className = `bi ${isReelsMuted ? 'bi-volume-mute-fill' : 'bi-volume-up-fill'}`;
+                if (icon) if (window.VastoIcons) { VastoIcons.setIcon(icon, isReelsMuted ? 'volume-x' : 'volume-2'); }
                 const lbl = btn.querySelector('.rail-label');
                 if (lbl) lbl.textContent = isReelsMuted ? 'Muted' : 'Sound';
             });
@@ -842,12 +842,12 @@
         exportBtn.onclick = async (e) => {
             e.stopPropagation();
             const orig = exportBtn.innerHTML;
-            exportBtn.innerHTML = '<i class="bi bi-arrow-repeat spin-icon"></i>';
+            exportBtn.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon spin-icon"></i>';
             try {
                 const { downloadManager } = await getServices();
                 if (!downloadManager) throw new Error('Download manager unavailable');
                 await downloadManager.exportToDevice(item.id);
-                exportBtn.innerHTML = '<i class="bi bi-check2 text-success"></i><span class="rail-label">Saved</span>';
+                exportBtn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i><span class="rail-label">Saved</span>';
                 setTimeout(() => { exportBtn.innerHTML = orig; }, 2000);
             } catch (err) {
                 console.error('[Reel Export] Failed:', err);
@@ -930,7 +930,7 @@
             vid.muted = isReelsMuted;
         });
         document.querySelectorAll('.reel-sound-btn').forEach(btn => {
-            btn.querySelector('i').className = `bi ${isReelsMuted ? 'bi-volume-mute-fill' : 'bi-volume-up-fill'}`;
+            if (window.VastoIcons) { VastoIcons.setIcon(btn.querySelector('[data-lucide]'), isReelsMuted ? 'volume-x' : 'volume-2'); }
             btn.querySelector('.rail-label').textContent = isReelsMuted ? 'Muted' : 'Sound';
         });
     }
@@ -976,23 +976,23 @@
         if (!title || !desc || !icon) return;
 
         if (currentCategory === 'video') {
-            icon.className = 'bi bi-camera-video';
+            icon.setAttribute('class','vasto-icon'); VastoIcons.setIcon && VastoIcons.setIcon(icon,'video');
             title.textContent = 'No downloaded videos';
             desc.textContent = 'Videos you download from posts and reels will appear here for offline streaming.';
         } else if (currentCategory === 'image') {
-            icon.className = 'bi bi-image';
+            icon.setAttribute('class','vasto-icon'); VastoIcons.setIcon && VastoIcons.setIcon(icon,'image');
             title.textContent = 'No downloaded photos';
             desc.textContent = 'Images you save will be available here without an internet connection.';
         } else if (currentCategory === 'audio') {
-            icon.className = 'bi bi-music-note-beamed';
+            icon.setAttribute('class','vasto-icon'); VastoIcons.setIcon && VastoIcons.setIcon(icon,'music');
             title.textContent = 'No downloaded audio';
             desc.textContent = 'Voice messages, songs, and audio tracks will be ready here offline.';
         } else if (currentCategory === 'document') {
-            icon.className = 'bi bi-file-earmark-text';
+            icon.setAttribute('class','vasto-icon'); VastoIcons.setIcon && VastoIcons.setIcon(icon,'file-text');
             title.textContent = 'No downloaded documents';
             desc.textContent = 'PDFs, docs, and notes you download can be read offline anytime.';
         } else {
-            icon.className = 'bi bi-cloud-arrow-down';
+            icon.setAttribute('class','vasto-icon'); VastoIcons.setIcon && VastoIcons.setIcon(icon,'cloud-download');
             title.textContent = 'No downloaded media yet';
             desc.textContent = 'Files you download while browsing vasto will automatically be saved here for full offline streaming and viewing.';
         }

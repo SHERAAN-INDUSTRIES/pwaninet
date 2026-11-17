@@ -114,6 +114,7 @@
     }
 
     function sparkRenderIcons(root) {
+        if (window.VastoIcons) return window.VastoIcons.render(root || document);
         if (window.lucide && typeof window.lucide.createIcons === 'function') {
             try { window.lucide.createIcons({ root: root || document }); } catch (e) { /* noop */ }
         }

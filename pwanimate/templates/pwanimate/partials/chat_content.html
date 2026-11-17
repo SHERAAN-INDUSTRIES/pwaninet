@@ -531,6 +531,18 @@
                                         <div class="pwanimate-markdown-body" data-raw="{{ msg.content|escape }}">{{ msg.content }}</div>
                                     {% endif %}
 
+                                    {% if msg.generated_documents %}
+                                    <div class="spark-generated-documents d-flex flex-wrap gap-2 my-2">
+                                        {% for file in msg.generated_documents %}
+                                        <a class="btn btn-sm btn-outline-primary text-wrap text-break mw-100" href="{{ file.download_url }}" download>Download {{ file.format|upper }} · {{ file.title }}</a>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+
+                                    {% for error in msg.export_errors %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger pwanimate-resource-download" data-format="{{ error.format }}">{{ error.format|upper }} failed · Retry export</button>
+                                    {% endfor %}
+
                                     {% if msg.people %}
                                         {% include 'pwanimate/partials/people_section.html' with people=msg.people %}
                                     {% endif %}
@@ -611,6 +623,8 @@
                                         <ul class="dropdown-menu dropdown-menu-end pwanimate-resource-export-menu">
                                             <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i data-lucide="file-text" class="me-2"></i>{% trans "Download PDF" %}</button></li>
                                             <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i data-lucide="file-text" class="me-2"></i>{% trans "Download Word document" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="doc"><i data-lucide="file-text" class="me-2"></i>{% trans "Download legacy Word (.doc)" %}</button></li>
+                                            <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pptx"><i data-lucide="presentation" class="me-2"></i>{% trans "Download PowerPoint" %}</button></li>
                                         </ul>
                                     </div>
                                     <button type="button"
@@ -1233,6 +1247,8 @@
                                         <select class="form-select form-select-sm" id="pwanimateSummaryCollectionFormat">
                                             <option value="pdf">{% trans "PDF Document (.pdf)" %}</option>
                                             <option value="docx">{% trans "Word Document (.docx)" %}</option>
+                                            <option value="doc">{% trans "Legacy Word (.doc)" %}</option>
+                                            <option value="pptx">{% trans "PowerPoint (.pptx)" %}</option>
                                         </select>
                                     </div>
                                     <div class="col-md-5">

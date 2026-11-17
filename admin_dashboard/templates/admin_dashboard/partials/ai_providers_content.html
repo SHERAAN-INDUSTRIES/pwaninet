@@ -1,0 +1,261 @@
+<main class="adw-page" data-adw-section="providers">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">AI console</div>
+      <h1 class="adw-page-title">AI providers</h1>
+      <p class="adw-page-sub">Credentials, engine ladders, fallback order and live rate limits.</p>
+    </div>
+    <div class="adw-page-actions">
+      <a href="{% url 'admin_dashboard:ai_usage' %}" class="adw-btn"
+         hx-get="{% url 'admin_dashboard:ai_usage' %}" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="chart-column" class="vasto-icon vasto-icon--sm"></i> Token usage
+      </a>
+      <a href="{% url 'admin_dashboard:ai_models' %}" class="adw-btn adw-btn-primary"
+         hx-get="{% url 'admin_dashboard:ai_models' %}" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i> Models
+      </a>
+    </div>
+  </header>
+
+  {# ── Console stats ── #}
+  <div class="adw-stat-grid adw-stat-grid-4">
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Providers ready</span><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ providers_ready }}<span class="adw-stat-denom">/{{ providers|length }}</span></div>
+      <div class="adw-stat-note">With usable credentials</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Missing keys</span><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ providers_missing }}</div>
+      <div class="adw-stat-note">Providers not configured</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Rungs in cooldown</span><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ rungs_limited }}<span class="adw-stat-denom">/{{ rungs_total }}</span></div>
+      <div class="adw-stat-note">Rate-limited right now (this worker)</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Engines</span><i aria-hidden="true" data-lucide="network" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ engines|length }}</div>
+      <div class="adw-stat-note">Spark engine ladders</div>
+    </section>
+  </div>
+
+  {# ── Providers ── #}
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Provider health</h2>
+        <div class="adw-panel-sub">API keys are read from server settings — presence only, values never leave the server.</div>
+      </div>
+      <i aria-hidden="true" data-lucide="network" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <div class="adw-table-wrap">
+        <table class="adw-table">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Keys</th>
+              <th>State</th>
+              <th class="adw-num">Chain models</th>
+              <th class="adw-num">Limited</th>
+              <th class="adw-num">Cooldown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in providers %}
+            <tr>
+              <td>
+                <div class="adw-cell-strong">{{ p.label }}</div>
+                <div class="adw-cell-sub">{{ p.provider }}</div>
+              </td>
+              <td>
+                {% if p.state == 'ready' %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i> Ready</span>
+                {% elif p.state == 'local' %}
+                  <span class="adw-chip is-mute"><i aria-hidden="true" data-lucide="monitor" class="vasto-icon vasto-icon--sm"></i> Local</span>
+                {% elif p.state == 'not_configured' %}
+                  <span class="adw-chip is-warn" title="{{ p.key_detail }}"><i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i> Missing</span>
+                {% else %}
+                  <span class="adw-chip is-mute">{{ p.key_state }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.state == 'rate_limited' %}
+                  <span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i> Rate limited</span>
+                {% elif p.state == 'not_configured' %}
+                  <span class="adw-chip is-off"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon vasto-icon--sm"></i> Not configured</span>
+                {% elif p.state == 'healthy' %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check" class="vasto-icon vasto-icon--sm"></i> Healthy</span>
+                {% else %}
+                  <span class="adw-chip is-mute">Idle</span>
+                {% endif %}
+              </td>
+              <td class="adw-num">{{ p.chain_models }}</td>
+              <td class="adw-num">{% if p.rate_limited_models %}<span class="adw-text-warn">{{ p.rate_limited_models }}</span>{% else %}0{% endif %}</td>
+              <td class="adw-num">{% if p.cooldown_remaining %}{{ p.cooldown_remaining|floatformat:0 }}s{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="adw-panel-note"><i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i> Rate-limit state is tracked per worker process and recovered per request.</p>
+    </div>
+  </section>
+
+  {# ── Engines ── #}
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Spark engines</h2>
+        <div class="adw-panel-sub">What each engine uses first, and whether fallbacks are standing by.</div>
+      </div>
+      <i aria-hidden="true" data-lucide="cpu" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body">
+      <div class="adw-engine-grid">
+        {% for engine in engines %}
+        <article class="adw-engine-card">
+          <div class="adw-engine-card-top">
+            <span class="adw-engine-card-icon"><i aria-hidden="true" data-lucide="{{ engine.icon_lucide }}" class="vasto-icon vasto-icon--sm"></i></span>
+            <div>
+              <div class="adw-engine-card-name">{{ engine.name }}</div>
+              <div class="adw-engine-card-tag">{{ engine.tagline }}</div>
+            </div>
+            {% if engine.primary_status == 'ready' %}
+              <span class="adw-chip is-ok">Ready</span>
+            {% elif engine.primary_status == 'rate_limited' %}
+              <span class="adw-chip is-warn" title="Primary in cooldown: {{ engine.cooldown_remaining|floatformat:0 }}s">Rate limited</span>
+            {% else %}
+              <span class="adw-chip is-off">Primary key missing</span>
+            {% endif %}
+          </div>
+          <div class="adw-engine-card-body">
+            <div class="adw-kv"><span>Primary</span><code>{{ engine.primary_provider }}/{{ engine.primary_model }}</code></div>
+            <div class="adw-kv"><span>Powered by</span><span>{{ engine.powered_by|join:", "|default:"—" }}</span></div>
+            <div class="adw-kv"><span>Fallbacks ready</span><span>{{ engine.fallbacks_ready }}</span></div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="adw-grid-2">
+    {# ── LLM fallback chain ── #}
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Chat fallback chain</h2>
+          <div class="adw-panel-sub">Ordered by preference; health and quotas re-order live.</div>
+        </div>
+        <i aria-hidden="true" data-lucide="signpost" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <ol class="adw-chain">
+          {% for rung in llm_chain %}
+          <li class="adw-chain-rung">
+            <span class="adw-chain-pos">{{ forloop.counter }}</span>
+            <span class="adw-chain-main">
+              <code>{{ rung.model_id }}</code>
+              <small>{{ rung.provider_label }} · {{ rung.provider }}</small>
+            </span>
+            {% if rung.configured %}
+              <span class="adw-chip is-ok">Key</span>
+            {% else %}
+              <span class="adw-chip is-warn">No key</span>
+            {% endif %}
+          </li>
+          {% empty %}
+          <li class="adw-empty"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon vasto-icon--sm"></i><strong>No chain configured</strong></li>
+          {% endfor %}
+        </ol>
+      </div>
+    </section>
+
+    {# ── Vision fallback chain ── #}
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Vision fallback chain</h2>
+          <div class="adw-panel-sub">Used for image understanding requests.</div>
+        </div>
+        <i aria-hidden="true" data-lucide="eye" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <ol class="adw-chain">
+          {% for rung in vision_chain %}
+          <li class="adw-chain-rung">
+            <span class="adw-chain-pos">{{ forloop.counter }}</span>
+            <span class="adw-chain-main">
+              <code>{{ rung.model_id }}</code>
+              <small>{{ rung.provider_label }} · {{ rung.provider }}</small>
+            </span>
+            {% if rung.configured %}
+              <span class="adw-chip is-ok">Key</span>
+            {% else %}
+              <span class="adw-chip is-warn">No key</span>
+            {% endif %}
+          </li>
+          {% empty %}
+          <li class="adw-empty"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon vasto-icon--sm"></i><strong>No vision chain configured</strong></li>
+          {% endfor %}
+        </ol>
+      </div>
+    </section>
+  </div>
+
+  {# ── Rate limits ── #}
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Rate limits</h2>
+        <div class="adw-panel-sub">Live cooldowns for every rung in the chat chain.</div>
+      </div>
+      <i aria-hidden="true" data-lucide="gauge" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <div class="adw-table-wrap">
+        <table class="adw-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Provider</th>
+              <th>State</th>
+              <th class="adw-num">Cooldown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for model in quota.models %}
+            <tr class="{% if model.rate_limited %}adw-row-limited{% endif %}">
+              <td>
+                <div class="adw-cell-strong">{{ model.display_name }}</div>
+                <div class="adw-cell-sub">{{ model.model }}</div>
+              </td>
+              <td>{{ model.provider_label }}</td>
+              <td>
+                {% if model.rate_limited %}
+                  <span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i> Limited</span>
+                {% elif not model.is_configured %}
+                  <span class="adw-chip is-off">No key</span>
+                {% else %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check" class="vasto-icon vasto-icon--sm"></i> Serving</span>
+                {% endif %}
+              </td>
+              <td class="adw-num">{% if model.cooldown_remaining %}{{ model.cooldown_remaining|floatformat:1 }}s{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="adw-empty"><i aria-hidden="true" data-lucide="circle-check" class="vasto-icon vasto-icon--sm"></i><strong>No quota state yet</strong></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="adw-panel-note"><i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i> Cooldowns are per worker and clear automatically when the window resets ({{ quota.cooldown_duration|floatformat:0 }}s window).</p>
+    </div>
+  </section>
+
+</main>

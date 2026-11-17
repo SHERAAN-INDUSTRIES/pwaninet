@@ -735,8 +735,8 @@ export class MediaComposer {
         const muteButton = document.getElementById('global-mute-button');
         if (muteButton) {
             const icon = muteButton.querySelector('i');
-            if (icon) {
-                icon.className = muted ? 'bi bi-volume-mute' : 'bi-volume-up';
+            if (icon && window.VastoIcons) {
+                VastoIcons.setIcon(icon, muted ? 'volume-x' : 'volume-2');
             }
             muteButton.title = muted ? 'Unmute all videos' : 'Mute all videos';
         }
@@ -764,11 +764,11 @@ export class MediaComposer {
         if (!this.muteBtn || !this.muteIcon) return;
         if (item?.isMuted) {
             this.muteBtn.classList.add('active');
-            this.muteIcon.className = 'bi bi-volume-mute-fill';
+            if (window.VastoIcons) VastoIcons.setIcon(this.muteIcon, 'volume-x');
             this.muteBtn.title = 'Unmute Video';
         } else {
             this.muteBtn.classList.remove('active');
-            this.muteIcon.className = 'bi bi-volume-up-fill';
+            if (window.VastoIcons) VastoIcons.setIcon(this.muteIcon, 'volume-2');
             this.muteBtn.title = 'Mute Video';
         }
     }

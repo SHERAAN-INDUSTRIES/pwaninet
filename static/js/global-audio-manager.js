@@ -96,13 +96,14 @@
     }
 
     function createMuteButtonHTML() {
-        const icon = state.audioPreference === 'muted' ? 'bi-volume-mute' : 'bi-volume-up';
+        const icon = state.audioPreference === 'muted' ? 'volume-x' : 'volume-2';
         return `
             <button id="global-mute-button" 
                     class="btn btn-link p-0 position-relative" 
-                    style="color: var(--text-dark);"
-                    title="${state.audioPreference === 'muted' ? 'Unmute all videos' : 'Mute all videos'}">
-                <i class="bi ${icon}" style="font-size: 1.2rem;"></i>
+                    style="color: var(--text-dark); display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;"
+                    title="${state.audioPreference === 'muted' ? 'Unmute all videos' : 'Mute all videos'}"
+                    aria-label="${state.audioPreference === 'muted' ? 'Unmute all videos' : 'Mute all videos'}">
+                <i aria-hidden="true" data-lucide="${icon}" class="vasto-icon" style="--vasto-icon-size: 1.2rem;"></i>
             </button>
         `;
     }
@@ -176,9 +177,11 @@
     function updateMuteButtonIcon() {
         const muteButton = document.getElementById('global-mute-button');
         if (muteButton) {
-            const icon = muteButton.querySelector('i');
-            const newIcon = state.audioPreference === 'muted' ? 'bi-volume-mute' : 'bi-volume-up';
-            icon.className = `bi ${newIcon}`;
+            const icon = muteButton.querySelector('[data-lucide]');
+            const newIcon = state.audioPreference === 'muted' ? 'volume-x' : 'volume-2';
+            if (!icon) return;
+            if (window.VastoIcons && window.VastoIcons.setIcon) { VastoIcons.setIcon(icon, newIcon); }
+            else if (window.VastoIcons && window.VastoIcons.render) { icon.setAttribute('data-lucide', newIcon); window.VastoIcons.render(muteButton); }
             muteButton.title = state.audioPreference === 'muted' ? 'Unmute all videos' : 'Mute all videos';
         }
     }
@@ -199,7 +202,7 @@
             <div class="bubble-content">
                 <p class="bubble-text">Use this button to mute/unmute all videos</p>
                 <button class="bubble-close" onclick="dismissTutorial()">
-                    <i class="bi bi-x-lg"></i>
+                    <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
                 </button>
             </div>
             <div class="bubble-tail"></div>

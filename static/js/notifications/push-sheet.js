@@ -237,7 +237,7 @@
     function showToast(message) {
         const toast = document.createElement('div');
         toast.className = 'push-toast-alert';
-        toast.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> ' + message;
+        toast.innerHTML = '<i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon me-2"></i> ' + message;
         toast.style.cssText = [
             'position: fixed',
             'bottom: 30px',

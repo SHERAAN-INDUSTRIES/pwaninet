@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load static %}
+{% comment %}
+  Admin command-center shell.
+
+  Mirrors the Spark / student-dashboard workspace pattern: the page opts the
+  whole document into `adw-active`, which repoints the base three-surface
+  grid at the admin rails (left = navigation owner, right = live ops,
+  collapsed by default). `admin-workspace.js` (loaded globally from base.html)
+  enforces the workspace boundary so entering and leaving is always a clean
+  full-page navigation — the same rule the vasto <-> Spark boundary follows.
+{% endcomment %}
+
+{% block html_class %}adw-active{% endblock %}
+{% block body_class %}adw-active{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/admin/admin-workspace.css' %}?v=20261117-8">
+<link rel="stylesheet" href="{% static 'css/admin/admin-dashboard.css' %}?v=20261117-8">
+{% endblock %}
+
+{% block header %}
+{% include 'admin_dashboard/partials/admin_topbar.html' %}
+{% endblock %}
+
+{% block left_rail %}
+{% include 'admin_dashboard/partials/admin_left_rail.html' %}
+{% endblock %}
+
+{% block context_rail %}
+{% include 'admin_dashboard/partials/admin_context_rail.html' %}
+{% endblock %}
+
+{% block content %}
+<script>
+  // Applied during parse so the persisted rail state paints with the page
+  // (no expanded-then-collapse flash); admin-workspace.js re-applies it on
+  // every HTMX swap and on history restore.
+  document.documentElement.classList.add('adw-active');
+  document.body.classList.add('adw-active');
+  try {
+    if (localStorage.getItem('adw_left_collapsed') === '1') {
+      document.documentElement.classList.add('adw-left-collapsed');
+      document.body.classList.add('adw-left-collapsed');
+    }
+    if (localStorage.getItem('adw_ctx_open') === '1') {
+      document.body.classList.add('adw-ctx-open');
+    }
+    var adwWidth = parseInt(localStorage.getItem('adw_ctx_width') || '', 10);
+    if (adwWidth > 0) document.documentElement.style.setProperty('--adw-ctx-width', adwWidth + 'px');
+  } catch (e) {}
+</script>
+{% block workspace_content %}{% endblock %}
+{% endblock %}
+
+{% block mobile_bottom_nav %}{% endblock %}
+{% block footer %}{% endblock %}

@@ -1,5 +1,9 @@
-{% extends 'base.html' %}
+{% extends 'admin_dashboard/base_workspace.html' %}
 
-{% block content %}
-    {% include 'admin_dashboard/partials/dashboard_content.html' %}
+{% block title %}Overview · Admin — vasto{% endblock %}
+
+{% block workspace_content %}
+<div class="admin-workspace" id="admin-workspace" data-admin-title="{{ page_title }}">
+  {% include content_partial %}
+</div>
 {% endblock %}

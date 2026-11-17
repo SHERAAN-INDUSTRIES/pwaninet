@@ -170,8 +170,8 @@
 }
 
 /* Globe icon inherits subtitle font-size */
-.post-header-subtitle .bi-globe-americas {
-  font-size: inherit;
+.post-header-subtitle .vasto-icon {
+  --vasto-icon-size: 1em;
 }
 
 /* 44×44px minimum accessible touch hitbox */
@@ -476,8 +476,9 @@
   color: var(--fb-blue) !important;
 }
 
-.fb-action-btn i {
-  font-size: 1.15rem;
+.fb-action-btn i,
+.fb-action-btn .vasto-icon {
+  --vasto-icon-size: 1.15rem;
   flex-shrink: 0;
 }
 
@@ -487,8 +488,9 @@
     gap: 4px;
     padding: 0 2px !important;
   }
-  .fb-action-btn i {
-    font-size: 1rem;
+  .fb-action-btn i,
+  .fb-action-btn .vasto-icon {
+    --vasto-icon-size: 1rem;
   }
 }
 
@@ -553,8 +555,10 @@
 }
 
 .postcard-actions .engagement-button i,
-.engagement-button i {
-  font-size: 1.1rem !important;
+.engagement-button i,
+.postcard-actions .engagement-button .vasto-icon,
+.engagement-button .vasto-icon {
+  --vasto-icon-size: 1.1rem !important;
   line-height: 1 !important;
   flex-shrink: 0 !important;
   background: none !important;
@@ -586,12 +590,15 @@
 }
 
 .like-button.text-danger,
-.like-button.text-danger i {
+.like-button.text-danger i,
+.like-button.text-danger .vasto-icon {
   color: #ef4444 !important;
 }
 
 [data-theme="dark"] .like-button.text-danger,
-[data-theme="dark"] .like-button.text-danger i {
+[data-theme="dark"] .like-button.text-danger i,
+.like-button.text-danger .vasto-icon,
+[data-theme="dark"] .like-button.text-danger .vasto-icon {
   color: #ef4444 !important;
 }
 
@@ -618,8 +625,10 @@
     padding: 0 2px !important;
   }
   .postcard-actions .engagement-button i,
-  .engagement-button i {
-    font-size: 0.95rem !important;
+  .engagement-button i,
+  .postcard-actions .engagement-button .vasto-icon,
+  .engagement-button .vasto-icon {
+    --vasto-icon-size: 0.95rem !important;
     background: none !important;
     border-radius: 0 !important;
   }
@@ -1401,6 +1410,10 @@
   filter: none !important;
 }
 
+.reel-action-btn .vasto-icon {
+  --vasto-icon-size: 1.85rem;
+}
+
 .reel-action-label {
   font-size: 0.74rem;
   font-weight: 700;
@@ -1690,7 +1703,14 @@ video.is-playing ~ .reel-play-hud,
   color: var(--primary, #3b82f6);
 }
 
-.reel-tool-btn.text-danger i {
+.reel-tool-btn .vasto-icon {
+  --vasto-icon-size: 1.25rem;
+  width: 24px;
+  color: var(--primary, #3b82f6);
+}
+
+.reel-tool-btn.text-danger i,
+.reel-tool-btn.text-danger .vasto-icon {
   color: #ef4444 !important;
 }
 
@@ -1703,7 +1723,8 @@ video.is-playing ~ .reel-play-hud,
   background: rgba(96, 165, 250, 0.12);
 }
 
-#quickToolsAutoScrollBtn.active i {
+#quickToolsAutoScrollBtn.active i,
+#quickToolsAutoScrollBtn.active .vasto-icon {
   color: #0d6efd;
 }
 
@@ -2893,9 +2914,10 @@ body.reels-active .modal-backdrop {
   color: #e0245e !important;
 }
 
-.reel-desktop-action-btn.liked i::before {
-  content: "\F415"; /* bi-heart-fill */
+.reel-desktop-action-btn .vasto-icon {
+  --vasto-icon-size: 1.25rem;
 }
+
 
 .reel-desktop-action-label {
   color: var(--text-secondary, #65676b);
@@ -3102,7 +3124,9 @@ body.reels-active .modal-backdrop {
 }
 
 #fsRailRefreshBtn.spinning i,
-#fsRailRefreshBtn i.spinning {
+#fsRailRefreshBtn i.spinning,
+#fsRailRefreshBtn.spinning .vasto-icon,
+#fsRailRefreshBtn .vasto-icon.spinning {
   display: inline-block;
   animation: fs-rail-spin 0.75s linear infinite;
 }
@@ -3151,6 +3175,12 @@ body.reels-active .modal-backdrop {
   transition: color 0.15s ease-in-out;
 }
 
+.reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn .vasto-icon {
+  --vasto-icon-size: 1rem;
+  color: var(--text-muted, #65676b);
+  transition: color 0.15s ease-in-out;
+}
+
 .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover {
   background-color: var(--hover-bg, #f2f2f2);
   color: var(--text-primary, #050505);
@@ -3158,7 +3188,8 @@ body.reels-active .modal-backdrop {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
-.reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover i {
+.reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover i,
+.reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover .vasto-icon {
   color: var(--primary, #0d6efd);
 }
 
@@ -3173,7 +3204,8 @@ body.reels-active .modal-backdrop {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn i {
+[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn i,
+[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn .vasto-icon {
   color: var(--text-muted, #b0b3b8);
 }
 
@@ -3183,7 +3215,8 @@ body.reels-active .modal-backdrop {
   border-color: var(--card-border, #4e4f50);
 }
 
-[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover i {
+[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover i,
+[data-theme="dark"] .reel-comment-rail-toggle-wrapper .reel-collapse-toggle-btn:hover .vasto-icon {
   color: #3d8bfd;
 }
 
@@ -3979,7 +4012,9 @@ body.reels-active .modal-backdrop {
 }
 
 .reel-action-btn.is-reposted i,
-.reel-desktop-action-btn.is-reposted i {
+.reel-desktop-action-btn.is-reposted i,
+.reel-action-btn.is-reposted .vasto-icon,
+.reel-desktop-action-btn.is-reposted .vasto-icon {
   color: #0d6efd !important;
   animation: pulseRepost 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -4067,7 +4102,8 @@ body.reels-active .modal-backdrop {
   pointer-events: none;
 }
 
-.link-preview-play-badge i {
+.link-preview-play-badge i,
+.link-preview-play-badge .vasto-icon {
   margin-left: 3px; /* visual center offset for play icon */
 }
 

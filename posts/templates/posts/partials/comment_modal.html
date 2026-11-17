@@ -28,7 +28,7 @@
         <div class="comment-stream" id="imageCommentsModalList">
           <!-- Comments will be loaded here -->
           <div id="commentsEmptyState" class="comments-empty" style="display: none;">
-            <i class="bi bi-chat-dots"></i>
+            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
             <p>No comments yet. Be the first to comment.</p>
           </div>
         </div>
@@ -62,7 +62,7 @@
               <label class="btn border-0 p-0 text-muted position-absolute mb-0" 
                      style="right: 66px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer;" 
                      title="Attach photo as sticker">
-                <i class="bi bi-camera fs-6"></i>
+                <i aria-hidden="true" data-lucide="camera" class="vasto-icon fs-6"></i>
                 <input type="file" name="attachment_image" class="comment-photo-input d-none" accept="image/*">
               </label>
               <button type="button" 
@@ -70,12 +70,12 @@
                       data-media-picker
                       style="right: 36px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
                       title="Emoji, GIFs & Stickers">
-                <i class="bi bi-emoji-smile fs-6"></i>
+                <i aria-hidden="true" data-lucide="smile" class="vasto-icon fs-6"></i>
               </button>
               <button type="submit" 
                       class="comment-send-btn position-absolute"
                       style="right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--primary); padding: 4px 8px;">
-                <i class="bi bi-send-fill"></i>
+                <i aria-hidden="true" data-lucide="send" class="vasto-icon"></i>
               </button>
             </div>
           </div>
@@ -373,6 +373,10 @@
     font-size: 1rem;
   }
 
+  .comment-action .vasto-icon {
+    --vasto-icon-size: 1rem;
+  }
+
   .comments-empty {
     text-align: center;
     padding: 40px 20px;
@@ -383,6 +387,10 @@
     font-size: 48px;
     margin-bottom: 12px;
     display: block;
+  }
+
+  .comments-empty .vasto-icon {
+    --vasto-icon-size: 48px;
   }
 
   .comments-empty p {

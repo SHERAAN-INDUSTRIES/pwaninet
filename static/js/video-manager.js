@@ -38,6 +38,27 @@
     let   _promptSessionReelCount = 0;                     // how many reels played this session
     let   _promptShownThisSession = false;                  // show at most once per session
 
+    // Lucide icon helper: swap an icon element (<i data-lucide> placeholder or
+    // rendered <svg>) by name, optionally resetting its class list. Safe no-op
+    // when VastoIcons is unavailable.
+    function vmSetIcon(el, name, className) {
+        if (!el) return null;
+        var next = null;
+        if (window.VastoIcons && window.VastoIcons.setIcon) {
+            next = window.VastoIcons.setIcon(el, name);
+        }
+        if (next) {
+            if (className !== undefined) next.setAttribute('class', className);
+            return next;
+        }
+        el.setAttribute('data-lucide', name);
+        if (className !== undefined) el.setAttribute('class', className);
+        if (window.VastoIcons && window.VastoIcons.render) {
+            window.VastoIcons.render(el.parentNode || el);
+        }
+        return el;
+    }
+
     const state = {
         videos: new Map(), // video element -> video metadata
         feedObserver: null,
@@ -182,8 +203,8 @@
             if (proxyBtn && isLiked !== undefined && isLiked !== null) {
                 proxyBtn.classList.toggle('liked', isLiked);
                 proxyBtn.classList.toggle('text-danger', isLiked);
-                const icon = proxyBtn.querySelector('i');
-                if (icon) icon.className = isLiked ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+                const icon = proxyBtn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('class', isLiked ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
             }
             const countEl = snapItem.querySelector(`#fs-reel-like-count-${postId}`);
             if (countEl && likeCount !== undefined && likeCount !== null) {
@@ -198,8 +219,8 @@
             if (isLiked !== undefined && isLiked !== null) {
                 desktopLikeBtn.classList.toggle('liked', isLiked);
                 desktopLikeBtn.classList.toggle('text-danger', isLiked);
-                const icon = desktopLikeBtn.querySelector('i');
-                if (icon) icon.className = isLiked ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+                const icon = desktopLikeBtn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('class', isLiked ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
             }
         }
         if (desktopLikeCount && (desktopLikeBtn?.dataset.postId === postId || currentDesktopRailPostId === postId)) {
@@ -234,17 +255,17 @@
         ];
         document.querySelectorAll(btnSelectors.join(', ')).forEach(btn => {
             const isReel = btn.classList.contains('reel-action-btn');
-            const icon = btn.querySelector('i');
+            const icon = btn.querySelector('[data-lucide]');
             if (isLiked !== undefined && isLiked !== null) {
                 if (isReel) {
                     btn.classList.toggle('liked', isLiked);
                     btn.classList.toggle('text-danger', isLiked);
                     btn.classList.toggle('text-white', !isLiked);
-                    if (icon) icon.className = isLiked ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+                    if (icon) icon.setAttribute('class', isLiked ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
                 } else {
                     btn.classList.toggle('text-danger', isLiked);
                     btn.classList.toggle('text-muted', !isLiked);
-                    if (icon) icon.className = isLiked ? 'bi bi-heart-fill text-danger heart-pop fs-5' : 'bi bi-heart fs-5';
+                    if (icon) icon.setAttribute('class', isLiked ? 'vasto-icon vasto-icon--filled text-danger heart-pop' : 'vasto-icon');
                 }
             }
             const countSpan = btn.querySelector('.like-count') || document.getElementById(`reel-like-count-${postId}`) || btn.querySelector('span');
@@ -333,7 +354,7 @@
                              onerror="this.src='/static/images/default-avatar.png'">
                     </a>
                     <span class="scatter-repost-icon" title="Repost">
-                        <i class="bi bi-repeat"></i>
+                        <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon"></i>
                     </span>
                 </div>
             `;
@@ -506,8 +527,8 @@
             if (proxyBtn && isReposted !== undefined && isReposted !== null) {
                 proxyBtn.classList.toggle('is-reposted', isReposted);
                 proxyBtn.classList.toggle('text-primary', isReposted);
-                const icon = proxyBtn.querySelector('i');
-                if (icon) icon.className = isReposted ? 'bi bi-repeat text-primary' : 'bi bi-repeat';
+                const icon = proxyBtn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('class', isReposted ? 'vasto-icon text-primary' : 'vasto-icon');
                 proxyBtn.title = isReposted ? 'Reposted' : 'Repost';
                 proxyBtn.setAttribute('aria-label', isReposted ? 'Undo repost' : 'Repost');
                 const status = snapItem.querySelector(`#fs-reel-repost-state-${postId}`);
@@ -526,8 +547,8 @@
             if (isReposted !== undefined && isReposted !== null) {
                 desktopRepostBtn.classList.toggle('is-reposted', isReposted);
                 desktopRepostBtn.classList.toggle('text-primary', isReposted);
-                const icon = desktopRepostBtn.querySelector('i');
-                if (icon) icon.className = isReposted ? 'bi bi-repeat text-primary' : 'bi bi-repeat';
+                const icon = desktopRepostBtn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('class', isReposted ? 'vasto-icon text-primary' : 'vasto-icon');
                 desktopRepostBtn.title = isReposted ? 'Reposted' : 'Repost';
                 desktopRepostBtn.setAttribute('aria-label', isReposted ? 'Undo repost' : 'Repost');
                 document.getElementById('fsDesktopRepostState')?.classList.toggle('d-none', !isReposted);
@@ -547,7 +568,7 @@
             const modalRepostLabel = document.getElementById('globalShareRepostLabel');
             if (isReposted !== undefined && isReposted !== null) {
                 if (modalRepostBtn) modalRepostBtn.classList.toggle('active', isReposted);
-                if (modalRepostIcon) modalRepostIcon.className = isReposted ? 'bi bi-repeat fs-5 text-primary' : 'bi bi-repeat fs-5 text-dark';
+                if (modalRepostIcon) modalRepostIcon.setAttribute('class', isReposted ? 'vasto-icon text-primary' : 'vasto-icon text-dark');
                 if (modalRepostLabel) modalRepostLabel.textContent = isReposted ? 'Reposted' : 'Repost';
             }
         }
@@ -580,8 +601,8 @@
             if (isReposted !== undefined && isReposted !== null) {
                 btn.classList.toggle('text-primary', isReposted);
                 btn.classList.toggle('text-muted', !isReposted);
-                const icon = btn.querySelector('i');
-                if (icon) icon.className = isReposted ? 'bi bi-repeat fs-5 text-primary' : 'bi bi-repeat fs-5';
+                const icon = btn.querySelector('[data-lucide]');
+                if (icon) icon.setAttribute('class', isReposted ? 'vasto-icon text-primary' : 'vasto-icon');
                 const stateLabel = btn.querySelector('.repost-state-label');
                 if (stateLabel) stateLabel.classList.toggle('d-none', !isReposted);
                 btn.title = isReposted ? 'Reposted' : 'Repost';
@@ -730,15 +751,9 @@
 
         const muteButtons = document.querySelectorAll('.reel-mute-btn, .video-mute-toggle, [data-action="mute-toggle"], #global-mute-button');
         muteButtons.forEach(btn => {
-            const icon = btn.querySelector('i');
+            const icon = btn.querySelector('[data-lucide]');
             if (icon) {
-                if (isMuted) {
-                    icon.className = icon.className.includes('bi-volume') ? 'bi bi-volume-mute-fill' : icon.className;
-                    if (btn.id === 'global-mute-button') icon.className = 'bi bi-volume-mute';
-                } else {
-                    icon.className = icon.className.includes('bi-volume') ? 'bi bi-volume-up-fill' : icon.className;
-                    if (btn.id === 'global-mute-button') icon.className = 'bi bi-volume-up';
-                }
+                vmSetIcon(icon, isMuted ? 'volume-x' : 'volume-2', 'vasto-icon');
             }
             const label = btn.parentElement?.querySelector('.reel-mute-label, .reel-desktop-action-label.reel-mute-label');
             if (label) {
@@ -814,9 +829,9 @@
         const statusBadge = document.getElementById('quickToolsAutoScrollStatus');
         if (toggleBtn) {
             toggleBtn.classList.toggle('active', isAutoScrollEnabled);
-            const icon = toggleBtn.querySelector('i');
+            const icon = toggleBtn.querySelector('[data-lucide]');
             if (icon) {
-                icon.className = isAutoScrollEnabled ? 'bi bi-collection-play-fill text-primary' : 'bi bi-collection-play';
+                vmSetIcon(icon, isAutoScrollEnabled ? 'square-play' : 'square-play', isAutoScrollEnabled ? 'vasto-icon text-primary' : 'vasto-icon');
             }
         }
         if (statusBadge) {
@@ -888,14 +903,14 @@
         el.setAttribute('aria-label', 'Auto-scroll suggestion');
         el.innerHTML = `
             <div class="as-prompt-icon">
-                <i class="bi bi-collection-play-fill"></i>
+                <i aria-hidden="true" data-lucide="square-play" class="vasto-icon"></i>
             </div>
             <div class="as-prompt-body">
                 <div class="as-prompt-title">Auto-scroll reels?</div>
                 <div class="as-prompt-desc">Automatically advance to the next reel when one ends — no swiping needed.</div>
                 <div class="as-prompt-actions">
                     <button type="button" class="as-prompt-btn-primary" id="asPromptAccept">
-                        <i class="bi bi-check2"></i> Turn On
+                        <i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Turn On
                     </button>
                     <button type="button" class="as-prompt-btn-ghost" id="asPromptDismiss">
                         Not now
@@ -903,7 +918,7 @@
                 </div>
             </div>
             <button type="button" class="as-prompt-close" id="asPromptClose" aria-label="Dismiss">
-                <i class="bi bi-x-lg"></i>
+                <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
             </button>
         `;
         return el;
@@ -1858,9 +1873,9 @@
                 hud._hideTimer = null;
             }
 
-            const icon = hud.querySelector('i');
+            const icon = hud.querySelector('[data-lucide]');
             if (icon) {
-                icon.className = 'bi bi-play-fill';
+                icon.setAttribute('class', 'vasto-icon');
             }
 
             if (!isPlaying) {
@@ -2022,7 +2037,7 @@
         const unitBadge = card.querySelector('.reel-unit-badge') || card.querySelector('.fb-sub-meta .badge');
         const unitCode = card.dataset.unit || unitBadge?.textContent?.trim() || '';
         const unitHtml = unitCode ?
-            `<span class="badge bg-white bg-opacity-25 text-white border border-white border-opacity-20 px-2 py-1 reel-unit-badge"><i class="bi bi-mortarboard-fill me-1"></i>${unitCode}</span>` : '';
+            `<span class="badge bg-white bg-opacity-25 text-white border border-white border-opacity-20 px-2 py-1 reel-unit-badge"><i aria-hidden="true" data-lucide="graduation-cap" class="vasto-icon me-1"></i>${unitCode}</span>` : '';
 
         const timeAgo = card.dataset.time ||
                         card.querySelector('.fb-sub-meta span:not(.badge)')?.textContent?.trim() ||
@@ -2084,7 +2099,7 @@
                         <div class="text-white-50 small text-truncate d-flex align-items-center gap-1" style="font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,0.85); line-height: 1.2;">
                             <span>${timeAgo}</span>
                             <span>&middot;</span>
-                            <i class="bi bi-globe-americas" style="font-size: 10px;" title="Public"></i>
+                            <i aria-hidden="true" data-lucide="globe" class="vasto-icon" style="font-size: 10px;" title="Public"></i>
                         </div>
                     </div>
                 </div>
@@ -2252,7 +2267,7 @@
 
                 <!-- Transient Play/Pause HUD Indicator -->
                 <div class="reel-play-hud" aria-hidden="true">
-                    <i class="bi bi-play-fill"></i>
+                    <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
                 </div>
 
                 <!-- Central Buffering / Audio-Wait Spinner -->
@@ -2265,7 +2280,7 @@
 
                 <!-- Heart Burst Animation Target -->
                 <div class="reel-heart-burst" aria-hidden="true">
-                    <i class="bi bi-heart-fill"></i>
+                    <i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
                 </div>
 
                 <!-- Top Scrim -->
@@ -2280,7 +2295,7 @@
                                 data-author="${authorName}"
                                 title="Options"
                                 aria-label="Options">
-                            <i class="bi bi-three-dots-vertical fs-5"></i>
+                            <i aria-hidden="true" data-lucide="ellipsis-vertical" class="vasto-icon fs-5"></i>
                         </button>
                     </div>
                 </div>
@@ -2289,21 +2304,21 @@
                 <div class="reel-actions-stack">
                     <div class="reel-action-unit text-center">
                         <button type="button" class="reel-action-btn fs-like-proxy-btn text-white ${isLiked ? 'liked text-danger' : ''}" data-post-id="${postId}" title="Like" aria-label="Like">
-                            <i class="bi ${isLiked ? 'bi-heart-fill text-danger' : 'bi-heart'}"></i>
+                            <i aria-hidden="true" data-lucide="heart" class="vasto-icon${isLiked ? ' vasto-icon--filled text-danger' : ''}"></i>
                         </button>
                         <span class="reel-action-label" id="fs-reel-like-count-${postId}">${likeCount}</span>
                     </div>
 
                     <div class="reel-action-unit text-center">
                         <button type="button" class="reel-action-btn text-white reel-comment-trigger" data-post-id="${postId}" title="Comment" aria-label="Comment">
-                            <i class="bi bi-chat-dots-fill"></i>
+                            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                         </button>
                         <span class="reel-action-label" id="fs-reel-comment-count-${postId}">${commentCount}</span>
                     </div>
 
                     <div class="reel-action-unit text-center">
                         <button type="button" class="reel-action-btn fs-repost-proxy-btn text-white ${isReposted ? 'text-primary is-reposted' : ''}" data-post-id="${postId}" title="${isReposted ? 'Reposted' : 'Repost'}" aria-label="${isReposted ? 'Undo repost' : 'Repost'}">
-                            <i class="bi ${isReposted ? 'bi-repeat text-primary' : 'bi-repeat'}"></i>
+                            <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon${isReposted ? ' text-primary' : ''}"></i>
                         </button>
                         <span class="reel-action-label" id="fs-reel-repost-count-${postId}">${repostCount}</span>
                         <span class="reel-action-label fs-repost-state-label ${isReposted ? '' : 'd-none'}" id="fs-reel-repost-state-${postId}">Reposted</span>
@@ -2311,14 +2326,14 @@
 
                     <div class="reel-action-unit text-center">
                         <button type="button" class="reel-action-btn text-white" data-bs-toggle="modal" data-bs-target="#globalShareModal" data-post-id="${postId}" data-post-url="/post/${postId}/" data-video-url="${videoSrc}" data-poster-url="${poster}" data-post-content="${rawCaptionText.replace(/"/g, '&quot;')}" data-reel="true" title="Share" aria-label="Share">
-                            <i class="bi bi-share-fill"></i>
+                            <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i>
                         </button>
                         <span class="reel-action-label">Share</span>
                     </div>
 
                     <div class="reel-action-unit text-center">
                         <button type="button" class="reel-action-btn reel-mute-btn text-white" data-action="mute-toggle" title="${isGlobalMuted ? 'Unmute' : 'Mute'}" aria-label="${isGlobalMuted ? 'Unmute' : 'Mute'}">
-                            <i class="bi ${isGlobalMuted ? 'bi-volume-mute-fill' : 'bi-volume-up-fill'}"></i>
+                            <i aria-hidden="true" data-lucide="${isGlobalMuted ? 'volume-x' : 'volume-2'}" class="vasto-icon"></i>
                         </button>
                         <span class="reel-action-label reel-mute-label">${isGlobalMuted ? 'Muted' : 'Sound'}</span>
                     </div>
@@ -2612,11 +2627,11 @@
                     </div>
                     <div class="comment-actions">
                         <button class="comment-action" data-action="like" data-comment-id="${comment.id}" aria-label="Like comment">
-                            <i class="bi bi-heart"></i>
+                            <i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
                             <span>${comment.likes_count || 0}</span>
                         </button>
                         <button class="comment-action" data-action="reply" data-comment-id="${comment.id}" aria-label="Reply to comment">
-                            <i class="bi bi-chat-dots"></i>
+                            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                             Reply
                         </button>
                     </div>
@@ -2702,7 +2717,7 @@
         tip.id = 'reelImmersiveTip';
         tip.className = 'reel-immersive-tip';
         tip.innerHTML = [
-            '<i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i>',
+            '<i aria-hidden="true" data-lucide="panel-right-open" class="vasto-icon" aria-hidden="true"></i>',
             '<span>' + (window.gettext ? gettext('Collapse the rail for full-cinema mode') : 'Collapse the rail for full-cinema mode') + '</span>',
             '<button type="button" class="btn btn-sm btn-primary rounded-pill px-3 reel-immersive-tip-cta">' + (window.gettext ? gettext('Collapse') : 'Collapse') + '</button>'
         ].join('');
@@ -2792,8 +2807,8 @@
             coach.id = 'reelKbCoach';
             coach.className = 'reel-kb-coach';
             coach.innerHTML = [
-                '<button type="button" class="reel-kb-coach-close" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>',
-                '<div class="reel-kb-coach-title"><i class="bi bi-keyboard" aria-hidden="true"></i><span>' + (window.gettext ? gettext('Browse with your keyboard') : 'Browse with your keyboard') + '</span></div>',
+                '<button type="button" class="reel-kb-coach-close" aria-label="Dismiss"><i aria-hidden="true" data-lucide="x" class="vasto-icon"></i></button>',
+                '<div class="reel-kb-coach-title"><i aria-hidden="true" data-lucide="keyboard" class="vasto-icon" aria-hidden="true"></i><span>' + (window.gettext ? gettext('Browse with your keyboard') : 'Browse with your keyboard') + '</span></div>',
                 reelKbRowsHtml()
             ].join('');
             coach.addEventListener('click', function (e) { e.stopPropagation(); });
@@ -2926,7 +2941,7 @@
         if (!postId) return;
 
         const refreshBtn = document.getElementById('fsRailRefreshBtn');
-        const icon = refreshBtn?.querySelector('i');
+        const icon = refreshBtn?.querySelector('[data-lucide]');
         if (icon) icon.classList.add('spinning');
         if (refreshBtn) refreshBtn.disabled = true;
 
@@ -3317,8 +3332,8 @@
             fsLikeBtn.dataset.postId = postId;
             fsLikeBtn.setAttribute('data-post-id', postId);
             fsLikeBtn.classList.toggle('liked', isLiked);
-            const icon = fsLikeBtn.querySelector('i');
-            if (icon) icon.className = isLiked ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+            const icon = fsLikeBtn.querySelector('[data-lucide]');
+            if (icon) icon.setAttribute('class', isLiked ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
         }
         if (fsLikeCount) {
             fsLikeCount.textContent = likeCount;
@@ -3362,8 +3377,8 @@
             fsRepostBtn.classList.toggle('is-reposted', isReposted);
             fsRepostBtn.title = isReposted ? 'Reposted' : 'Repost';
             fsRepostBtn.setAttribute('aria-label', isReposted ? 'Undo repost' : 'Repost');
-            const rIcon = fsRepostBtn.querySelector('i');
-            if (rIcon) rIcon.className = isReposted ? 'bi bi-repeat text-primary' : 'bi bi-repeat';
+            const rIcon = fsRepostBtn.querySelector('[data-lucide]');
+            if (rIcon) rIcon.setAttribute('class', isReposted ? 'vasto-icon text-primary' : 'vasto-icon');
         }
         document.getElementById('fsDesktopRepostState')?.classList.toggle('d-none', !isReposted);
         if (fsRepostCount) {
@@ -3386,13 +3401,13 @@
             fsBookmarkBtn.dataset.postId = postId;
             const isSaved = window.pwaniSavedPosts ? window.pwaniSavedPosts.isPostSaved(postId) : fsBookmarkBtn.classList.contains('active');
             fsBookmarkBtn.classList.toggle('active', isSaved);
-            const icon = fsBookmarkBtn.querySelector('i');
-            if (icon) icon.className = isSaved ? 'bi bi-bookmark-fill text-warning' : 'bi bi-bookmark';
+            const icon = fsBookmarkBtn.querySelector('[data-lucide]');
+            if (icon) icon.setAttribute('class', isSaved ? 'vasto-icon vasto-icon--filled text-warning' : 'vasto-icon');
             if (fsBookmarkLabel) fsBookmarkLabel.textContent = isSaved ? 'Saved' : 'Save';
             fsBookmarkBtn.onclick = function() {
                 const nowSaved = window.pwaniSavedPosts ? window.pwaniSavedPosts.togglePostSaved(postId) : fsBookmarkBtn.classList.toggle('active');
                 fsBookmarkBtn.classList.toggle('active', nowSaved);
-                if (icon) icon.className = nowSaved ? 'bi bi-bookmark-fill text-warning' : 'bi bi-bookmark';
+                if (icon) icon.setAttribute('class', nowSaved ? 'vasto-icon vasto-icon--filled text-warning' : 'vasto-icon');
                 if (fsBookmarkLabel) fsBookmarkLabel.textContent = nowSaved ? 'Saved' : 'Save';
             };
         }
@@ -4058,15 +4073,15 @@
         if (bookmarkBtn) {
             const isBookmarked = window.pwaniSavedPosts ? window.pwaniSavedPosts.isPostSaved(postId) : bookmarkBtn.classList.contains('active');
             bookmarkBtn.classList.toggle('active', isBookmarked);
-            const icon = bookmarkBtn.querySelector('i');
+            const icon = bookmarkBtn.querySelector('[data-lucide]');
             const label = bookmarkBtn.querySelector('.fw-semibold');
-            if (icon) icon.className = isBookmarked ? 'bi bi-bookmark-fill text-warning' : 'bi bi-bookmark';
+            if (icon) icon.setAttribute('class', isBookmarked ? 'vasto-icon vasto-icon--filled text-warning' : 'vasto-icon');
             if (label) label.textContent = isBookmarked ? 'Saved to Library' : 'Save to Library';
 
             bookmarkBtn.onclick = function() {
                 const nowSaved = window.pwaniSavedPosts ? window.pwaniSavedPosts.togglePostSaved(postId) : bookmarkBtn.classList.toggle('active');
                 bookmarkBtn.classList.toggle('active', nowSaved);
-                if (icon) icon.className = nowSaved ? 'bi bi-bookmark-fill text-warning' : 'bi bi-bookmark';
+                if (icon) icon.setAttribute('class', nowSaved ? 'vasto-icon vasto-icon--filled text-warning' : 'vasto-icon');
                 if (label) label.textContent = nowSaved ? 'Saved to Library' : 'Save to Library';
                 bootstrap.Modal.getInstance(modalEl)?.hide();
             };
@@ -4486,7 +4501,7 @@
                 const commentId = likeBtn.dataset.commentId;
                 if (!commentId) return;
 
-                const icon = likeBtn.querySelector('i');
+                const icon = likeBtn.querySelector('[data-lucide]');
                 const countSpan = likeBtn.querySelector('span');
                 const wasLiked = likeBtn.classList.contains('liked');
                 const curCount = parseInt(countSpan?.textContent || '0', 10) || 0;
@@ -4497,9 +4512,9 @@
                     document.querySelectorAll(`[data-action="like"][data-comment-id="${commentId}"]`).forEach(btn => {
                         btn.classList.toggle('liked', likedState);
                         btn.classList.toggle('text-danger', likedState);
-                        const ic = btn.querySelector('i');
+                        const ic = btn.querySelector('[data-lucide]');
                         if (ic) {
-                            ic.className = likedState ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+                            ic.setAttribute('class', likedState ? 'vasto-icon vasto-icon--filled text-danger' : 'vasto-icon');
                         }
                         const sp = btn.querySelector('span');
                         if (sp) {
@@ -4610,11 +4625,8 @@
                         repliesContainer.style.display = 'none';
                     }
                     toggleBtn.classList.remove('expanded');
-                    const icon = toggleBtn.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-up');
-                        icon.classList.add('bi-chevron-down');
-                    }
+                    const icon = toggleBtn.querySelector('[data-lucide]');
+                    if (icon && window.VastoIcons) { window.VastoIcons.setIcon(icon, 'chevron-down'); }
                     const span = toggleBtn.querySelector('span');
                     if (span) span.textContent = `View ${toggleBtn.dataset.replyCount || ''} replies`;
                 } else {
@@ -4683,15 +4695,15 @@
                                                     ${replyAttachmentHtml}
                                                     <div class="comment-actions d-flex align-items-center gap-3 mt-1" style="font-size: 11px;">
                                                         <button type="button" class="btn btn-link p-0 text-muted text-decoration-none comment-action ${replyLiked}" data-action="like" data-comment-id="${reply.id}">
-                                                            <i class="bi ${reply.is_liked ? 'bi-heart-fill text-danger' : 'bi-heart'}"></i>
+                                                            <i aria-hidden="true" data-lucide="heart" class="vasto-icon${reply.is_liked ? ' vasto-icon--filled text-danger' : ''}"></i>
                                                             <span class="ms-0.5">${reply.like_count || 0}</span>
                                                         </button>
                                                         <button type="button" class="btn btn-link p-0 text-muted text-decoration-none comment-action" data-action="reply" data-comment-id="${reply.id}">
-                                                            <i class="bi bi-chat-dots"></i> Reply
+                                                            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i> Reply
                                                         </button>
                                                         <div class="comment-menu-wrapper position-relative d-inline-flex">
                                                             <button type="button" class="btn btn-link p-0 text-muted comment-menu-btn" data-action="menu" data-comment-id="${reply.id}" aria-label="More options" aria-expanded="false">
-                                                                <i class="bi bi-three-dots"></i>
+                                                                <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon"></i>
                                                             </button>
                                                         </div>
                                                     </div>
@@ -4712,11 +4724,8 @@
                         }
                     }
                     toggleBtn.classList.add('expanded');
-                    const icon = toggleBtn.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-down');
-                        icon.classList.add('bi-chevron-up');
-                    }
+                    const icon = toggleBtn.querySelector('[data-lucide]');
+                    if (icon && window.VastoIcons) { window.VastoIcons.setIcon(icon, 'chevron-up'); }
                     const span = toggleBtn.querySelector('span');
                     if (span) span.textContent = 'Hide replies';
                 }
@@ -4773,30 +4782,30 @@
                     if (isOwner) {
                         items += `
                             <button type="button" class="comment-menu-item" data-action="edit" data-comment-id="${commentId}">
-                                <i class="bi bi-pencil"></i> Edit
+                                <i aria-hidden="true" data-lucide="pencil" class="vasto-icon"></i> Edit
                             </button>
                             <button type="button" class="comment-menu-item danger" data-action="delete" data-comment-id="${commentId}">
-                                <i class="bi bi-trash"></i> Delete
+                                <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> Delete
                             </button>
                             <div class="comment-menu-divider"></div>
                         `;
                     } else if (isModerator) {
                         items += `
                             <button type="button" class="comment-menu-item danger" data-action="delete" data-comment-id="${commentId}">
-                                <i class="bi bi-trash"></i> Delete
+                                <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> Delete
                             </button>
                             <div class="comment-menu-divider"></div>
                         `;
                     }
                     items += `
                         <button type="button" class="comment-menu-item" data-action="copy-text" data-comment-id="${commentId}">
-                            <i class="bi bi-copy"></i> Copy text
+                            <i aria-hidden="true" data-lucide="copy" class="vasto-icon"></i> Copy text
                         </button>
                         <button type="button" class="comment-menu-item" data-action="copy-link" data-comment-id="${commentId}">
-                            <i class="bi bi-link-45deg"></i> Copy link
+                            <i aria-hidden="true" data-lucide="link" class="vasto-icon"></i> Copy link
                         </button>
                         <button type="button" class="comment-menu-item" data-action="view-profile" data-comment-id="${commentId}">
-                            <i class="bi bi-person"></i> View profile
+                            <i aria-hidden="true" data-lucide="user" class="vasto-icon"></i> View profile
                         </button>
                     `;
                     menuHtml = `<div class="comment-menu-dropdown" id="menu-${commentId}" role="menu">${items}</div>`;

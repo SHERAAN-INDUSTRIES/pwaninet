@@ -78,13 +78,13 @@
     const LEGACY_TOOL_TYPES = {
         web_search: 'web_search', retrieve_documents: 'document_read',
         academic_lookup: 'document_read', document_detail: 'document_read',
-        student_timetable: 'document_read', content_search: 'content_search', recall_memory: 'document_read',
+        student_timetable: 'document_read', content_search: 'content_search', recall_memory: 'document_read', generate_document: 'document_read',
     };
     const LEGACY_STAGE_TYPES = {
         thinking: 'thinking', searching_web: 'web_search',
         reading_sources: 'document_read', devouring_context: 'document_read',
         searching_documents: 'document_read', searching_posts: 'content_search',
-        writing_answer: 'response_draft', reading_document_page: 'document_read',
+        writing_answer: 'response_draft', reading_document_page: 'document_read', summarizing_document: 'document_read',
     };
     const STATUS_ICONS = {
         completed: 'check-circle-2', blocked: 'circle-alert', failed: 'circle-x',
@@ -95,6 +95,7 @@
         if (kind === 'status') return null; // outcome markers handled separately
         if (kind === 'tool') return LEGACY_TOOL_TYPES[event.tool] || 'tool_call';
         if (kind === 'stage') {
+            if (event.id === 'stage-summarizing_document' && publicCount(event.completed_sections) !== null) return `Summarized ${event.completed_sections} of ${event.total_sections || 0} source sections.`;
             const id = String(event.id || '');
             const stage = id.startsWith('stage-') ? id.slice(6) : '';
             return LEGACY_STAGE_TYPES[stage] || null;
@@ -121,17 +122,17 @@
         create_reminder:'Saving your reminder', unread_chats:'Checking unread chat counts',
         send_message:'Preparing a message for your approval', follow_user:'Preparing a follow request',
         propose_personal_memory:'Preparing a preference for your review',
-        recall_memory:'Reviewing your saved study history', send_notification:'Creating your notification',
+        recall_memory:'Reviewing your saved study history', generate_document:'Creating your downloadable file', send_notification:'Creating your notification',
         add_study_block:'Adding your study session', update_study_block:'Updating your study session',
         remove_study_block:'Removing your study session', complete_study_block:'Recording your completed session',
     };
     const STAGE_LABELS = {thinking:'Looking at your request', searching_web:'Searching the web',
         reading_sources:'Reading the sources', devouring_context:'Reading the selected material',
         searching_posts:'Searching campus posts', searching_documents:'Searching document content',
-        teaching_check:'Preparing your lesson', reading_document_page:"Checking the page you're reading",
+        teaching_check:'Preparing your lesson', summarizing_document:'Summarizing the selected document', reading_document_page:"Checking the page you're reading",
         writing_answer:'Putting the answer together'};
-    const TOOL_PURPOSES = {"recall_memory":"I’m checking your approved memories and recorded academic activity across conversations.", "send_notification":"I’m creating the immediate in-app notification you requested; this does not schedule a phone alert.", "web_search": "I’m checking external sources for information that can support your answer.", "retrieve_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "content_search": "I’m checking campus content for material relevant to your request.", "academic_lookup": "I’m checking academic records rather than guessing course or programme details.", "student_timetable": "I’m checking your class timetable so any scheduling advice can account for your classes.", "document_detail": "I’m checking the document’s available information before using it as a source.", "personal_schedule": "I’m checking your existing plans and reminders before suggesting changes.", "send_message": "I’m preparing a draft for you to review before a message can be sent.", "follow_user": "I’m preparing a follow request for your approval before it can be applied.", "propose_personal_memory": "I’m preparing the stated preference for your review; it is not approved memory yet.", "create_reminder": "I’m using the requested reminder details; creating it does not establish delivery on your phone.", "create_study_plan": "I’m saving the study plan you requested so it can be available later.", "add_study_block": "I’m adding the study session you requested to your personal schedule.", "update_study_block": "I’m applying your requested change to the existing study session.", "remove_study_block": "I’m removing the study session you asked to cancel.", "complete_study_block": "I’m recording the study session as completed at your request."};
-    const STAGE_SUMMARIES = {"reading_document_page":"I’m reviewing the authorized page evidence for your document question.", "thinking": "I’m identifying what your request needs and whether it calls for sources, account information, or a direct explanation.", "searching_web": "I’m checking external sources for information that can support your answer.", "reading_sources": "I’m reviewing the available sources for relevance before using them in the answer.", "devouring_context": "I’m reading the supplied material and connecting the relevant parts to your question.", "searching_posts": "I’m checking campus content for material relevant to your request.", "searching_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "writing_answer": "I’m putting the available evidence into a direct answer and noting any checks that could not complete.", "teaching_check": "I’m checking your study session and lesson state so the next step continues from where you left off."};
+    const TOOL_PURPOSES = {"generate_document":"I’m rendering the completed content into a private downloadable file. A link appears only after it is saved.", "recall_memory":"I’m checking your approved memories and recorded academic activity across conversations.", "send_notification":"I’m creating the immediate in-app notification you requested; this does not schedule a phone alert.", "web_search": "I’m checking external sources for information that can support your answer.", "retrieve_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "content_search": "I’m checking campus content for material relevant to your request.", "academic_lookup": "I’m checking academic records rather than guessing course or programme details.", "student_timetable": "I’m checking your class timetable so any scheduling advice can account for your classes.", "document_detail": "I’m checking the document’s available information before using it as a source.", "personal_schedule": "I’m checking your existing plans and reminders before suggesting changes.", "send_message": "I’m preparing a draft for you to review before a message can be sent.", "follow_user": "I’m preparing a follow request for your approval before it can be applied.", "propose_personal_memory": "I’m preparing the stated preference for your review; it is not approved memory yet.", "create_reminder": "I’m using the requested reminder details; creating it does not establish delivery on your phone.", "create_study_plan": "I’m saving the study plan you requested so it can be available later.", "add_study_block": "I’m adding the study session you requested to your personal schedule.", "update_study_block": "I’m applying your requested change to the existing study session.", "remove_study_block": "I’m removing the study session you asked to cancel.", "complete_study_block": "I’m recording the study session as completed at your request."};
+    const STAGE_SUMMARIES = {"summarizing_document":"I’m covering the available extracted source text in bounded sections, keeping source identity and coverage.", "reading_document_page":"I’m reviewing the authorized page evidence for your document question.", "thinking": "I’m identifying what your request needs and whether it calls for sources, account information, or a direct explanation.", "searching_web": "I’m checking external sources for information that can support your answer.", "reading_sources": "I’m reviewing the available sources for relevance before using them in the answer.", "devouring_context": "I’m reading the supplied material and connecting the relevant parts to your question.", "searching_posts": "I’m checking campus content for material relevant to your request.", "searching_documents": "I’m looking for relevant passages in documents you can access, so the explanation can be grounded in the material.", "writing_answer": "I’m putting the available evidence into a direct answer and noting any checks that could not complete.", "teaching_check": "I’m checking your study session and lesson state so the next step continues from where you left off."};
     const publicCount = value => Number.isInteger(value) && value >= 0 ? Math.min(value,10000) : null;
     function executionSummary(event) {
         const kind = event.kind, status = event.status;
@@ -170,6 +171,9 @@
             if (typeof event[key] === 'string') clean[key] = event[key];
         }
         clean.status = ['running','completed','failed','waiting','answered','cancelled','blocked','retrying'].includes(event.status) ? event.status : 'running';
+        if (event.kind === 'stage' && event.id === 'stage-summarizing_document') {
+            for (const key of ['completed_sections','total_sections']) if (publicCount(event[key]) !== null) clean[key] = event[key];
+        }
         if (event.kind === 'tool') {
             clean.tool = Object.prototype.hasOwnProperty.call(TOOL_LABELS,event.tool) ? event.tool : 'other';
             const count = publicCount(event.result_count);

@@ -4,7 +4,7 @@
         {% include 'posts/partials/comment_single_item.html' with comment=comment liked_comment_ids=liked_comment_ids %}
     {% empty %}
     <div class="comments-empty">
-        <i class="bi bi-chat-dots"></i>
+        <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
         <p>No comments yet. Be the first to comment.</p>
     </div>
     {% endfor %}
@@ -16,7 +16,7 @@
            hx-target="#comments-section"
            hx-swap="outerHTML"
            class="btn btn-sm btn-outline-secondary rounded-pill px-4 fw-bold" style="font-size: 12px;">
-            <i class="bi bi-chevron-down me-1"></i>View all {{ total_comments_count|default:post.comments.count }} comments
+            <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon me-1"></i>View all {{ total_comments_count|default:post.comments.count }} comments
         </a>
     </div>
     {% endif %}

@@ -1,0 +1,32 @@
+{% load i18n %}
+{% comment %}
+  HTMX navigation response for every workspace page.
+
+  The centre panel is `#admin-workspace` (also the marker admin-workspace.js
+  uses to detect the workspace side of a navigation), and both rails come back
+  out-of-band so the active state, badges and live ops stay current. The
+  topbar is deliberately NOT swapped: entering the workspace is always a
+  native full-page load, so the admin chrome is already in place and cannot
+  leak onto a normal page.
+{% endcomment %}
+<div class="admin-workspace" id="admin-workspace" data-admin-title="{{ page_title }}">
+{% include content_partial %}
+</div>
+
+<!-- Left rail Out-Of-Band: active state + badge refresh -->
+<aside id="left-nav-rail" class="desktop-left-rail d-none d-lg-block" aria-label="{% trans 'Admin Navigation' %}" hx-swap-oob="true">
+    <div class="left-rail-inner">
+        {% include 'admin_dashboard/partials/admin_left_rail.html' %}
+    </div>
+</aside>
+
+<!-- Context rail Out-Of-Band: live ops refresh -->
+<aside id="context-rail-target" class="desktop-context-rail d-none d-xl-block" aria-label="{% trans 'Live Operations' %}" hx-swap-oob="true">
+    <div class="context-rail-inner" id="context-rail-inner">
+        {% include 'admin_dashboard/partials/admin_context_rail.html' %}
+    </div>
+</aside>
+
+<!-- Clear any lingering floating actions from other workspaces -->
+<div id="profile-floating-actions" hx-swap-oob="true"></div>
+<div id="document-modal-container" hx-swap-oob="true"></div>

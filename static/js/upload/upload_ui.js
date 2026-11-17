@@ -74,7 +74,7 @@ class UploadBanner {
                 </div>
             </div>
             <button class="upload-cancel-btn" id="upload-banner-cancel" title="Cancel">
-                <i class="bi bi-x-lg"></i>
+                <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
             </button>
         `;
 

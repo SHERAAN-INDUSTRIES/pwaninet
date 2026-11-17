@@ -9,7 +9,7 @@ counters, so a student can never see a number we do not enforce.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from django.db import transaction
 from django.db.models import F
@@ -76,6 +76,13 @@ def next_week_start(now: datetime) -> datetime:
 _OFFERING_INDEX: Dict[str, Any] = {"at": None, "index": {}}
 _OFFERING_INDEX_TTL_SECONDS = 60.0
 
+# Models an admin switched off from the dashboard. This is a kill switch and
+# it must beat every admission path: without it a disabled ':free' rung would
+# be re-admitted by `offering_allows_tier`'s "unregistered but provably free"
+# fallback, and a disabled rung would stay reachable to callers with no tier
+# context (the tier gate is skipped entirely for them).
+_DISABLED_INDEX: Dict[str, Any] = {"at": None, "keys": set()}
+
 
 def offering_index(now: Optional[float] = None) -> Dict[Tuple[str, str], ModelOffering]:
     """(provider, model_id) -> offering, cached briefly."""
@@ -96,6 +103,34 @@ def offering_index(now: Optional[float] = None) -> Dict[Tuple[str, str], ModelOf
 def invalidate_offering_index() -> None:
     _OFFERING_INDEX["index"] = {}
     _OFFERING_INDEX["at"] = None
+    _DISABLED_INDEX["keys"] = set()
+    _DISABLED_INDEX["at"] = None
+
+
+def disabled_offering_keys(now: Optional[float] = None) -> Set[Tuple[str, str]]:
+    """(provider, model_id) pairs whose offering is switched off."""
+    import time as _time
+
+    now = now if now is not None else _time.monotonic()
+    at = _DISABLED_INDEX["at"]
+    if at is not None and (now - at) < _OFFERING_INDEX_TTL_SECONDS:
+        return _DISABLED_INDEX["keys"]
+    keys: Set[Tuple[str, str]] = set()
+    for offering in ModelOffering.objects.filter(is_active=False).only("provider", "model_id"):
+        keys.add((offering.provider, offering.model_id))
+        keys.add((offering.provider, offering.model_id.lower()))
+    _DISABLED_INDEX["keys"] = keys
+    _DISABLED_INDEX["at"] = now
+    return keys
+
+
+def is_offering_disabled(provider: str, model_id: Optional[str]) -> bool:
+    """True when the registry has this candidate switched off."""
+    if not provider:
+        return False
+    keys = disabled_offering_keys()
+    model = (model_id or "").strip().lower()
+    return (provider, model) in keys or (provider.lower(), model) in keys
 
 
 def tier_rank_for_user(user, now: Optional[datetime] = None) -> Optional[int]:

@@ -274,7 +274,7 @@ def _claim_and_tail(request, run, continuation, *, interaction, raw_answer,
             locked, attempt_id = agent_execution.claim_run(
                 request.user, run, interaction=interaction, raw_answer=raw_answer,
                 legacy_text=legacy_text, note=continuation['note'],
-                kind=continuation['kind'], via=via)
+                kind=continuation['kind'], via=via, context_resources=request.data.get('context_resources'))
             from pwanimate.tasks.agent_runs import dispatch_run
             dispatch_run(locked.id, attempt_id)
     except (InteractionError, RunError, TransitionError) as exc:
@@ -316,7 +316,7 @@ def _claim_and_execute(request, run, continuation, *, interaction, raw_answer,
             locked, _ = agent_execution.claim_run(
                 request.user, run, interaction=interaction, raw_answer=raw_answer,
                 legacy_text=legacy_text, note=continuation['note'],
-                kind=continuation['kind'], via=via)
+                kind=continuation['kind'], via=via, context_resources=request.data.get('context_resources'))
         else:
             # Already running means another attempt owns this run.
             raise RunError('This task has already continued. Refresh the conversation to see its status.')
@@ -487,7 +487,8 @@ def _terminal_payload(run):
                      'answer': 'Stopped — you cancelled this task.',
                      'message': 'Stopped — you cancelled this task.'})
         return base
-    if run.status in {SparkAgentRun.STATUS_FAILED, SparkAgentRun.STATUS_INTERRUPTED}:
+    document_result = (run.state or {}).get('document_exports') or {}
+    if run.status in {SparkAgentRun.STATUS_FAILED, SparkAgentRun.STATUS_INTERRUPTED} and not document_result:
         base['error'] = ('The task could not continue. Approved actions remain '
                          'recorded; refresh to inspect their outcomes.')
         return base
@@ -513,6 +514,12 @@ def _terminal_payload(run):
                 'metadata': {'awaiting_clarification': False,
                              'awaiting_approval': False},
             })
+            if document_result:
+                from pwanimate.services.document_exports import saved_resources
+                base['metadata']['generated_documents'] = saved_resources(run.user, [msg.pk]).get(msg.pk, [])
+                base['metadata']['export_errors'] = document_result.get('errors', [])
+                base['metadata']['artifacts_complete'] = document_result.get('complete') is True
+                base['metadata']['source_coverage'] = document_result.get('source_coverage')
             if teaching:
                 base['metadata']['teaching'] = teaching
             if run.status == SparkAgentRun.STATUS_WAITING:

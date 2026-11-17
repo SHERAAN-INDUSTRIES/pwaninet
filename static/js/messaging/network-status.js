@@ -144,13 +144,13 @@ class NetworkStatus {
         banner.innerHTML = `
             <div class="offline-banner-content">
                 <div class="offline-banner-icon">
-                    <i class="bi bi-wifi-off"></i>
+                    <i aria-hidden="true" data-lucide="wifi-off" class="vasto-icon"></i>
                 </div>
                 <div class="offline-banner-text">
                     <strong>You're offline.</strong> Showing saved messages.
                 </div>
                 <div class="offline-banner-close" onclick="this.parentElement.parentElement.style.display='none'">
-                    <i class="bi bi-x"></i>
+                    <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
                 </div>
             </div>
         `;

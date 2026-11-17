@@ -4,7 +4,7 @@
 {% if media_type == 'media' %}
   {% if page == 1 and not items %}
     <div class="text-center py-5 text-muted small" id="mediaPhotosVideosEmpty">
-      <i class="bi bi-images fs-2 d-block mb-2 opacity-50"></i>
+      <i aria-hidden="true" data-lucide="images" class="vasto-icon fs-2 d-block mb-2 opacity-50"></i>
       {% trans "No photos or videos shared yet" %}
     </div>
   {% else %}
@@ -21,7 +21,7 @@
         {% elif item.type == 'video' %}
           <a href="{{ item.url }}" target="_blank" rel="noopener" class="position-relative d-block w-100 h-100">
             <video src="{{ item.url }}" preload="none"></video>
-            <i class="bi bi-play-circle-fill position-absolute top-50 start-50 translate-middle text-white fs-4"></i>
+            <i aria-hidden="true" data-lucide="circle-play" class="vasto-icon position-absolute top-50 start-50 translate-middle text-white fs-4"></i>
           </a>
         {% endif %}
       </div>
@@ -47,7 +47,7 @@
 {% elif media_type == 'docs' %}
   {% if page == 1 and not items %}
     <div class="text-center py-5 text-muted small" id="mediaDocsEmpty">
-      <i class="bi bi-file-earmark-text fs-2 d-block mb-2 opacity-50"></i>
+      <i aria-hidden="true" data-lucide="file-text" class="vasto-icon fs-2 d-block mb-2 opacity-50"></i>
       {% trans "No documents shared yet" %}
     </div>
   {% else %}
@@ -58,13 +58,13 @@
     {% for item in items %}
       <a href="{{ item.url }}" download class="d-flex align-items-center gap-3 p-2 rounded border text-decoration-none text-dark bg-light bg-opacity-50">
         <div class="p-2 bg-primary bg-opacity-10 text-primary rounded">
-          <i class="bi bi-file-earmark-text fs-4"></i>
+          <i aria-hidden="true" data-lucide="file-text" class="vasto-icon fs-4"></i>
         </div>
         <div class="flex-grow-1 overflow-hidden" style="min-width: 0;">
           <div class="fw-semibold text-truncate small">{{ item.name }}</div>
           <div class="text-muted x-small" style="font-size: 0.72rem;">{{ item.created_at|date:"M d, Y" }}</div>
         </div>
-        <i class="bi bi-download text-muted"></i>
+        <i aria-hidden="true" data-lucide="download" class="vasto-icon text-muted"></i>
       </a>
     {% endfor %}
 
@@ -87,7 +87,7 @@
 {% elif media_type == 'audio' %}
   {% if page == 1 and not items %}
     <div class="text-center py-5 text-muted small" id="mediaAudioEmpty">
-      <i class="bi bi-mic fs-2 d-block mb-2 opacity-50"></i>
+      <i aria-hidden="true" data-lucide="mic" class="vasto-icon fs-2 d-block mb-2 opacity-50"></i>
       {% trans "No audio messages shared yet" %}
     </div>
   {% else %}
@@ -98,7 +98,7 @@
     {% for item in items %}
       <div class="p-2 rounded border bg-light bg-opacity-50">
         <div class="d-flex align-items-center gap-2 mb-1">
-          <i class="bi bi-mic text-primary"></i>
+          <i aria-hidden="true" data-lucide="mic" class="vasto-icon text-primary"></i>
           <span class="small fw-semibold text-truncate">{{ item.name|default:"Voice Note" }}</span>
           <span class="text-muted x-small ms-auto" style="font-size: 0.7rem;">{{ item.created_at|date:"H:i" }}</span>
         </div>
@@ -125,7 +125,7 @@
 {% elif media_type == 'links' %}
   {% if page == 1 and not items %}
     <div class="text-center py-5 text-muted small" id="mediaLinksEmpty">
-      <i class="bi bi-link-45deg fs-2 d-block mb-2 opacity-50"></i>
+      <i aria-hidden="true" data-lucide="link" class="vasto-icon fs-2 d-block mb-2 opacity-50"></i>
       {% trans "No links shared yet" %}
     </div>
   {% else %}
@@ -136,9 +136,9 @@
     {% for item in items %}
       <a href="{{ item.url }}" target="_blank" rel="noopener" class="d-flex flex-column p-2 rounded border text-decoration-none text-dark bg-light bg-opacity-50">
         <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-link-45deg text-primary fs-5"></i>
+          <i aria-hidden="true" data-lucide="link" class="vasto-icon text-primary fs-5"></i>
           <span class="fw-semibold text-truncate small text-primary">{{ item.title|default:item.url }}</span>
-          <i class="bi bi-box-arrow-up-right x-small text-muted ms-auto" style="font-size: 0.75rem;"></i>
+          <i aria-hidden="true" data-lucide="external-link" class="vasto-icon x-small text-muted ms-auto" style="font-size: 0.75rem;"></i>
         </div>
         {% if item.description %}
           <p class="text-muted x-small mb-1 text-truncate" style="font-size: 0.72rem;">{{ item.description }}</p>

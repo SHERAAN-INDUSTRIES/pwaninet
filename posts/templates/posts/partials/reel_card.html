@@ -113,11 +113,11 @@
                 <span>{% if post.repost_of %}{{ post.repost_of.created_at|timesince }}{% else %}{{ post.created_at|timesince }}{% endif %} ago</span>
                 <span class="mx-1">&middot;</span>
                 {% if post.visibility == 'PRIVATE' %}
-                    <i class="bi bi-lock-fill text-muted" title="{% trans 'Only me' %}" aria-label="{% trans 'Only me' %}" style="font-size: 11px;"></i>
+                    <i aria-hidden="true" data-lucide="lock" class="vasto-icon text-muted" title="{% trans 'Only me' %}" aria-label="{% trans 'Only me' %}" style="font-size: 11px;"></i>
                 {% elif post.visibility == 'FOLLOWERS' %}
-                    <i class="bi bi-people-fill text-muted" title="{% trans 'Followers only' %}" aria-label="{% trans 'Followers only' %}" style="font-size: 11px;"></i>
+                    <i aria-hidden="true" data-lucide="users" class="vasto-icon text-muted" title="{% trans 'Followers only' %}" aria-label="{% trans 'Followers only' %}" style="font-size: 11px;"></i>
                 {% else %}
-                    <i class="bi bi-globe-americas text-muted" title="{% trans 'vasto students' %}" aria-label="{% trans 'vasto students' %}" style="font-size: 11px;"></i>
+                    <i aria-hidden="true" data-lucide="globe" class="vasto-icon text-muted" title="{% trans 'vasto students' %}" aria-label="{% trans 'vasto students' %}" style="font-size: 11px;"></i>
                 {% endif %}
             </div>
         </div>
@@ -128,20 +128,20 @@
                     data-bs-toggle="dropdown"
                     aria-expanded="false"
                     aria-label="{% trans 'Post options' %}">
-                <i class="bi bi-three-dots fs-5"></i>
+                <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon fs-5"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow border-0">
                 <li>
                     <button class="dropdown-item d-flex align-items-center gap-2"
                             data-action="fullscreen"
                             data-post-id="{{ post.share_id }}">
-                        <i class="bi bi-arrows-fullscreen"></i> {% trans "Watch Fullscreen" %}
+                        <i aria-hidden="true" data-lucide="maximize" class="vasto-icon"></i> {% trans "Watch Fullscreen" %}
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item d-flex align-items-center gap-2"
                             data-bs-toggle="modal" data-bs-target="#globalRepostModal" data-post-id="{{ post.share_id }}">
-                        <i class="bi bi-repeat"></i> {% trans "Repost" %}
+                        <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon"></i> {% trans "Repost" %}
                     </button>
                 </li>
                 <li>
@@ -149,7 +149,7 @@
                             hx-post="/api/posts/{{ post.share_id }}/hide/"
                             hx-target="#reel-card-{{ post.share_id }}"
                             hx-swap="outerHTML">
-                        <i class="bi bi-eye-slash"></i> {% trans "Hide post" %}
+                        <i aria-hidden="true" data-lucide="eye-off" class="vasto-icon"></i> {% trans "Hide post" %}
                     </button>
                 </li>
                 <li>
@@ -159,25 +159,25 @@
                             hx-target="body"
                             hx-swap="none"
                             hx-on::after-request="if(event.detail.successful) window.location.reload()">
-                        <i class="bi bi-person-dash"></i> {% trans "Hide posts from" %} {{ post.author.username }}
+                        <i aria-hidden="true" data-lucide="user-round-minus" class="vasto-icon"></i> {% trans "Hide posts from" %} {{ post.author.username }}
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item d-flex align-items-center gap-2"
                             data-bs-toggle="modal" data-bs-target="#globalShareModal" data-post-id="{{ post.share_id }}" data-post-url="{% url 'posts:post_details' post.share_id %}" data-post-content="{{ post.content|truncatechars:80|escapejs }}">
-                        <i class="bi bi-share"></i> {% trans "Share to profile" %}
+                        <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i> {% trans "Share to profile" %}
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item d-flex align-items-center gap-2"
                             onclick="copyLinkToClipboard(window.location.origin + '{% url 'posts:post_details' post.share_id %}')">
-                        <i class="bi bi-link-45deg"></i> {% trans "Copy Link" %}
+                        <i aria-hidden="true" data-lucide="link" class="vasto-icon"></i> {% trans "Copy Link" %}
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item d-flex align-items-center gap-2"
                             data-bs-toggle="modal" data-bs-target="#globalReportModal" data-post-id="{{ post.share_id }}">
-                        <i class="bi bi-flag"></i> {% trans "Report post" %}
+                        <i aria-hidden="true" data-lucide="flag" class="vasto-icon"></i> {% trans "Report post" %}
                     </button>
                 </li>
                 {% with post_obj=post.repost_of|default:post %}
@@ -192,7 +192,7 @@
                             {% if post_obj.allow_downloads %}data-url="{% protected_download_url post_obj 'video' %}"{% else %}disabled aria-disabled="true"{% endif %}
                             data-filename="reel_{{ post_obj.share_id }}.mp4"
                             data-thumbnail="{{ post_obj.get_video_poster|default:post_obj.thumbnail_url|default:'' }}">
-                        <i class="bi bi-download"></i> {% trans "Download Reel" %}
+                        <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i> {% trans "Download Reel" %}
                     </button>
                 </li>
                     {% endif %}
@@ -205,7 +205,7 @@
                             hx-confirm="{% trans 'Are you sure you want to delete this post?' %}"
                             hx-target="#reel-card-{{ post.share_id }}"
                             hx-swap="outerHTML">
-                        <i class="bi bi-trash"></i> {% trans "Delete post" %}
+                        <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> {% trans "Delete post" %}
                     </button>
                 </li>
                 {% endif %}
@@ -280,7 +280,7 @@
 
         <!-- Transient Play/Pause HUD Indicator -->
         <div id="reel-play-hud-{{ post.share_id }}" class="reel-play-hud" aria-hidden="true">
-            <i class="bi bi-play-fill"></i>
+            <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
         </div>
 
         <!-- Central Buffering / Audio-Wait Spinner -->
@@ -293,7 +293,7 @@
 
         <!-- Heart Burst Animation Target -->
         <div id="reel-heart-{{ post.share_id }}" class="reel-heart-burst" aria-hidden="true">
-            <i class="bi bi-heart-fill"></i>
+            <i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
         </div>
 
         <!-- Top Right Overlay: Fullscreen expansion button -->
@@ -304,7 +304,7 @@
                     data-action="fullscreen"
                     title="{% trans 'Full Screen' %}"
                     aria-label="{% trans 'Expand reel' %}">
-                <i class="bi bi-arrows-fullscreen"></i>
+                <i aria-hidden="true" data-lucide="maximize" class="vasto-icon"></i>
             </button>
         </div>
 
@@ -324,7 +324,7 @@
                     data-action="mute-toggle"
                     title="{% trans 'Toggle mute' %}"
                     aria-label="{% trans 'Toggle mute' %}">
-                <i class="bi bi-volume-mute-fill"></i>
+                <i aria-hidden="true" data-lucide="volume-x" class="vasto-icon"></i>
             </button>
         </div>
 
@@ -348,7 +348,7 @@
                 data-post-id="{{ post.share_id }}"
                 data-action="open-comments"
                 aria-label="{% trans 'Comment' %}">
-            <i class="bi bi-chat-dots fs-5"></i>
+            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon fs-5"></i>
             <span id="comment-count-{{ post.share_id }}" class="fw-bold">{{ post.comments.count }}</span>
         </button>
         <button type="button"
@@ -359,7 +359,7 @@
                 onclick="const vm = window.videoManager || window.vastoVideoManager; if (vm && vm.toggleReelRepost) { event.preventDefault(); event.stopPropagation(); vm.toggleReelRepost('{{ post.share_id }}'); }"
                 aria-label="{% if user_has_reposted %}{% trans 'Undo repost' %}{% else %}{% trans 'Repost' %}{% endif %}"
                 title="{% if user_has_reposted %}{% trans 'Reposted' %}{% else %}{% trans 'Repost' %}{% endif %}">
-            <i class="bi bi-repeat fs-5 {% if user_has_reposted %}text-primary{% endif %}"></i>
+            <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon fs-5 {% if user_has_reposted %}text-primary{% endif %}"></i>
             <span class="repost-state-label {% if not user_has_reposted %}d-none{% endif %}">{% trans "Reposted" %}</span>
             <span class="fw-bold repost-count">{{ post.repost_count }}</span>
         </button>
@@ -371,7 +371,7 @@
                 data-post-url="{% url 'posts:post_details' post.share_id %}"
                 data-post-content="{{ post.content|truncatechars:80|escapejs }}"
                 aria-label="{% trans 'Share post' %}">
-            <i class="bi bi-share fs-5"></i>
+            <i aria-hidden="true" data-lucide="share" class="vasto-icon fs-5"></i>
             <span class="fw-bold">{% trans "Share" %}</span>
         </button>
     </div>

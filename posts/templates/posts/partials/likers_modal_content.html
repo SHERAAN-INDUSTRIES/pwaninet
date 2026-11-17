@@ -29,7 +29,7 @@
 <div class="modal-header people-modal-header border-0 pb-0">
     <div class="people-modal-handle d-md-none" aria-hidden="true"></div>
     <h5 class="modal-title fw-bold w-100 text-center pt-2">
-        <i class="bi bi-shield-check me-2 text-primary"></i>Comrades who liked
+        <i aria-hidden="true" data-lucide="shield-check" class="vasto-icon me-2 text-primary"></i>Comrades who liked
     </h5>
     <button type="button" class="btn-close people-modal-close" data-bs-dismiss="modal" aria-label="Close" style="position: absolute; right: 12px; top: 8px; z-index: 10; font-size: 1.25rem; opacity: 1; background-image: none;">✕</button>
 </div>
@@ -80,7 +80,7 @@
         </div>
         {% empty %}
         <div class="people-empty text-center">
-            <i class="bi bi-radar text-muted fs-1 mb-3 d-block"></i>
+            <i aria-hidden="true" data-lucide="radar" class="vasto-icon text-muted fs-1 mb-3 d-block"></i>
             <p class="small fw-bold text-uppercase text-muted">Zero Signals Detected</p>
             <p class="text-muted">No comrades have interacted with this post yet.</p>
         </div>
@@ -97,12 +97,12 @@
                    hx-get="{% url 'posts:post_likers_list' post.share_id %}?page={{ page_obj.previous_page_number }}"
                    hx-target="#modal-content-target"
                    href="#">
-                    <i class="bi bi-chevron-left"></i>
+                    <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon"></i>
                 </a>
             </li>
             {% else %}
             <li class="page-item disabled">
-                <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                <span class="page-link"><i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon"></i></span>
             </li>
             {% endif %}
             
@@ -127,12 +127,12 @@
                    hx-get="{% url 'posts:post_likers_list' post.share_id %}?page={{ page_obj.next_page_number }}"
                    hx-target="#modal-content-target"
                    href="#">
-                    <i class="bi bi-chevron-right"></i>
+                    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon"></i>
                 </a>
             </li>
             {% else %}
             <li class="page-item disabled">
-                <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                <span class="page-link"><i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon"></i></span>
             </li>
             {% endif %}
         </ul>

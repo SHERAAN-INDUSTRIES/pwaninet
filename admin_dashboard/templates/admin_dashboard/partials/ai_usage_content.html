@@ -1,0 +1,247 @@
+<main class="adw-page" data-adw-section="usage">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">AI console</div>
+      <h1 class="adw-page-title">Token usage</h1>
+      <p class="adw-page-sub">Tokens, requests and spend straight from the metering ledger.</p>
+    </div>
+    <div class="adw-page-actions adw-seg" role="tablist" aria-label="Date range">
+      <a href="{% url 'admin_dashboard:ai_usage' %}?days=7" class="adw-seg-btn{% if days == 7 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:ai_usage' %}?days=7" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">7d</a>
+      <a href="{% url 'admin_dashboard:ai_usage' %}?days=30" class="adw-seg-btn{% if days == 30 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:ai_usage' %}?days=30" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">30d</a>
+      <a href="{% url 'admin_dashboard:ai_usage' %}?days=90" class="adw-seg-btn{% if days == 90 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:ai_usage' %}?days=90" hx-target="#page-content-target"
+         hx-swap="innerHTML" hx-push-url="true">90d</a>
+    </div>
+  </header>
+
+  {# ── Totals ── #}
+  <div class="adw-stat-grid">
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Total tokens</span><i aria-hidden="true" data-lucide="coins" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ usage.totals.total }}</div>
+      <div class="adw-stat-note">Last {{ days }} days</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Prompt</span><i aria-hidden="true" data-lucide="log-in" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ usage.totals.prompt }}</div>
+      <div class="adw-stat-note">Input tokens</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Completion</span><i aria-hidden="true" data-lucide="log-out" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ usage.totals.completion }}</div>
+      <div class="adw-stat-note">Output tokens</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Requests</span><i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ usage.totals.requests }}</div>
+      <div class="adw-stat-note">{% if usage.totals.images %}{{ usage.totals.images }} images generated{% else %}Metered calls{% endif %}</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Est. spend</span><i aria-hidden="true" data-lucide="coins" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value"><span class="adw-stat-currency">$</span>{{ usage.totals.cost_usd|floatformat:4 }}</div>
+      <div class="adw-stat-note">Recorded cost_micros</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Consumers</span><i aria-hidden="true" data-lucide="users" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ usage.totals.users }}</div>
+      <div class="adw-stat-note">Distinct users in range</div>
+    </section>
+  </div>
+
+  {# ── Charts ── #}
+  <div class="adw-grid-2">
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Tokens per day</h2>
+          <div class="adw-panel-sub">Prompt vs completion, last {{ days }} days</div>
+        </div>
+        <i aria-hidden="true" data-lucide="chart-line" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <div class="adw-chart"><canvas id="tokensChart"></canvas><div class="adw-chart-fallback" data-usage-chart-fallback aria-live="polite"></div></div>
+      </div>
+    </section>
+
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Cost per day</h2>
+          <div class="adw-panel-sub">Recorded spend, last {{ days }} days (USD)</div>
+        </div>
+        <i aria-hidden="true" data-lucide="banknote" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body">
+        <div class="adw-chart"><canvas id="costChart"></canvas><div class="adw-chart-fallback" data-usage-chart-fallback aria-live="polite"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="adw-grid-2">
+    {# ── Most used models ── #}
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">Most used models</h2>
+          <div class="adw-panel-sub">Ranked by total tokens in range</div>
+        </div>
+        <i aria-hidden="true" data-lucide="trophy" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body adw-panel-body-flush">
+        <div class="adw-table-wrap">
+          <table class="adw-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="adw-num">Tokens</th>
+                <th class="adw-num">Requests</th>
+                <th class="adw-num">Users</th>
+                <th class="adw-num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in usage.by_model %}
+              <tr>
+                <td>
+                  <div class="adw-cell-strong"><code>{{ row.model_id }}</code></div>
+                  <div class="adw-cell-sub">{{ row.provider }}</div>
+                </td>
+                <td class="adw-num">{{ row.total }}</td>
+                <td class="adw-num">{{ row.requests }}</td>
+                <td class="adw-num">{{ row.users }}</td>
+                <td class="adw-num">${{ row.cost_usd|floatformat:4 }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="adw-empty"><i aria-hidden="true" data-lucide="inbox" class="vasto-icon vasto-icon--sm"></i><strong>No usage yet</strong><span>Nothing has been metered in this range.</span></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    {# ── By provider ── #}
+    <section class="adw-panel">
+      <div class="adw-panel-head">
+        <div>
+          <h2 class="adw-panel-title">By provider</h2>
+          <div class="adw-panel-sub">Where the tokens went</div>
+        </div>
+        <i aria-hidden="true" data-lucide="network" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+      </div>
+      <div class="adw-panel-body adw-panel-body-flush">
+        <div class="adw-table-wrap">
+          <table class="adw-table">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th class="adw-num">Tokens</th>
+                <th class="adw-num">Requests</th>
+                <th class="adw-num">Users</th>
+                <th class="adw-num">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in usage.by_provider %}
+              <tr>
+                <td><div class="adw-cell-strong">{{ row.provider|default:"unknown" }}</div></td>
+                <td class="adw-num">{{ row.total }}</td>
+                <td class="adw-num">{{ row.requests }}</td>
+                <td class="adw-num">{{ row.users }}</td>
+                <td class="adw-num">${{ row.cost_usd|floatformat:4 }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="adw-empty"><i aria-hidden="true" data-lucide="inbox" class="vasto-icon vasto-icon--sm"></i><strong>No usage yet</strong></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="adw-panel-note"><i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i> Cost is what <code>UsageRecord.cost_usd_micros</code> recorded for each call — unavailable on legacy rows reads as 0.</p>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<script>
+  (function() {
+    const labels = {{ chart_labels|safe }};
+    const promptData = {{ chart_prompt|safe }};
+    const completionData = {{ chart_completion|safe }};
+    const costData = {{ chart_cost|safe }};
+
+    function loadChartJs() {
+      if (window.Chart) return Promise.resolve(window.Chart);
+      if (window.vastoChartJsPromise) return window.vastoChartJsPromise;
+      window.vastoChartJsPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = () => resolve(window.Chart);
+        script.onerror = () => {
+          window.vastoChartJsPromise = null;
+          reject(new Error('Chart.js failed to load'));
+        };
+        document.head.appendChild(script);
+      });
+      return window.vastoChartJsPromise;
+    }
+
+    function renderUsageCharts() {
+      const tokensCanvas = document.getElementById('tokensChart');
+      const costCanvas = document.getElementById('costChart');
+      if (!tokensCanvas || !costCanvas) return;
+
+      loadChartJs().then((Chart) => {
+        if (!Chart || !tokensCanvas.isConnected || !costCanvas.isConnected) return;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        Chart.defaults.color = isDark ? '#e4e6eb' : '#666';
+        Chart.defaults.scale.grid.color = isDark ? '#3a3b3c' : '#e5e5e5';
+        Chart.defaults.scale.grid.borderColor = isDark ? '#3a3b3c' : '#e5e5e5';
+
+        Chart.getChart(tokensCanvas)?.destroy();
+        Chart.getChart(costCanvas)?.destroy();
+        new Chart(tokensCanvas, {
+          type: 'bar',
+          data: { labels, datasets: [
+            { label: 'Prompt', data: promptData, backgroundColor: '#6366f1', borderRadius: 3 },
+            { label: 'Completion', data: completionData, backgroundColor: '#22a06b', borderRadius: 3 }
+          ] },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'bottom' } },
+            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+        });
+        new Chart(costCanvas, {
+          type: 'line',
+          data: { labels, datasets: [{
+            label: 'Cost (USD)', data: costData,
+            borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)',
+            tension: 0.3, fill: true
+          }] },
+          options: { responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } } }
+        });
+      }).catch(() => {
+        document.querySelectorAll('[data-usage-chart-fallback]').forEach((el) => {
+          el.textContent = 'Charts could not be loaded. Please try refreshing.';
+        });
+      });
+    }
+
+    window.vastoRenderUsageCharts = renderUsageCharts;
+    renderUsageCharts();
+    if (!window.vastoUsageChartEventsBound) {
+      window.vastoUsageChartEventsBound = true;
+      const rerender = () => {
+        if (typeof window.vastoRenderUsageCharts === 'function') window.vastoRenderUsageCharts();
+      };
+      document.addEventListener('htmx:afterSwap', rerender);
+      document.addEventListener('themeChanged', rerender);
+    }
+  })();
+</script>

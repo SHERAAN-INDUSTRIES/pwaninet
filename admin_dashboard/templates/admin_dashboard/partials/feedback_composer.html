@@ -3,7 +3,7 @@
 <section id="feedback-composer" class="settings-feedback-composer p-3 p-md-4 border-bottom">
   <div class="d-flex align-items-start gap-3 mb-3">
     <div class="settings-category-icon flex-shrink-0">
-      <i class="bi bi-chat-square-text"></i>
+      <i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon vasto-icon--sm"></i>
     </div>
     <div>
       <h2 class="h6 mb-1">{% trans "Share feedback" %}</h2>
@@ -13,7 +13,7 @@
 
   {% if submitted %}
   <div class="alert alert-success py-2" role="status">
-    <i class="bi bi-check-circle-fill me-2"></i>{% trans "Thanks—your feedback was sent to the admin team." %}
+    <i aria-hidden="true" data-lucide="circle-check-big" class="me-2 vasto-icon vasto-icon--sm"></i>{% trans "Thanks—your feedback was sent to the admin team." %}
   </div>
   {% endif %}
   {% if error_message %}
@@ -47,7 +47,7 @@
       </div>
       <div class="col-12 d-flex justify-content-end">
         <button type="submit" class="btn btn-primary btn-sm px-3">
-          <i class="bi bi-send me-1"></i>{% trans "Send feedback" %}
+          <i aria-hidden="true" data-lucide="send" class="me-1 vasto-icon vasto-icon--sm"></i>{% trans "Send feedback" %}
         </button>
       </div>
     </div>

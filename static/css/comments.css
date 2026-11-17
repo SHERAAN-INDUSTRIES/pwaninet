@@ -197,6 +197,10 @@
   font-size: 16px;
 }
 
+.comment-action .vasto-icon {
+  --vasto-icon-size: 16px;
+}
+
 /* Like Button - Active State */
 .comment-action.liked {
   color: #ef4444;
@@ -376,7 +380,13 @@
   transition: transform 0.2s ease;
 }
 
-.reply-toggle.expanded i {
+.reply-toggle .vasto-icon {
+  --vasto-icon-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.reply-toggle.expanded i,
+.reply-toggle.expanded .vasto-icon {
   transform: rotate(180deg);
 }
 
@@ -800,6 +810,10 @@
   opacity: 0.5;
 }
 
+.comments-empty .vasto-icon {
+  --vasto-icon-size: 32px;
+}
+
 .comments-empty p {
   font-size: 14px;
   margin: 0;
@@ -815,7 +829,8 @@
   color: var(--text-secondary);
 }
 
-.comments-loading i {
+.comments-loading i,
+.comments-loading .vasto-icon {
   animation: spin 1s linear infinite;
 }
 

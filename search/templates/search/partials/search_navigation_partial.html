@@ -227,7 +227,7 @@
           hx-history="true"
           class="search-form"
           autocomplete="off">
-      <i class="bi bi-search search-icon"></i>
+      <i aria-hidden="true" data-lucide="search" class="search-icon vasto-icon vasto-icon--sm"></i>
       <input type="text"
              name="q"
              class="search-input"
@@ -239,7 +239,7 @@
               class="search-clear"
               onclick="const inp=this.form.querySelector('input[name=\'q\']'); if(inp){ inp.value=''; inp.dispatchEvent(new Event('input')); }"
               aria-label="Clear search">
-        <i class="bi bi-x"></i>
+        <i aria-hidden="true" data-lucide="x" class="vasto-icon vasto-icon--sm"></i>
       </button>
     </form>
   </div>
@@ -286,7 +286,7 @@
          hx-target="#page-content-target"
          hx-push-url="true"
          class="nav-link {% if active_tab == 'all' %}active{% endif %}">
-        <i class="bi bi-grid-fill me-1"></i>
+        <i aria-hidden="true" data-lucide="grid-2x2" class="me-1 vasto-icon vasto-icon--sm"></i>
         <span>All</span>
         <span class="badge rounded-pill ms-1">{{ counts.all }}</span>
       </a>
@@ -298,7 +298,7 @@
          hx-target="#page-content-target"
          hx-push-url="true"
          class="nav-link {% if active_tab == 'people' %}active{% endif %}">
-        <i class="bi bi-people-fill me-1"></i>
+        <i aria-hidden="true" data-lucide="users" class="me-1 vasto-icon vasto-icon--sm"></i>
         <span>People</span>
         <span class="badge rounded-pill ms-1">{{ counts.people }}</span>
       </a>
@@ -310,7 +310,7 @@
          hx-target="#page-content-target"
          hx-push-url="true"
          class="nav-link {% if active_tab == 'documents' %}active{% endif %}">
-        <i class="bi bi-file-earmark-text-fill me-1"></i>
+        <i aria-hidden="true" data-lucide="file-text" class="me-1 vasto-icon vasto-icon--sm"></i>
         <span>Documents</span>
         <span class="badge rounded-pill ms-1">{{ counts.documents }}</span>
       </a>
@@ -322,7 +322,7 @@
          hx-target="#page-content-target"
          hx-push-url="true"
          class="nav-link {% if active_tab == 'posts' %}active{% endif %}">
-        <i class="bi bi-chat-square-text-fill me-1"></i>
+        <i aria-hidden="true" data-lucide="message-square-text" class="me-1 vasto-icon vasto-icon--sm"></i>
         <span>Posts</span>
         <span class="badge rounded-pill ms-1">{{ counts.posts }}</span>
       </a>
@@ -334,7 +334,7 @@
          hx-target="#page-content-target"
          hx-push-url="true"
          class="nav-link {% if active_tab == 'groups' %}active{% endif %}">
-        <i class="bi bi-shield-fill me-1"></i>
+        <i aria-hidden="true" data-lucide="shield" class="me-1 vasto-icon vasto-icon--sm"></i>
         <span>Groups</span>
         <span class="badge rounded-pill ms-1">{{ counts.groups }}</span>
       </a>

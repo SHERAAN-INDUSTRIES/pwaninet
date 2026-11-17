@@ -212,7 +212,7 @@
                     <button type="button" class="chooser-option-btn text-start" id="chooser-opt-native">
                         <div class="chooser-option-left">
                             <div class="chooser-option-icon chooser-icon-native">
-                                <i class="bi bi-phone-fill"></i>
+                                <i aria-hidden="true" data-lucide="smartphone" class="vasto-icon"></i>
                             </div>
                             <div>
                                 <div class="chooser-opt-name">vasto App</div>
@@ -226,7 +226,7 @@
                     <button type="button" class="chooser-option-btn text-start" id="chooser-opt-pwa">
                         <div class="chooser-option-left">
                             <div class="chooser-option-icon chooser-icon-pwa">
-                                <i class="bi bi-window-fullscreen"></i>
+                                <i aria-hidden="true" data-lucide="monitor" class="vasto-icon"></i>
                             </div>
                             <div>
                                 <div class="chooser-opt-name">vasto Web App (PWA)</div>
@@ -240,7 +240,7 @@
                     <button type="button" class="chooser-option-btn text-start" id="chooser-opt-chrome">
                         <div class="chooser-option-left">
                             <div class="chooser-option-icon chooser-icon-chrome">
-                                <i class="bi bi-compass"></i>
+                                <i aria-hidden="true" data-lucide="compass" class="vasto-icon"></i>
                             </div>
                             <div>
                                 <div class="chooser-opt-name">Continue in Chrome</div>

@@ -10,7 +10,7 @@
         data-post-id="{{ post.id }}"
         data-is-liked="{% if user_has_liked %}true{% else %}false{% endif %}"
         aria-label="{% if user_has_liked %}{% trans 'Unlike post' %}{% else %}{% trans 'Like post' %}{% endif %}">
-    <i class="bi {% if user_has_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
+    <i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if user_has_liked %} vasto-icon--filled text-danger{% else %}{% endif %}"></i>
 </button>
 {% else %}
 <button class="like-button btn {% if user_has_liked %}text-danger liked{% else %}text-muted{% endif %} btn-sm border-0 d-flex align-items-center justify-content-center w-100 engagement-button"
@@ -22,7 +22,7 @@
         data-post-id="{{ post.id }}"
         data-is-liked="{% if user_has_liked %}true{% else %}false{% endif %}"
         aria-label="{% if user_has_liked %}{% trans 'Unlike post' %}{% else %}{% trans 'Like post' %}{% endif %}">
-    <i class="bi {% if user_has_liked %}bi-heart-fill text-danger heart-pop{% else %}bi-heart{% endif %} fs-5"></i>
+    <i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if user_has_liked %} vasto-icon--filled text-danger heart-pop{% else %}{% endif %}"></i>
     <span class="like-count ms-1 fw-bold">{{ like_count|default:post.like_count }}</span>
 </button>
 {% endif %}

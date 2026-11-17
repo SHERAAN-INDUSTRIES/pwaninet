@@ -50,7 +50,7 @@
                     data-action="like"
                     data-comment-id="{{ comment.id }}"
                     aria-label="Like comment">
-                <i class="bi {% if comment.id in liked_comment_ids %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
+                <i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if comment.id in liked_comment_ids %} vasto-icon--filled{% else %}{% endif %}"></i>
                 <span>{{ comment.likes.count }}</span>
             </button>
             
@@ -58,7 +58,7 @@
                     data-action="reply"
                     data-comment-id="{{ comment.id }}"
                     aria-label="Reply to comment">
-                <i class="bi bi-chat-dots"></i>
+                <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                 Reply
             </button>
             
@@ -68,7 +68,7 @@
                         data-comment-id="{{ comment.id }}"
                         aria-label="More options"
                         aria-expanded="false">
-                    <i class="bi bi-three-dots"></i>
+                    <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon"></i>
                 </button>
             </div>
         </div>
@@ -80,7 +80,7 @@
                 data-reply-count="{{ comment.reply_count }}"
                 aria-expanded="false"
                 aria-controls="replies-{{ comment.id }}">
-            <i class="bi bi-chevron-down"></i>
+            <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon"></i>
             <span>View {{ comment.reply_count }} {{ comment.reply_count|pluralize:"reply,replies" }}</span>
         </button>
         {% endif %}

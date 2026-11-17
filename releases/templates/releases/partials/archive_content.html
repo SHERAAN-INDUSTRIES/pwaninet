@@ -8,7 +8,7 @@
            hx-push-url="true"
            hx-history="true"
            class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+            <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon me-2"></i>Back to Dashboard
         </a>
     </div>
 
@@ -18,7 +18,7 @@
         </div>
         <div class="card-body">
             <div class="alert alert-warning mb-4">
-                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon me-2"></i>
                 You are about to archive release <strong>{{ release.version }}</strong>. This action will hide the release from users and mark it as archived.
             </div>
 
@@ -72,7 +72,7 @@
 
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-warning">
-                        <i class="bi bi-archive me-2"></i>Archive Release
+                        <i aria-hidden="true" data-lucide="archive" class="vasto-icon me-2"></i>Archive Release
                     </button>
                     <a href="{% url 'release_dashboard' %}"
                        hx-get="{% url 'release_dashboard' %}"

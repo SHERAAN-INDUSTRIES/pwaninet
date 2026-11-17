@@ -1,0 +1,5 @@
+/* Application controls explicitly opt in to these rules. Spark is untouched. */
+.text-center > svg.vasto-icon.d-block { margin-inline: auto; }
+svg.vasto-icon--filled[data-lucide="heart"],
+svg.vasto-icon--filled[data-lucide="bookmark"],
+svg.vasto-icon--filled[data-lucide="star"] { fill: currentColor; }

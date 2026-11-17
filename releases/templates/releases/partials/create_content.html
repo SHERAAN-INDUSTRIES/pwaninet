@@ -8,7 +8,7 @@
            hx-push-url="true"
            hx-history="true"
            class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+            <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon me-2"></i>Back to Dashboard
         </a>
     </div>
 
@@ -104,7 +104,7 @@
                             <div class="col-md-1">
                                 <label class="form-label">&nbsp;</label>
                                 <button type="button" class="btn btn-outline-danger w-100" onclick="this.closest('.release-item').remove()">
-                                    <i class="bi bi-trash"></i>
+                                    <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i>
                                 </button>
                             </div>
                         </div>
@@ -119,17 +119,17 @@
                 </div>
 
                 <button type="button" class="btn btn-outline-secondary mb-3" onclick="addReleaseItem()">
-                    <i class="bi bi-plus-lg me-2"></i>Add Item
+                    <i aria-hidden="true" data-lucide="plus" class="vasto-icon me-2"></i>Add Item
                 </button>
 
                 <hr class="my-4">
 
                 <div class="d-flex gap-2">
                     <button type="submit" name="action" value="draft" class="btn btn-primary">
-                        <i class="bi bi-save me-2"></i>Save as Draft
+                        <i aria-hidden="true" data-lucide="save" class="vasto-icon me-2"></i>Save as Draft
                     </button>
                     <button type="submit" name="action" value="publish" class="btn btn-success">
-                        <i class="bi bi-upload me-2"></i>Publish
+                        <i aria-hidden="true" data-lucide="upload" class="vasto-icon me-2"></i>Publish
                     </button>
                     <a href="{% url 'release_dashboard' %}"
                        hx-get="{% url 'release_dashboard' %}"
@@ -179,7 +179,7 @@ window.addReleaseItem = function() {
             <div class="col-md-1">
                 <label class="form-label">&nbsp;</label>
                 <button type="button" class="btn btn-outline-danger w-100" onclick="this.closest('.release-item').remove()">
-                    <i class="bi bi-trash"></i>
+                    <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i>
                 </button>
             </div>
         </div>

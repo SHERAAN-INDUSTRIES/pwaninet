@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 from django.test import TestCase
 
 from pwanimate.ai.gateway.types import LLMResponse
-from pwanimate.models import PwanimateConversation, SparkAgentRun
+from pwanimate.models import PwanimateConversation, SparkAgentInteraction, SparkAgentRun
 from pwanimate.orchestrator.service import PwanimateOrchestrator
 
 
@@ -139,3 +139,52 @@ class ClarificationResumeTests(TestCase):
                          % (resume.status_code, getattr(resume, 'data', None)))
         self.assertNotEqual(run.status, 'failed')
         self.assertGreaterEqual(calls['answer'], 1)
+
+    def test_fresh_prompt_while_clarification_is_waiting_supersedes_it(self):
+        """A genuinely new student turn must not be trapped behind the
+        new-task guard while a clarification run is paused in WAITING.
+        """
+        gateway = Mock()
+        gateway.generate.side_effect = [
+            reply({'update': 'I need the time first.', 'question': 'When should I remind you?', 'calls': []}),
+            reply({'update': 'That helps.', 'calls': []}),
+            answer('Reminder scheduled for tomorrow at 5 pm.'),
+        ]
+        run = self._pause_with_question(gateway)
+        self.assertEqual(run.status, SparkAgentRun.STATUS_WAITING)
+        # The student moves on to a genuinely different question instead of
+        # answering the parked one: the parked clarification must be abandoned
+        # server-side, and this turn must be allowed to start a new task.
+        fresh = self._post(gateway, {'message': 'What is photosynthesis?'})
+        print('[supersede] fresh status:', fresh.status_code, getattr(fresh, 'data', None))
+        run.refresh_from_db()
+        print('[supersede] old run status now:', run.status, '| wait_reason:', run.wait_reason, '| result_msg:', run.result_message_id)
+        self.assertEqual(fresh.status_code, 200, getattr(fresh, 'data', None))
+        self.assertEqual(run.status, 'cancelled')
+        self.assertFalse(
+            SparkAgentInteraction.objects.filter(run=run, status='pending').exists())
+
+    def test_ordinary_prompt_after_clarification_resume_completes_and_runs(self):
+        """Full lifecycle: clarification -> answer -> resume -> completion, then
+        an ordinary prompt must start a new, independent task instead of being
+        rejected by the still-orphaned active-run guard."""
+        gateway = Mock()
+        gateway.generate.side_effect = [
+            reply({'update': 'I need the time first.', 'question': 'When should I remind you?', 'calls': []}),
+            reply({'calls': []}),
+            final_answer,
+        ]
+        run = self._pause_with_question(gateway)
+
+        resume = self._post(gateway, {'resume_run_id': str(run.id),
+                                      'clarification_answer': 'Tomorrow at 5 pm'})
+        self.assertEqual(resume.status_code, 200, getattr(resume, 'data', None))
+        run.refresh_from_db()
+        self.assertEqual(run.status, 'completed')
+
+        ordinary = self._post(gateway, {'message': 'What is photosynthesis?'})
+        self.assertEqual(ordinary.status_code, 200, getattr(ordinary, 'data', None))
+        # The ordinary turn started a brand-new task instead of being rejected.
+        self.assertEqual(
+            SparkAgentRun.objects.filter(user=self.user, user_message__conversation=self.conversation).count(),
+            2, 'clarification run + the new ordinary task run')

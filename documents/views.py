@@ -1229,7 +1229,12 @@ def serve_download(request, share_id):
         if data != str(document.share_id):
             return HttpResponseForbidden("Download token does not match this document.")
         from documents.access_policy import DocumentAccessPolicy
-        if not DocumentAccessPolicy.can_read(request.user, document):
+        # Generated files already exist before optional indexing/previews.
+        # Only their authenticated owner may download while processing; this
+        # does not expose non-ready repository uploads or forwarded links.
+        own_generated_file = bool(document.is_ai_generated and document.is_available
+            and request.user.is_authenticated and document.uploaded_by_id == request.user.pk)
+        if not DocumentAccessPolicy.can_read(request.user, document, require_ready=not own_generated_file):
             return HttpResponseNotFound('Document not found')
 
         from .engagement.models import DocumentDownload

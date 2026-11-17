@@ -1956,12 +1956,12 @@ def extract_opengraph_metadata(html, url):
 def unread_message_count(request):
     """Return HTML for unread message count badge (similar to notifications)."""
     if not request.user or not request.user.is_authenticated:
-        return HttpResponse('<i class="bi bi-chat-dots-fill"></i>')
+        return HttpResponse('<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>')
     from .context_processors import get_cached_unread_message_count
     total_unread = get_cached_unread_message_count(request.user)
 
     # Build HTML similar to notification badge
-    html = '<i class="bi bi-chat-dots-fill"></i>'
+    html = '<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>'
     if total_unread > 0:
         html += f'''
             <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-danger border border-light"

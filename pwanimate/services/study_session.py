@@ -2379,7 +2379,7 @@ class StudyCollectionService:
             raise ValueError("Only assistant summary messages can be saved to a collection.")
 
         fmt = (file_format or "pdf").strip().lower()
-        if fmt not in {"pdf", "docx"}:
+        if fmt not in {"pdf", "docx", "doc", "pptx"}:
             raise ValueError("Choose PDF or DOCX format.")
 
         collection: Optional[Collection] = None

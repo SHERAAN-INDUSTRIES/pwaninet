@@ -35,7 +35,7 @@
   </div>
   {% empty %}
   <div class="text-center py-4 text-muted">
-    <i class="bi bi-clock fs-2 d-block mb-2"></i>
+    <i aria-hidden="true" data-lucide="clock" class="fs-2 d-block mb-2 vasto-icon vasto-icon--lg"></i>
     <p>Admins will review your feedback and reply here shortly.</p>
   </div>
   {% endfor %}
@@ -49,7 +49,7 @@
           <textarea class="form-control" name="message" rows="3" placeholder="Add a reply or more information..." required></textarea>
         </div>
         <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send me-2"></i>Send Reply</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i aria-hidden="true" data-lucide="send" class="me-2 vasto-icon vasto-icon--sm"></i>Send Reply</button>
         </div>
       </form>
     </div>

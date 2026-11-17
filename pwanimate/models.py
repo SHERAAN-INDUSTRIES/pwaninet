@@ -1154,8 +1154,8 @@ class PendingAction(models.Model):
 
 class SparkMemoryPreference(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    enabled = models.BooleanField(default=False)
-    consent_version = models.PositiveIntegerField(default=0)
+    enabled = models.BooleanField(default=True)
+    consent_version = models.PositiveIntegerField(default=1)
     revision = models.PositiveIntegerField(default=0)
     reset_at = models.DateTimeField(null=True, blank=True)
     automatic_extraction = models.BooleanField(default=False)

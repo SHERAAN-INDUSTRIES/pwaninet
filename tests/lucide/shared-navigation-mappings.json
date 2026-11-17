@@ -1,0 +1,192 @@
+{
+  "templates/partials/desktop_left_rail.html": {
+    "bi-house-door-fill": {
+      "lucide": "house",
+      "count": 1
+    },
+    "bi-people-fill": {
+      "lucide": "users",
+      "count": 1
+    },
+    "bi-chat-dots-fill": {
+      "lucide": "message-circle",
+      "count": 1
+    },
+    "bi-folder2-open": {
+      "lucide": "folder-open",
+      "count": 1
+    },
+    "bi-journal-bookmark-fill": {
+      "lucide": "book-marked",
+      "count": 1
+    },
+    "bi-bell-fill": {
+      "lucide": "bell",
+      "count": 1
+    },
+    "bi-person-fill": {
+      "lucide": "user-round",
+      "count": 1
+    },
+    "bi-gear-fill": {
+      "lucide": "settings",
+      "count": 1
+    },
+    "bi-cloud-arrow-down-fill": {
+      "lucide": "cloud-download",
+      "count": 1
+    },
+    "bi-cloud-arrow-up-fill": {
+      "lucide": "cloud-upload",
+      "count": 1
+    },
+    "bi-shield-lock-fill": {
+      "lucide": "shield-check",
+      "count": 1
+    },
+    "bi-database-fill-gear": {
+      "lucide": "database",
+      "count": 1
+    },
+    "bi-plus-circle-fill": {
+      "lucide": "circle-plus",
+      "count": 1
+    }
+  },
+  "templates/partials/top_nav.html": {
+    "bi-house-fill": {
+      "lucide": "house",
+      "count": 1
+    },
+    "bi-people-fill": {
+      "lucide": "users",
+      "count": 1
+    },
+    "bi-chat-dots-fill": {
+      "lucide": "message-circle",
+      "count": 1
+    },
+    "bi-plus-circle-fill": {
+      "lucide": "circle-plus",
+      "count": 1
+    },
+    "bi-bell-fill": {
+      "lucide": "bell",
+      "count": 2
+    },
+    "bi-shield-shaded": {
+      "lucide": "shield-check",
+      "count": 1
+    },
+    "bi-circle-half": {
+      "lucide": "contrast",
+      "count": 1
+    },
+    "bi-sun": {
+      "lucide": "sun",
+      "count": 1
+    },
+    "bi-moon": {
+      "lucide": "moon",
+      "count": 1
+    },
+    "bi-display": {
+      "lucide": "monitor",
+      "count": 1
+    },
+    "bi-person-fill": {
+      "lucide": "user-round",
+      "count": 1
+    }
+  },
+  "templates/partials/default_context_rail.html": {
+    "bi-stars": {
+      "lucide": "sparkles",
+      "count": 1
+    },
+    "bi-file-earmark-text": {
+      "lucide": "file-text",
+      "count": 1
+    },
+    "bi-chevron-right": {
+      "lucide": "chevron-right",
+      "count": 2
+    },
+    "bi-people": {
+      "lucide": "users",
+      "count": 1
+    }
+  },
+  "templates/partials/_form_field.html": {
+    "bi-chevron-right": {
+      "lucide": "chevron-right",
+      "count": 1
+    },
+    "bi-exclamation-triangle-fill": {
+      "lucide": "triangle-alert",
+      "count": 1
+    }
+  },
+  "templates/base.html": {
+    "bi-shield-lock-fill": {
+      "lucide": "shield-check",
+      "count": 1
+    },
+    "bi-x-lg": {
+      "lucide": "x",
+      "count": 1
+    },
+    "bi-arrow-up": {
+      "lucide": "arrow-up",
+      "count": 1
+    },
+    "bi-phone": {
+      "lucide": "smartphone",
+      "count": 1
+    },
+    "bi-link-45deg": {
+      "lucide": "link",
+      "count": 1
+    },
+    "bi-clipboard": {
+      "lucide": "clipboard",
+      "count": 1
+    },
+    "bi-check2": {
+      "lucide": "check",
+      "count": 1
+    },
+    "bi-stars": {
+      "lucide": "sparkles",
+      "count": 1
+    },
+    "bi-box-arrow-in-right": {
+      "lucide": "log-in",
+      "count": 1
+    },
+    "bi-person-plus": {
+      "lucide": "user-round-plus",
+      "count": 1
+    },
+    "bi-house-fill": {
+      "lucide": "house",
+      "count": 1
+    },
+    "bi-people-fill": {
+      "lucide": "users",
+      "count": 1
+    },
+    "bi-chat-dots-fill": {
+      "lucide": "message-circle",
+      "count": 1
+    },
+    "bi-plus-circle-fill": {
+      "lucide": "circle-plus",
+      "count": 1
+    },
+    "bi-person-circle": {
+      "lucide": "circle-user-round",
+      "count": 1
+    }
+  }
+}

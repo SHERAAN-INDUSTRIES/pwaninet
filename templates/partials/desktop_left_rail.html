@@ -11,7 +11,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-house-door-fill left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="house" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "Home" %}</span>
         </a>
 
@@ -23,7 +23,7 @@
            hx-push-url="true"
            hx-history="true">
             <span class="position-relative d-inline-flex align-items-center justify-content-center">
-                <i class="bi bi-people-fill left-rail-icon"></i>
+                <i aria-hidden="true" data-lucide="users" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
                 <span class="nav-groups-dot" title="{% trans 'New group activity' %}" style="{% if not has_unread_group_activity %}display: none;{% endif %}"></span>
             </span>
             <span class="left-rail-label">{% trans "Groups" %}</span>
@@ -35,7 +35,7 @@
            data-bypass-htmx="true"
            hx-boost="false">
             <span class="position-relative d-inline-flex align-items-center justify-content-center">
-                <i class="bi bi-chat-dots-fill left-rail-icon"></i>
+                <i aria-hidden="true" data-lucide="message-circle" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
                 {% if unread_messages_count > 0 %}
                     <span class="position-absolute badge rounded-pill bg-danger messages-badge" style="top: -4px; right: -8px; font-size: 0.65rem;">
                         {{ unread_messages_count }}
@@ -57,7 +57,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-folder2-open left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="folder-open" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "Documents" %}</span>
         </a>
 
@@ -69,7 +69,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-journal-bookmark-fill left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="book-marked" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "My Library" %}</span>
         </a>
 
@@ -98,7 +98,7 @@
            hx-push-url="true"
            hx-history="true">
             <span class="position-relative d-inline-flex align-items-center justify-content-center">
-                <i class="bi bi-bell-fill left-rail-icon"></i>
+                <i aria-hidden="true" data-lucide="bell" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
                 {% if unread_notifications_count > 0 %}
                     <span class="position-absolute badge rounded-pill bg-danger notification-badge" style="top: -4px; right: -8px; font-size: 0.65rem;">
                         {{ unread_notifications_count }}
@@ -123,7 +123,7 @@
             {% if request.user.profile_pic %}
                 <img src="{{ request.user.profile_pic.url }}" class="rounded-circle border left-rail-icon" style="width: 24px; height: 24px; object-fit: cover;" alt="{% trans 'Profile' %}">
             {% else %}
-                <i class="bi bi-person-fill left-rail-icon"></i>
+                <i aria-hidden="true" data-lucide="user-round" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             {% endif %}
             <span class="left-rail-label">{% trans "Profile" %}</span>
         </a>
@@ -135,7 +135,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-gear-fill left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="settings" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "Settings" %}</span>
         </a>
 
@@ -146,7 +146,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-cloud-arrow-down-fill left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="cloud-download" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "Download App" %}</span>
         </a>
 
@@ -154,7 +154,7 @@
            class="left-rail-link nav-chip {% if request.resolver_match.namespace == 'uploads_page' %}active{% endif %}"
            data-bypass-htmx="true"
            hx-boost="false">
-            <i class="bi bi-cloud-arrow-up-fill left-rail-icon"></i>
+            <i aria-hidden="true" data-lucide="cloud-upload" class="left-rail-icon vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label">{% trans "Uploads" %}</span>
         </a>
 
@@ -166,7 +166,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-shield-lock-fill left-rail-icon text-primary"></i>
+            <i aria-hidden="true" data-lucide="shield-check" class="left-rail-icon text-primary vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label text-primary fw-bold">{% trans "Admin Panel" %}</span>
         </a>
         <a href="{% url 'admin:index' %}"
@@ -174,7 +174,7 @@
            title="{% trans 'Django Admin Site' %}"
            data-bypass-htmx="true"
            hx-boost="false">
-            <i class="bi bi-database-fill-gear left-rail-icon text-warning"></i>
+            <i aria-hidden="true" data-lucide="database" class="left-rail-icon text-warning vasto-icon vasto-icon--lg"></i>
             <span class="left-rail-label text-warning fw-bold">{% trans "Django Admin" %}</span>
         </a>
         {% endif %}
@@ -193,7 +193,7 @@
                hx-swap="innerHTML"
                hx-push-url="true"
                hx-history="true">
-                <i class="bi bi-plus-circle-fill fs-5"></i>
+                <i aria-hidden="true" data-lucide="circle-plus" class="fs-5 vasto-icon"></i>
                 <span class="fw-bold">{% trans "Post" %}</span>
             </a>
         </div>

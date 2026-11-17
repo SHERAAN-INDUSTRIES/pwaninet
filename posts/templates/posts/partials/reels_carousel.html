@@ -15,10 +15,10 @@
             <!-- Scroll navigation arrows for desktop -->
             <div class="d-none d-md-flex align-items-center gap-1">
                 <button type="button" class="btn btn-sm btn-light rounded-circle reels-carousel-arrow reels-carousel-prev p-0 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" aria-label="{% trans 'Scroll left' %}" onclick="(function(btn){ const track = btn.closest('.reels-carousel-shelf').querySelector('.reels-carousel-track'); if(track) track.scrollBy({left: -320, behavior: 'smooth'}); })(this);">
-                    <i class="bi bi-chevron-left" style="font-size: 11px;"></i>
+                    <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon" style="font-size: 11px;"></i>
                 </button>
                 <button type="button" class="btn btn-sm btn-light rounded-circle reels-carousel-arrow reels-carousel-next p-0 d-flex align-items-center justify-content-center" style="width: 26px; height: 26px;" aria-label="{% trans 'Scroll right' %}" onclick="(function(btn){ const track = btn.closest('.reels-carousel-shelf').querySelector('.reels-carousel-track'); if(track) track.scrollBy({left: 320, behavior: 'smooth'}); })(this);">
-                    <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
+                    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon" style="font-size: 11px;"></i>
                 </button>
             </div>
 
@@ -28,7 +28,7 @@
                style="font-size: 13px;"
                data-action="fullscreen"
                onclick="(function(el){ const shelf = el.closest('.reels-carousel-shelf'); const firstCard = shelf?.querySelector('.reels-carousel-card'); const vm = window.videoManager || window.vastoVideoManager; if (firstCard && vm) { vm.openFullscreenReels(firstCard.dataset.postId); } })(this);">
-                {% trans "View all" %} <i class="bi bi-chevron-right" style="font-size: 10px;"></i>
+                {% trans "View all" %} <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon" style="font-size: 10px;"></i>
             </a>
         </div>
     </div>
@@ -69,7 +69,7 @@
                         <img src="{{ poster }}" class="reels-carousel-poster w-100 h-100 object-fit-cover" alt="" loading="lazy">
                     {% else %}
                         <div class="w-100 h-100 bg-dark d-flex align-items-center justify-content-center">
-                            <i class="bi bi-film text-white-50 fs-2"></i>
+                            <i aria-hidden="true" data-lucide="film" class="vasto-icon text-white-50 fs-2"></i>
                         </div>
                     {% endif %}
                 {% endwith %}

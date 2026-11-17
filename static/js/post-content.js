@@ -114,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="modal-body text-center py-4">
                         <div id="externalLinkLogo" class="d-flex align-items-center justify-content-center mx-auto mb-3 rounded-circle bg-body-secondary" style="width: 76px; height: 76px;" aria-hidden="true">
-                            <i class="bi bi-globe2 text-primary" style="font-size: 2.25rem;"></i>
+                            <i aria-hidden="true" data-lucide="globe" class="vasto-icon text-primary" style="--vasto-icon-size: 2.25rem;"></i>
                         </div>
                         <p class="mb-2">You are about to leave vasto and visit an external website:</p>
                         <p class="mb-4"><strong id="externalLinkUrl" style="word-break: break-all; color: var(--bs-primary);"></strong></p>
@@ -190,8 +190,9 @@ document.addEventListener('DOMContentLoaded', function() {
             image.style.objectFit = 'contain';
             image.onerror = () => {
                 const fallback = document.createElement('i');
-                fallback.className = 'bi bi-globe2 text-primary';
-                fallback.style.fontSize = '2.25rem';
+                fallback.setAttribute('data-lucide', 'globe');
+                fallback.className = 'vasto-icon text-primary';
+                fallback.style.setProperty('--vasto-icon-size', '2.25rem');
                 logo.replaceChildren(fallback);
             };
             logo.appendChild(image);
@@ -199,8 +200,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const fallback = document.createElement('i');
-        fallback.className = 'bi bi-globe2 text-primary';
-        fallback.style.fontSize = '2.25rem';
+        fallback.setAttribute('data-lucide', 'globe');
+        fallback.className = 'vasto-icon text-primary';
+        fallback.style.setProperty('--vasto-icon-size', '2.25rem');
         logo.appendChild(fallback);
     }
 

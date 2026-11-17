@@ -46,7 +46,7 @@
               class="d-flex align-items-center gap-2">
             <div class="input-group">
                 <span class="input-group-text border-0 rounded-start-pill ps-3" style="background-color: #e9ecef;">
-                    <i class="bi bi-search text-muted"></i>
+                    <i aria-hidden="true" data-lucide="search" class="vasto-icon text-muted"></i>
                 </span>
                 <input type="text" name="q" class="form-control border-0 rounded-end-pill"
                        placeholder="Search friends & groups..."
@@ -57,7 +57,7 @@
 
     {% if query %}
         <!-- Users Results -->
-        <h6 class="fw-bold text-uppercase text-muted small mb-3"><i class="bi bi-people me-1"></i>People</h6>
+        <h6 class="fw-bold text-uppercase text-muted small mb-3"><i aria-hidden="true" data-lucide="users" class="vasto-icon me-1"></i>People</h6>
         <div class="bg-white rounded-3 shadow-sm mb-4 overflow-hidden">
             {% for user in users %}
             <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
@@ -84,14 +84,14 @@
             </div>
             {% empty %}
             <div class="text-center py-4 text-muted">
-                <i class="bi bi-person-x fs-3"></i>
+                <i aria-hidden="true" data-lucide="user-round-x" class="vasto-icon fs-3"></i>
                 <p class="small mt-2 mb-0">No people found for "{{ query }}"</p>
             </div>
             {% endfor %}
         </div>
 
         <!-- Groups Results -->
-        <h6 class="fw-bold text-uppercase text-muted small mb-3"><i class="bi bi-shield me-1"></i>Groups</h6>
+        <h6 class="fw-bold text-uppercase text-muted small mb-3"><i aria-hidden="true" data-lucide="shield" class="vasto-icon me-1"></i>Groups</h6>
         <div class="bg-white rounded-3 shadow-sm mb-4 overflow-hidden">
             {% for group in groups %}
             <div class="d-flex align-items-center justify-content-between p-3 border-bottom">
@@ -118,7 +118,7 @@
             </div>
             {% empty %}
             <div class="text-center py-4 text-muted">
-                <i class="bi bi-shield-x fs-3"></i>
+                <i aria-hidden="true" data-lucide="shield-x" class="vasto-icon fs-3"></i>
                 <p class="small mt-2 mb-0">No groups found for "{{ query }}"</p>
             </div>
             {% endfor %}
@@ -126,7 +126,7 @@
 
     {% else %}
     <div class="text-center py-5 text-muted">
-        <i class="bi bi-search fs-1"></i>
+        <i aria-hidden="true" data-lucide="search" class="vasto-icon fs-1"></i>
         <p class="mt-3">Search for friends or groups above</p>
     </div>
     {% endif %}

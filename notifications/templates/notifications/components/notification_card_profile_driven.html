@@ -1,4 +1,5 @@
 {% load static %}
+{% load notifications_rendering %}
 {# Profile-Driven Notification Card Component #}
 {# Uses the canonical NotificationPayload structure #}
 {# Args: payload (NotificationPayload object), profile, message, components, preview, actions, status, interactions, navigation, expansion, aggregation #}
@@ -49,7 +50,7 @@
                   <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
                 {% else %}
                   <div class="d-flex align-items-center justify-content-center h-100">
-                    <i class="bi bi-person" style="color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="color: var(--text-secondary);"></i>
                   </div>
                 {% endif %}
               </a>
@@ -74,7 +75,7 @@
                   {% if payload.context.avatar_url %}
                     <img src="{{ payload.context.avatar_url }}" alt="{{ payload.context.name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                   {% else %}
-                    <i class="bi bi-people" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
                   {% endif %}
                 </a>
                 {% if payload.actors and payload.actors.0 %}
@@ -86,7 +87,7 @@
                     {% if actor.avatar %}
                       <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
                     {% else %}
-                      <i class="bi bi-person" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
+                      <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
                     {% endif %}
                   </a>
                   {% endwith %}
@@ -108,7 +109,7 @@
                 {% if actor.avatar %}
                   <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
                 {% else %}
-                  <i class="bi bi-person" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
+                  <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
                 {% endif %}
               </a>
               {% endwith %}
@@ -129,7 +130,7 @@
                   {% if actor.avatar %}
                     <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
                   {% else %}
-                    <i class="bi bi-person" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
                   {% endif %}
                 </a>
                 {% else %}
@@ -138,7 +139,7 @@
                   {% if actor.avatar %}
                     <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
                   {% else %}
-                    <i class="bi bi-person" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 0.85rem; color: var(--text-secondary);"></i>
                   {% endif %}
                 </div>
                 {% endif %}
@@ -160,7 +161,7 @@
               {% if actor.avatar %}
                 <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
               {% else %}
-                <i class="bi bi-person" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
+                <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
               {% endif %}
             </a>
             {% else %}
@@ -169,7 +170,7 @@
               {% if actor.avatar %}
                 <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;" loading="lazy">
               {% else %}
-                <i class="bi bi-person" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
+                <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
               {% endif %}
             </div>
             {% endif %}
@@ -179,7 +180,7 @@
       {% else %}
         <div class="rounded-circle border d-flex align-items-center justify-content-center"
              style="width: 56px; height: 56px; background-color: var(--bg-secondary);">
-          <i class="bi bi-bell" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
+          <i aria-hidden="true" data-lucide="bell" class="vasto-icon" style="font-size: 1.75rem; color: var(--text-secondary);"></i>
         </div>
       {% endif %}
     </div>
@@ -203,7 +204,7 @@
       {# Comment Content Preview with Truncation #}
       {% if payload.resource.content %}
         <div class="notif-comment-preview text-break mb-2" title="{{ payload.resource.content }}">
-          <i class="bi bi-chat-left-quote-fill notif-quote-icon flex-shrink-0"></i>
+          <i aria-hidden="true" data-lucide="message-square-quote" class="vasto-icon notif-quote-icon flex-shrink-0"></i>
           <span class="notif-comment-text">“{{ payload.resource.content|truncatechars:120 }}”</span>
         </div>
       {% endif %}
@@ -213,7 +214,7 @@
         <div class="context-header d-flex align-items-center gap-2 mb-1"
              style="font-size: 0.82rem; color: var(--text-muted);">
           {% if payload.context.icon %}
-            <i class="bi bi-{{ payload.context.icon }}"></i>
+            <i aria-hidden="true" data-lucide="{{ payload.context.icon|lucide_icon }}" class="vasto-icon"></i>
           {% endif %}
           {% if interactions.context_header.behavior == 'OPEN_CONTEXT' %}
             <span style="cursor: pointer;">{{ payload.context.name }}</span>
@@ -256,7 +257,7 @@
                   {% if actor.avatar %}
                     <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                   {% else %}
-                    <i class="bi bi-person" style="font-size: 1rem; color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 1rem; color: var(--text-secondary);"></i>
                   {% endif %}
                 </div>
                 <div class="d-flex flex-column">
@@ -274,7 +275,7 @@
                   {% if actor.avatar %}
                     <img src="{{ actor.avatar }}" alt="{{ actor.name }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" loading="lazy">
                   {% else %}
-                    <i class="bi bi-person" style="font-size: 1rem; color: var(--text-secondary);"></i>
+                    <i aria-hidden="true" data-lucide="user" class="vasto-icon" style="font-size: 1rem; color: var(--text-secondary);"></i>
                   {% endif %}
                 </div>
                 <div class="d-flex flex-column">
@@ -310,7 +311,7 @@
                           hx-swap="outerHTML"
                           onclick="event.stopPropagation();"
                           {% if not action.enabled %}disabled{% endif %}>
-                    {% if action.icon %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
+                    {% if action.icon %}<i aria-hidden="true" data-lucide="{{ action.icon|lucide_icon }}" class="vasto-icon"></i>{% endif %}
                     {{ action.label }}
                   </button>
                 {% else %}
@@ -329,7 +330,7 @@
                      style="background-color: {% if action.style == 'primary' %}var(--brand){% elif action.style == 'danger' %}var(--danger){% elif action.style == 'success' %}var(--success, #198754){% else %}var(--bg-secondary){% endif %}; color: {% if action.style in 'primary danger success' %}white{% else %}var(--text-primary){% endif %}; text-decoration: none; border-radius: 20px; font-weight: 600;"
                      onclick="{% if action.id == 'SEE_WHATS_NEW' %}event.preventDefault(); event.stopPropagation(); if (typeof window.openWhatsNewModal === 'function') { window.openWhatsNewModal('{{ payload.raw_data.target_id }}', event); }{% elif action.id == 'DOWNLOAD_APK' %}event.stopPropagation(); markAsRead('{{ payload.identity.notification_id }}', this); if (typeof window.triggervastoDownload === 'function') { event.preventDefault(); window.triggervastoDownload('{{ action.url }}'); }{% else %}event.stopPropagation(); markAsRead('{{ payload.identity.notification_id }}', this);{% endif %}"
                      {% if not action.enabled %}style="opacity: 0.5; pointer-events: none;"{% endif %}>
-                    {% if action.icon %}<i class="bi bi-{{ action.icon }}"></i>{% endif %}
+                    {% if action.icon %}<i aria-hidden="true" data-lucide="{{ action.icon|lucide_icon }}" class="vasto-icon"></i>{% endif %}
                     {{ action.label }}
                   </a>
                 {% endif %}
@@ -343,7 +344,7 @@
                   style="background: none; border: none; color: var(--text-secondary);"
                   onclick="event.stopPropagation(); toggleExpand('{{ payload.identity.notification_id }}', this);"
                   title="Show more">
-            <i class="bi bi-chevron-down" style="font-size: 1rem;"></i>
+            <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon" style="font-size: 1rem;"></i>
           </button>
         {% endif %}
 
@@ -385,30 +386,30 @@
                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
               <div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">
                 {% if payload.resource.type.value == 'DOCUMENT' or payload.resource.type == 'DOCUMENT' or payload.type in 'DOCUMENT_SHARED POST_DOCUMENT_SHARED' %}
-                  <i class="bi bi-file-earmark-text" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                  <i aria-hidden="true" data-lucide="file-text" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
                 {% elif payload.resource.type.value == 'POST' or payload.resource.type == 'POST' or payload.resource.type.value == 'COMMENT' or payload.resource.type == 'COMMENT' %}
-                  <i class="bi bi-chat-text" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                  <i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
                 {% elif payload.resource.type.value == 'GROUP' or payload.resource.type == 'GROUP' %}
-                  <i class="bi bi-people" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                  <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
                 {% else %}
-                  <i class="bi bi-file-earmark" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                  <i aria-hidden="true" data-lucide="file" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
                 {% endif %}
               </div>
             {% elif payload.resource.type.value == 'DOCUMENT' or payload.resource.type == 'DOCUMENT' or payload.type in 'DOCUMENT_SHARED POST_DOCUMENT_SHARED' %}
               <div class="d-flex align-items-center justify-content-center h-100">
-                <i class="bi bi-file-earmark-text" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="file-text" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
               </div>
             {% elif payload.resource.type.value == 'POST' or payload.resource.type == 'POST' or payload.resource.type.value == 'COMMENT' or payload.resource.type == 'COMMENT' %}
               <div class="d-flex align-items-center justify-content-center h-100">
-                <i class="bi bi-chat-text" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
               </div>
             {% elif payload.resource.type.value == 'GROUP' or payload.resource.type == 'GROUP' %}
               <div class="d-flex align-items-center justify-content-center h-100">
-                <i class="bi bi-people" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
               </div>
             {% else %}
               <div class="d-flex align-items-center justify-content-center h-100">
-                <i class="bi bi-file-earmark" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="file" class="vasto-icon" style="color: var(--text-secondary); font-size: 1.35rem;"></i>
               </div>
             {% endif %}
           {% if payload.resource.url %}
@@ -427,15 +428,15 @@ if (typeof window.toggleExpand !== 'function') {
   window.toggleExpand = function(notificationId, button) {
     const expandedDiv = document.getElementById('expanded-actors-' + notificationId);
     if (!expandedDiv) return;
-    const icon = button.querySelector('i');
+    const icon = button.querySelector('[data-lucide]');
     if (expandedDiv.style.maxHeight === '0px' || !expandedDiv.style.maxHeight) {
       expandedDiv.style.maxHeight = expandedDiv.scrollHeight + 'px';
       expandedDiv.style.opacity = '1';
-      if (icon) { icon.classList.remove('bi-chevron-down'); icon.classList.add('bi-chevron-up'); }
+      if (icon && window.VastoIcons) { window.VastoIcons.setIcon(icon, 'chevron-up'); }
     } else {
       expandedDiv.style.maxHeight = '0px';
       expandedDiv.style.opacity = '0';
-      if (icon) { icon.classList.remove('bi-chevron-up'); icon.classList.add('bi-chevron-down'); }
+      if (icon && window.VastoIcons) { window.VastoIcons.setIcon(icon, 'chevron-down'); }
     }
   };
 }

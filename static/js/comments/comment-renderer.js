@@ -100,7 +100,6 @@ const CommentRenderer = {
    */
   renderActions(commentData, isOwner, replyCount) {
     const likeClass = commentData.is_liked ? 'liked' : '';
-    const likeIcon = commentData.is_liked ? 'bi-heart-fill' : 'bi-heart';
 
     return `
       <div class="comment-actions">
@@ -108,7 +107,7 @@ const CommentRenderer = {
                 data-action="like"
                 data-comment-id="${commentData.id}"
                 aria-label="Like comment">
-          <i class="bi ${likeIcon}"></i>
+          <i aria-hidden="true" data-lucide="heart" class="vasto-icon${commentData.is_liked ? ' vasto-icon--filled' : ''}"></i>
           <span>${commentData.like_count || 0}</span>
         </button>
         
@@ -116,7 +115,7 @@ const CommentRenderer = {
                 data-action="reply"
                 data-comment-id="${commentData.id}"
                 aria-label="Reply to comment">
-          <i class="bi bi-chat-dots"></i>
+          <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
           Reply
         </button>
         
@@ -126,7 +125,7 @@ const CommentRenderer = {
                   data-comment-id="${commentData.id}"
                   aria-label="More options"
                   aria-expanded="false">
-            <i class="bi bi-three-dots"></i>
+            <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon"></i>
           </button>
         </div>
       </div>
@@ -143,7 +142,7 @@ const CommentRenderer = {
               data-comment-id="${commentId}"
               aria-expanded="false"
               aria-controls="replies-${commentId}">
-        <i class="bi bi-chevron-down"></i>
+        <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon"></i>
         <span>View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
       </button>
     `;
@@ -158,7 +157,7 @@ const CommentRenderer = {
         <div class="composer-header">
           Replying to <span>${this.escapeHtml(parentAuthorName)}</span>
           <button class="composer-close" data-action="close-composer" aria-label="Cancel reply">
-            <i class="bi bi-x-lg"></i>
+            <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
           </button>
         </div>
         <div class="comment-attachment-preview-container"></div>
@@ -170,10 +169,10 @@ const CommentRenderer = {
         <div class="composer-actions">
           <div class="composer-tools">
             <button type="button" class="composer-tool-btn composer-media-trigger" data-media-picker data-input="#composer-input-${commentId}" aria-label="Emoji, GIFs and Stickers" title="Emoji, GIFs & Stickers">
-              <i class="bi bi-emoji-smile"></i>
+              <i aria-hidden="true" data-lucide="smile" class="vasto-icon"></i>
             </button>
             <label class="composer-tool-btn mb-0" style="cursor: pointer;" title="Attach photo as sticker">
-              <i class="bi bi-camera"></i>
+              <i aria-hidden="true" data-lucide="camera" class="vasto-icon"></i>
               <input type="file" class="comment-photo-input d-none" accept="image/*">
             </label>
           </div>
@@ -223,17 +222,17 @@ const CommentRenderer = {
     if (isOwner) {
       menuItems += `
         <button class="comment-menu-item" data-action="edit" data-comment-id="${commentId}">
-          <i class="bi bi-pencil"></i> Edit
+          <i aria-hidden="true" data-lucide="pencil" class="vasto-icon"></i> Edit
         </button>
         <button class="comment-menu-item danger" data-action="delete" data-comment-id="${commentId}">
-          <i class="bi bi-trash"></i> Delete
+          <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> Delete
         </button>
         <div class="comment-menu-divider"></div>
       `;
     } else if (isModerator) {
       menuItems += `
         <button class="comment-menu-item danger" data-action="delete" data-comment-id="${commentId}">
-          <i class="bi bi-trash"></i> Delete
+          <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> Delete
         </button>
         <div class="comment-menu-divider"></div>
       `;
@@ -241,13 +240,13 @@ const CommentRenderer = {
 
     menuItems += `
       <button class="comment-menu-item" data-action="copy-text" data-comment-id="${commentId}">
-        <i class="bi bi-copy"></i> Copy text
+        <i aria-hidden="true" data-lucide="copy" class="vasto-icon"></i> Copy text
       </button>
       <button class="comment-menu-item" data-action="copy-link" data-comment-id="${commentId}">
-        <i class="bi bi-link-45deg"></i> Copy link
+        <i aria-hidden="true" data-lucide="link" class="vasto-icon"></i> Copy link
       </button>
       <button class="comment-menu-item" data-action="view-profile" data-comment-id="${commentId}">
-        <i class="bi bi-person"></i> View profile
+        <i aria-hidden="true" data-lucide="user" class="vasto-icon"></i> View profile
       </button>
     `;
 
@@ -255,10 +254,10 @@ const CommentRenderer = {
       menuItems += `
         <div class="comment-menu-divider"></div>
         <button class="comment-menu-item" data-action="pin" data-comment-id="${commentId}">
-          <i class="bi bi-pin"></i> Pin comment
+          <i aria-hidden="true" data-lucide="pin" class="vasto-icon"></i> Pin comment
         </button>
         <button class="comment-menu-item" data-action="hide" data-comment-id="${commentId}">
-          <i class="bi bi-eye-slash"></i> Hide comment
+          <i aria-hidden="true" data-lucide="eye-off" class="vasto-icon"></i> Hide comment
         </button>
       `;
     }
@@ -276,7 +275,7 @@ const CommentRenderer = {
   renderEmptyState() {
     return `
       <div class="comments-empty">
-        <i class="bi bi-chat-dots"></i>
+        <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
         <p>No comments yet. Be the first to comment.</p>
       </div>
     `;
@@ -288,7 +287,7 @@ const CommentRenderer = {
   renderLoadingState() {
     return `
       <div class="comments-loading">
-        <i class="bi bi-arrow-repeat"></i>
+        <i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon"></i>
         <p>Loading comments...</p>
       </div>
     `;

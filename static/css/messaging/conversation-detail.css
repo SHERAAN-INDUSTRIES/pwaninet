@@ -2852,11 +2852,6 @@ button#voiceBtn.pwanimate-send-btn {
   fill: none;
 }
 
-.pwanimate-send-btn i.bi-mic-fill {
-  fill: currentColor !important;
-  color: #ffffff !important;
-}
-
 .pwanimate-send-btn:hover,
 .pwanimate-send-btn.is-active:hover {
   background: var(--chat-accent, var(--chat-bg-sent, var(--brand, #2563eb))) !important;

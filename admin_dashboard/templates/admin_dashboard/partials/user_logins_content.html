@@ -1,0 +1,96 @@
+<main class="adw-page" data-adw-section="logins">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">Governance</div>
+      <h1 class="adw-page-title">User logins</h1>
+      <p class="adw-page-sub">Successful sign-ins, failures and new devices — merged from axes and your device-trust service.</p>
+    </div>
+    <div class="adw-page-actions adw-seg" role="tablist" aria-label="Date range">
+      <a href="{% url 'admin_dashboard:user_logins' %}?days=7&outcome={{ outcome }}&q={{ search }}" class="adw-seg-btn{% if days == 7 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:user_logins' %}?days=7&outcome={{ outcome }}&q={{ search }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">7d</a>
+      <a href="{% url 'admin_dashboard:user_logins' %}?days=30&outcome={{ outcome }}&q={{ search }}" class="adw-seg-btn{% if days == 30 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:user_logins' %}?days=30&outcome={{ outcome }}&q={{ search }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">30d</a>
+      <a href="{% url 'admin_dashboard:user_logins' %}?days=90&outcome={{ outcome }}&q={{ search }}" class="adw-seg-btn{% if days == 90 %} is-active{% endif %}"
+         hx-get="{% url 'admin_dashboard:user_logins' %}?days=90&outcome={{ outcome }}&q={{ search }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">90d</a>
+    </div>
+  </header>
+
+  {% if search or outcome != 'all' %}
+  <div class="adw-tally-bar">
+    {% if outcome != 'all' %}<span class="adw-chip is-info">Filtered: {{ outcome|capfirst }}</span>{% endif %}
+    {% if search %}<span class="adw-chip is-mute">Search: {{ search }}</span>{% endif %}
+    <a class="adw-link" href="{% url 'admin_dashboard:user_logins' %}" hx-get="{% url 'admin_dashboard:user_logins' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">Reset <i aria-hidden="true" data-lucide="circle-x" class="vasto-icon vasto-icon--sm"></i></a>
+  </div>
+  {% endif %}
+
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Login audit feed</h2>
+        <div class="adw-panel-sub">{{ login_rows|length }} events in the last {{ days }} days</div>
+      </div>
+      <i aria-hidden="true" data-lucide="key-round" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <form method="get" class="adw-filter-bar" id="adwLoginFilter">
+        <input type="hidden" name="days" value="{{ days }}">
+        <input type="text" name="q" value="{{ search }}" class="adw-input" placeholder="Search user or IP…" aria-label="Search logins">
+        <select name="outcome" class="adw-input" aria-label="Outcome">
+          {% for value, label in outcome_options %}
+          <option value="{{ value }}"{% if value == outcome %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="adw-btn">Apply</button>
+      </form>
+      <script>
+        document.querySelectorAll('#adwLoginFilter select, #adwLoginFilter input[type=text]').forEach(el => {
+          el.addEventListener('change', () => el.form.submit());
+        });
+      </script>
+
+      <div class="adw-table-wrap">
+        <table class="adw-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>User</th>
+              <th>IP</th>
+              <th>Location</th>
+              <th>Browser</th>
+              <th>OS / Device</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in login_rows %}
+            <tr>
+              <td class="adw-cell-strong">{{ row.when|date:"M d, H:i" }}</td>
+              <td><div class="adw-cell-strong">{{ row.user }}</div></td>
+              <td><code>{{ row.ip }}</code></td>
+              <td>{{ row.location|default:"Unknown" }}</td>
+              <td>{{ row.browser|default:"Unknown" }}</td>
+              <td class="adw-cell-sub">{{ row.os_device|default:"Unknown" }}</td>
+              <td>
+                {% if row.outcome == 'success' %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i> {{ row.outcome_label }}</span>
+                {% elif row.outcome == 'failed' %}
+                  <span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="circle-x" class="vasto-icon vasto-icon--sm"></i> {{ row.outcome_label }}</span>
+                {% elif row.outcome == 'blocked' %}
+                  <span class="adw-chip is-off"><i aria-hidden="true" data-lucide="shield-alert" class="vasto-icon vasto-icon--sm"></i> {{ row.outcome_label }}</span>
+                {% else %}
+                  <span class="adw-chip is-info"><i aria-hidden="true" data-lucide="phone" class="vasto-icon vasto-icon--sm"></i> {{ row.outcome_label }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="adw-empty"><i aria-hidden="true" data-lucide="inbox" class="vasto-icon vasto-icon--sm"></i><strong>No login data yet</strong><span>New sign-ins will appear here once axes records them.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="adw-panel-note"><i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i> Location is best-effort (IP-only via GeoLite2 when <code>GEOIP_PATH</code> is configured). Failed attempts carry no location. Source: <code>axes_accesslog</code>, <code>axes_accessfailurelog</code>, <code>users_deviceverificationevent</code>.</p>
+    </div>
+  </section>
+
+</main>

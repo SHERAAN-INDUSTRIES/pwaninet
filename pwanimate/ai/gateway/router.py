@@ -249,6 +249,19 @@ class LLMRouter:
                 provider="none",
             )
 
+        # Registry kill switch: a model an admin switched off in the dashboard
+        # is removed for every caller, before the tier gate (which is skipped
+        # when there is no tier context) and before health re-ordering can put
+        # it back in play.
+        from pwanimate.billing.services import is_offering_disabled
+
+        available = [c for c in available if not is_offering_disabled(c["provider"], c["model"])]
+        if not available:
+            raise AIProviderConfigurationError(
+                "Every model for this request is switched off in the registry.",
+                provider="registry",
+            )
+
         # Tier gate: a candidate the caller's tier may not reach is withheld
         # from the chain, so a free-tier student can never fall through to a
         # paid model (e.g. the frontier rung in the global Auto chain).

@@ -21,7 +21,7 @@
            hx-swap="innerHTML"
            hx-push-url="true"
            hx-history="true">
-            <i class="bi bi-house-fill" style="font-size: 1.35rem;"></i>
+            <i aria-hidden="true" data-lucide="house" class="vasto-icon vasto-icon--lg"></i>
             <span style="font-size: 0.65rem; font-weight: 600;">{% trans "Home" %}</span>
         </a>
         <a href="{% url 'groups:groups_dashboard' %}"
@@ -33,7 +33,7 @@
            hx-push-url="true"
            hx-history="true">
             <span style="position: relative; display: inline-block;">
-                <i class="bi bi-people-fill" style="font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="users" class="vasto-icon vasto-icon--lg"></i>
                 <span class="nav-groups-dot" title="New group activity" style="{% if not has_unread_group_activity %}display: none;{% endif %}"></span>
             </span>
             <span style="font-size: 0.65rem; font-weight: 600;">{% trans "Groups" %}</span>
@@ -46,7 +46,7 @@
            style="display: flex; flex-direction: column; align-items: center; gap: 0px;"
            aria-label="{% trans 'Chats' %}">
             <span style="position: relative; display: inline-block;">
-                <i class="bi bi-chat-dots-fill" style="font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon vasto-icon--lg"></i>
                 {% if unread_messages_count > 0 %}
                     <span class="position-absolute badge rounded-pill bg-danger messages-badge" style="top: -2px; right: -6px; font-size: 0.65rem;">
                         {{ unread_messages_count }}
@@ -69,13 +69,14 @@
            hx-push-url="true"
            hx-history="true"
            style="display: flex; flex-direction: column; align-items: center; gap: 0px;">
-            <i class="bi bi-plus-circle-fill" style="font-size: 1.35rem;"></i>
+            <i aria-hidden="true" data-lucide="circle-plus" class="vasto-icon vasto-icon--lg"></i>
             <span style="font-size: 0.65rem; font-weight: 600;">{% trans "Post" %}</span>
         </a>
         {% endif %}
         <a href="{% url 'notifications:notifications' %}"
            class="nav-chip {% if request.resolver_match.url_name == 'notifications' %}active{% endif %}"
            id="notification-badge-container-desktop"
+           aria-label="{% trans 'Notifications' %}"
            style="display: flex; flex-direction: column; align-items: center; gap: 0px; min-width: 50px;"
            hx-get="{% url 'notifications:notifications' %}"
            hx-target="#page-content-target"
@@ -83,7 +84,7 @@
            hx-push-url="true"
            hx-history="true">
             <span style="position: relative; display: inline-block;">
-                <i class="bi bi-bell-fill" style="font-size: 1.35rem;"></i>
+                <i aria-hidden="true" data-lucide="bell" class="vasto-icon vasto-icon--lg"></i>
                 {% if unread_notifications_count > 0 %}
                     <span class="position-absolute badge rounded-pill bg-danger border border-light notification-badge"
                         style="font-size: 0.65rem; padding: 0.3em 0.45em; min-width: 18px; text-align: center; top: -4px; right: -6px; z-index: 10;">
@@ -111,7 +112,7 @@
            aria-label="{% trans 'Django Admin Site' %}"
            data-bypass-htmx="true"
            hx-boost="false">
-            <i class="bi bi-shield-shaded" style="font-size: 1.3rem;"></i>
+            <i aria-hidden="true" data-lucide="shield-check" class="vasto-icon vasto-icon--lg"></i>
         </a>
         {% endif %}
 
@@ -136,7 +137,7 @@
            title="{% trans 'Notifications' %}"
            hx-get="{% url 'notifications:notifications' %}"
            hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
-            <i class="bi bi-bell-fill" aria-hidden="true"></i>
+            <i data-lucide="bell" class="vasto-icon" aria-hidden="true"></i>
             <span class="badge rounded-pill bg-danger notification-badge"{% if not unread_notifications_count %} style="display:none"{% endif %}>{{ unread_notifications_count|default:0 }}</span>
         </a>
         {% endif %}
@@ -144,22 +145,22 @@
         <!-- Theme Toggle (Mobile & Desktop) -->
         <div class="dropdown">
             <button class="btn btn-link p-0" data-bs-toggle="dropdown" style="color: var(--text-dark); display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;" aria-label="{% trans 'Theme Toggle' %}">
-                <i class="bi bi-circle-half" style="font-size: 1.2rem;"></i>
+                <i aria-hidden="true" data-lucide="contrast" class="vasto-icon"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li>
                     <button class="dropdown-item" onclick="setTheme('light')">
-                        <i class="bi bi-sun me-2"></i> Light
+                        <i aria-hidden="true" data-lucide="sun" class="me-2 vasto-icon"></i> Light
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item" onclick="setTheme('dark')">
-                        <i class="bi bi-moon me-2"></i> Dark
+                        <i aria-hidden="true" data-lucide="moon" class="me-2 vasto-icon"></i> Dark
                     </button>
                 </li>
                 <li>
                     <button class="dropdown-item" onclick="setTheme('system')">
-                        <i class="bi bi-display me-2"></i> System
+                        <i aria-hidden="true" data-lucide="monitor" class="me-2 vasto-icon"></i> System
                     </button>
                 </li>
             </ul>
@@ -173,12 +174,12 @@
                hx-swap="innerHTML"
                hx-push-url="true"
                hx-history="true"
-               class="avatar-link d-flex align-items-center">
+               class="avatar-link d-flex align-items-center" aria-label="{% trans 'Profile' %}">
                 {% if request.user.profile_pic %}
                     <img src="{{ request.user.profile_pic.url }}" class="rounded-circle border" style="width: 36px; height: 36px; object-fit: cover;" alt="Profile">
                 {% else %}
                     <div class="rounded-circle border d-inline-flex align-items-center justify-content-center bg-secondary text-white" style="width: 36px; height: 36px;">
-                        <i class="bi bi-person-fill fs-5"></i>
+                        <i aria-hidden="true" data-lucide="user-round" class="fs-5 vasto-icon vasto-icon--lg"></i>
                     </div>
                 {% endif %}
             </a>

@@ -942,13 +942,15 @@
   outline-offset: -3px;
 }
 
-.mobile-bottom-nav .nav-chip i {
+.mobile-bottom-nav .nav-chip i,
+.mobile-bottom-nav .nav-chip svg.vasto-icon {
   display: block;
   font-size: 19px;
   line-height: 1;
   transition: transform 320ms var(--ios-spring), filter 260ms ease;
 }
-.mobile-bottom-nav .nav-chip.active i {
+.mobile-bottom-nav .nav-chip.active i,
+.mobile-bottom-nav .nav-chip.active svg.vasto-icon {
   transform: translateY(-1px) scale(1.06);
   filter: drop-shadow(0 1px 7px rgba(255, 255, 255, 0.45));
 }
@@ -1344,7 +1346,13 @@
     <link rel="stylesheet" href="{% static 'css/downloads/offline_media_viewer.css' %}">
     <link rel="stylesheet" id="pwanimate-css" href="{% static 'css/pwanimate/pwanimate.css' %}">
     <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vasto-navigation-icons.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vasto-application-icons.css' %}">
     {% block extra_css %}{% endblock %}
+    {# Admin workspace boundary + rail mechanics. Deliberately NOT deferred: #}
+    {# it registers a capture-phase click listener on document, which must   #}
+    {# run before base.html's inline boundary/progressive handlers in body.   #}
+    <script src="{% static 'js/admin/admin-workspace.js' %}"></script>
     <script src="{% static 'js/htmx.min.js' %}"></script>
     <script>
         // Configure HTMX for proper history handling
@@ -1635,7 +1643,8 @@
                 border-radius: 16px;
             }
 
-            .mobile-bottom-nav .nav-chip i {
+            .mobile-bottom-nav .nav-chip i,
+            .mobile-bottom-nav .nav-chip svg.vasto-icon {
                 font-size: 1.45rem;
             }
 
@@ -1834,7 +1843,8 @@
             transform: scale(0.92);
         }
 
-        .mobile-bottom-nav .nav-chip i {
+        .mobile-bottom-nav .nav-chip i,
+        .mobile-bottom-nav .nav-chip svg.vasto-icon {
             font-size: 1.55rem;
             line-height: 1;
             display: block;
@@ -1861,7 +1871,8 @@
             color: var(--primary);
         }
 
-        .mobile-bottom-nav .nav-chip.active i {
+        .mobile-bottom-nav .nav-chip.active i,
+        .mobile-bottom-nav .nav-chip.active svg.vasto-icon {
             transform: scale(1.08);
         }
 
@@ -2598,7 +2609,7 @@
             <div id="twoFactorNudgeBanner" class="alert alert-primary border-0 shadow-sm rounded-3 d-flex align-items-center justify-content-between p-3 mb-3 twofactor-nudge-banner" style="display: none !important;" role="alert">
                 <div class="d-flex align-items-center me-2">
                     <div class="twofactor-nudge-icon me-3 p-2 bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; flex-shrink: 0;">
-                        <i class="bi bi-shield-lock-fill fs-5"></i>
+                        <i aria-hidden="true" data-lucide="shield-check" class="fs-5 vasto-icon"></i>
                     </div>
                     <div>
                         <strong class="twofactor-nudge-title d-block fw-bold mb-0">{% trans "Protect Your Account with 2FA" %}</strong>
@@ -2610,7 +2621,7 @@
                         {% trans "Enable" %}
                     </a>
                     <button type="button" class="btn btn-sm btn-link p-1 twofactor-nudge-dismiss" onclick="dismiss2faNudge()" aria-label="Dismiss">
-                        <i class="bi bi-x-lg"></i>
+                        <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
                     </button>
                 </div>
             </div>
@@ -2665,7 +2676,7 @@
             type="button"
             aria-label="{% trans 'Back to top' %}"
             title="{% trans 'Back to top' %}">
-        <i class="bi bi-arrow-up"></i>
+        <i aria-hidden="true" data-lucide="arrow-up" class="vasto-icon"></i>
     </button>
 
     {% block modals %}
@@ -2691,7 +2702,7 @@
             <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
               <div class="modal-header border-0 pb-0 pt-4 px-4 align-items-center">
                 <h5 class="modal-title fw-bold" id="qrInstallModalTitle">
-                  <i class="bi bi-phone text-primary me-2"></i>{% trans "Install vasto on Android" %}
+                  <i aria-hidden="true" data-lucide="smartphone" class="text-primary me-2 vasto-icon"></i>{% trans "Install vasto on Android" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
               </div>
@@ -2729,11 +2740,11 @@
                 <!-- Copyable Link Input -->
                 <div class="input-group mb-2">
                   <span class="input-group-text bg-transparent border-end-0 text-muted">
-                    <i class="bi bi-link-45deg"></i>
+                    <i aria-hidden="true" data-lucide="link" class="vasto-icon vasto-icon--sm"></i>
                   </span>
                   <input type="text" id="qr-modal-link-input" class="form-control border-start-0 border-end-0 small" value="https://pwaninet.app{{ global_app_invite_url }}" readonly style="font-size: 0.85rem; background: transparent;">
                   <button class="btn btn-outline-primary btn-sm px-3" type="button" id="qr-modal-copy-btn" onclick="if (typeof copyApkLink === 'function') copyApkLink(this);">
-                    <i class="bi bi-clipboard me-1"></i>{% trans "Copy" %}
+                    <i aria-hidden="true" data-lucide="clipboard" class="me-1 vasto-icon vasto-icon--sm"></i>{% trans "Copy" %}
                   </button>
                 </div>
               </div>
@@ -2753,11 +2764,13 @@
                   }
 
                   function showSuccess() {
-                    button.innerHTML = '<i class="bi bi-check2 me-1"></i>{% trans "Copied!" %}';
+                    button.innerHTML = '<i aria-hidden="true" data-lucide="check" class="me-1 vasto-icon vasto-icon--sm"></i>{% trans "Copied!" %}';
+                    if (window.VastoIcons) window.VastoIcons.render(button);
                     button.classList.remove('btn-outline-primary');
                     button.classList.add('btn-success');
                     setTimeout(() => {
                       button.innerHTML = originalHtml;
+                      if (window.VastoIcons) window.VastoIcons.render(button);
                       button.classList.remove('btn-success');
                       button.classList.add('btn-outline-primary');
                       delete button.dataset.copying;
@@ -2910,7 +2923,7 @@
 
                         <!-- Search recent conversations or profile targets -->
                         <div class="position-relative mb-3">
-                            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 13px;"></i>
+                            <i aria-hidden="true" data-lucide="search" class="vasto-icon position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="font-size: 13px;"></i>
                             <input type="text"
                                    id="globalShareSearchInput"
                                    class="form-control rounded-pill ps-5 bg-light border-0"
@@ -2926,7 +2939,7 @@
                             </div>
                             <div class="share-tray-carousel-wrapper position-relative">
                                 <button type="button" class="btn btn-sm btn-light rounded-circle shadow-sm position-absolute start-0 top-50 translate-middle-y z-3 d-none d-md-flex align-items-center justify-content-center share-scroll-btn share-tray-scroll-prev" id="shareTrayPrevBtn" aria-label="{% trans 'Scroll left' %}" style="width: 28px; height: 28px; left: -10px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;">
-                                    <i class="bi bi-chevron-left" style="font-size: 11px;"></i>
+                                    <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon" style="font-size: 11px;"></i>
                                 </button>
                                 <div class="share-users-tray d-flex gap-3 overflow-x-auto pb-2 px-1" id="globalShareTargetsTray" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">
                                     <div class="text-center py-3 text-muted small w-100" id="globalShareTrayLoading">
@@ -2935,7 +2948,7 @@
                                     </div>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-light rounded-circle shadow-sm position-absolute end-0 top-50 translate-middle-y z-3 d-none d-md-flex align-items-center justify-content-center share-scroll-btn share-tray-scroll-next" id="shareTrayNextBtn" aria-label="{% trans 'Scroll right' %}" style="width: 28px; height: 28px; right: -10px; transition: opacity 0.2s ease;">
-                                    <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
+                                    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon" style="font-size: 11px;"></i>
                                 </button>
                             </div>
                         </div>
@@ -2947,26 +2960,26 @@
                             <div class="small fw-semibold text-muted text-uppercase px-1 mb-2" style="font-size: 11px; letter-spacing: 0.5px;">{% trans "Share via" %}</div>
                             <div class="share-tools-carousel-wrapper position-relative">
                                 <button type="button" class="btn btn-sm btn-light rounded-circle shadow-sm position-absolute start-0 top-50 translate-middle-y z-3 d-none d-md-flex align-items-center justify-content-center share-scroll-btn share-tools-scroll-prev" id="shareToolsPrevBtn" aria-label="{% trans 'Scroll left' %}" style="width: 28px; height: 28px; left: -10px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease;">
-                                    <i class="bi bi-chevron-left" style="font-size: 11px;"></i>
+                                    <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon" style="font-size: 11px;"></i>
                                 </button>
                                 <div class="d-flex gap-3 overflow-x-auto pb-2 px-1" id="globalShareActionChips" style="scrollbar-width: none; -webkit-overflow-scrolling: touch;">
                                     <!-- 0. Share to messages -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareMessagesBtn" title="{% trans 'Share to messages' %}" aria-label="{% trans 'Share to messages' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-chat-dots fs-5 text-dark"></i>
+                                            <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon fs-5 text-dark"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "Messages" %}</span>
                                     </button>
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareProfilesBtn" title="{% trans 'Share to profiles' %}" aria-label="{% trans 'Share to profiles' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-person-plus fs-5 text-dark"></i>
+                                            <i aria-hidden="true" data-lucide="user-round-plus" class="vasto-icon fs-5 text-dark"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "Profiles" %}</span>
                                     </button>
                                     <!-- 0. Repost Action Chip -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareRepostBtn" title="{% trans 'Repost' %}" aria-label="{% trans 'Repost' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-repeat fs-5 text-dark" id="globalShareRepostIcon"></i>
+                                            <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon fs-5 text-dark" id="globalShareRepostIcon"></i>
                                         </div>
                                         <span class="share-action-label small text-muted" id="globalShareRepostLabel">{% trans "Repost" %}</span>
                                     </button>
@@ -2974,7 +2987,7 @@
                                     <!-- 1. Bookmark / Save -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareBookmarkBtn" title="{% trans 'Save to Library' %}" aria-label="{% trans 'Save to Library' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-bookmark fs-5 text-dark"></i>
+                                            <i aria-hidden="true" data-lucide="bookmark" class="vasto-icon fs-5 text-dark"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "Save" %}</span>
                                     </button>
@@ -2982,7 +2995,7 @@
                                     <!-- 2. Download Reel -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalShareDownloadBtn" title="{% trans 'Download Video' %}" aria-label="{% trans 'Download Video' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-download fs-5 text-dark"></i>
+                                            <i aria-hidden="true" data-lucide="download" class="vasto-icon fs-5 text-dark"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "Download" %}</span>
                                     </button>
@@ -2990,7 +3003,7 @@
                                     <!-- 3. Copy Link -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0" id="globalCopyLinkBtn" title="{% trans 'Copy Link' %}" aria-label="{% trans 'Copy Link' %}">
                                         <div class="share-action-icon rounded-circle bg-light d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-link-45deg fs-4 text-dark"></i>
+                                            <i aria-hidden="true" data-lucide="link" class="vasto-icon fs-4 text-dark"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "Copy Link" %}</span>
                                     </button>
@@ -3030,13 +3043,13 @@
                                     <!-- 8. Native System Share -->
                                     <button type="button" class="share-action-chip border-0 bg-transparent text-center p-0 flex-shrink-0 d-none" id="globalNativeShareBtn" title="{% trans 'More' %}" aria-label="{% trans 'More options' %}">
                                         <div class="share-action-icon rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center mx-auto mb-1">
-                                            <i class="bi bi-share-fill fs-5 text-secondary"></i>
+                                            <i aria-hidden="true" data-lucide="share" class="vasto-icon fs-5 text-secondary"></i>
                                         </div>
                                         <span class="share-action-label small text-muted">{% trans "More" %}</span>
                                     </button>
                                 </div>
                                 <button type="button" class="btn btn-sm btn-light rounded-circle shadow-sm position-absolute end-0 top-50 translate-middle-y z-3 d-none d-md-flex align-items-center justify-content-center share-scroll-btn share-tools-scroll-next" id="shareToolsNextBtn" aria-label="{% trans 'Scroll right' %}" style="width: 28px; height: 28px; right: -10px; transition: opacity 0.2s ease;">
-                                    <i class="bi bi-chevron-right" style="font-size: 11px;"></i>
+                                    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon" style="font-size: 11px;"></i>
                                 </button>
                             </div>
                         </div>
@@ -3056,7 +3069,7 @@
                     <div class="modal-header border-0 pb-1 pt-2 px-3 d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center gap-2 min-w-0">
                             <span class="badge bg-primary bg-opacity-10 text-primary fw-semibold rounded-pill px-2.5 py-1" style="font-size: 11px;">
-                                <i class="bi bi-play-circle-fill me-1"></i>{% trans "Reel Options" %}
+                                <i aria-hidden="true" data-lucide="circle-play" class="vasto-icon me-1"></i>{% trans "Reel Options" %}
                             </span>
                             <span id="quickToolsAuthor" class="small text-muted text-truncate fw-medium" style="max-width: 180px;"></span>
                         </div>
@@ -3066,7 +3079,7 @@
                         <div class="d-flex flex-column gap-1">
                             <!-- 1. Bookmark / Save to Library -->
                             <button type="button" class="reel-tool-btn" id="quickToolsBookmarkBtn">
-                                <i class="bi bi-bookmark"></i>
+                                <i aria-hidden="true" data-lucide="bookmark" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Save to Library" %}</div>
                                     <div class="small text-muted">{% trans "Bookmark this reel to revisit later" %}</div>
@@ -3075,7 +3088,7 @@
 
                             <!-- 2. Repost Reel -->
                             <button type="button" class="reel-tool-btn" id="quickToolsRepostBtn">
-                                <i class="bi bi-repeat"></i>
+                                <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Repost Reel" %}</div>
                                     <div class="small text-muted">{% trans "Share this with your followers" %}</div>
@@ -3084,7 +3097,7 @@
 
                             <!-- 3. Share Reel -->
                             <button type="button" class="reel-tool-btn" id="quickToolsShareBtn">
-                                <i class="bi bi-share"></i>
+                                <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Share to Groups / WhatsApp" %}</div>
                                     <div class="small text-muted">{% trans "Send to campus groups or friends" %}</div>
@@ -3093,7 +3106,7 @@
 
                             <!-- 4. Copy Link -->
                             <button type="button" class="reel-tool-btn" id="quickToolsCopyLinkBtn">
-                                <i class="bi bi-link-45deg"></i>
+                                <i aria-hidden="true" data-lucide="link" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Copy Link" %}</div>
                                     <div class="small text-muted">{% trans "Copy reel link to clipboard" %}</div>
@@ -3102,7 +3115,7 @@
 
                             <!-- 5. Download for Offline -->
                             <button type="button" class="reel-tool-btn" id="quickToolsDownloadBtn">
-                                <i class="bi bi-download"></i>
+                                <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Save for Offline" %}</div>
                                     <div class="small text-muted">{% trans "Watch without using cellular data" %}</div>
@@ -3111,7 +3124,7 @@
 
                             <!-- 6. See Less / Hide -->
                             <button type="button" class="reel-tool-btn" id="quickToolsHideBtn">
-                                <i class="bi bi-eye-slash"></i>
+                                <i aria-hidden="true" data-lucide="eye-off" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Not Interested" %}</div>
                                     <div class="small text-muted">{% trans "Hide this reel from your feed" %}</div>
@@ -3120,7 +3133,7 @@
 
                             <!-- 7. Report Reel -->
                             <button type="button" class="reel-tool-btn" id="quickToolsReportBtn">
-                                <i class="bi bi-flag"></i>
+                                <i aria-hidden="true" data-lucide="flag" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold">{% trans "Report Reel" %}</div>
                                     <div class="small text-muted">{% trans "Flag inappropriate content" %}</div>
@@ -3129,7 +3142,7 @@
 
                             <!-- 8. Delete Reel (Author Only) -->
                             <button type="button" class="reel-tool-btn text-danger d-none" id="quickToolsDeleteBtn">
-                                <i class="bi bi-trash"></i>
+                                <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i>
                                 <div>
                                     <div class="fw-semibold text-danger">{% trans "Delete Reel" %}</div>
                                     <div class="small text-muted">{% trans "Permanently remove your reel" %}</div>
@@ -3140,7 +3153,7 @@
 
                             <!-- 9. Auto-Scroll Toggle (Playback Preference) -->
                             <button type="button" class="reel-tool-btn" id="quickToolsAutoScrollBtn" aria-pressed="false">
-                                <i class="bi bi-collection-play"></i>
+                                <i aria-hidden="true" data-lucide="library" class="vasto-icon"></i>
                                 <div class="flex-grow-1">
                                     <div class="fw-semibold">{% trans "Auto-scroll" %}</div>
                                     <div class="small text-muted">{% trans "Automatically advance to the next reel when it ends" %}</div>
@@ -3151,7 +3164,7 @@
                             <!-- 10. Video Quality Selector (Adaptive Bitrate Control) -->
                             <div class="reel-tool-btn d-flex align-items-center justify-content-between" id="quickToolsQualityRow" style="cursor: default;">
                                 <div class="d-flex align-items-center gap-2 min-w-0">
-                                    <i class="bi bi-badge-hd fs-5 text-primary"></i>
+                                    <i aria-hidden="true" data-lucide="badge-check" class="vasto-icon fs-5 text-primary"></i>
                                     <div class="min-w-0 text-start">
                                         <div class="fw-semibold">{% trans "Video Quality" %}</div>
                                         <div class="small text-muted text-truncate" id="quickToolsQualitySub">{% trans "Adaptive bitrate" %}</div>
@@ -3213,7 +3226,7 @@
                                     <label class="btn border-0 p-0 text-muted position-absolute mb-0" 
                                            style="right: 44px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer;" 
                                            title="{% trans 'Attach photo as sticker' %}">
-                                        <i class="bi bi-camera fs-6"></i>
+                                        <i aria-hidden="true" data-lucide="camera" class="vasto-icon fs-6"></i>
                                         <input type="file" name="attachment_image" class="comment-photo-input d-none" accept="image/*">
                                     </label>
                                     <button type="button" 
@@ -3222,11 +3235,11 @@
                                             data-input="#reelCommentInput"
                                             style="right: 14px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
                                             title="{% trans 'Emoji, GIFs & Stickers' %}">
-                                        <i class="bi bi-emoji-smile fs-6"></i>
+                                        <i aria-hidden="true" data-lucide="smile" class="vasto-icon fs-6"></i>
                                     </button>
                                 </div>
                                 <button type="submit" class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; flex-shrink: 0;" aria-label="{% trans 'Send' %}">
-                                    <i class="bi bi-send-fill" style="font-size: 14px;"></i>
+                                    <i aria-hidden="true" data-lucide="send" class="vasto-icon" style="font-size: 14px;"></i>
                                 </button>
                             </div>
                         </form>
@@ -3278,7 +3291,7 @@
                         <div class="my-2">
                             <div class="auth-icon-circle mx-auto mb-3 d-flex align-items-center justify-content-center shadow-sm" 
                                  style="width: 60px; height: 60px; border-radius: 50%; background: rgba(37, 99, 235, 0.1); color: var(--primary, #2563eb);">
-                                <i class="bi bi-stars fs-2" id="guestAuthIcon"></i>
+                                <i aria-hidden="true" data-lucide="sparkles" class="fs-2 vasto-icon vasto-icon--lg" id="guestAuthIcon"></i>
                             </div>
                             <h5 class="fw-bold mb-2 text-dark" id="guestAuthModalTitle">{% trans "Sign in to explore more" %}</h5>
                             <p class="text-muted small mb-0 px-2" id="guestAuthModalSubtitle">
@@ -3288,10 +3301,10 @@
 
                         <div class="d-grid gap-2 pt-3">
                             <a href="{% url 'login' %}" id="guestAuthSignInBtn" class="btn btn-primary fw-semibold py-2 rounded-pill shadow-sm">
-                                <i class="bi bi-box-arrow-in-right me-1"></i> {% trans "Sign In" %}
+                                <i aria-hidden="true" data-lucide="log-in" class="me-1 vasto-icon"></i> {% trans "Sign In" %}
                             </a>
                             <a href="{% url 'users:register' %}" id="guestAuthSignUpBtn" class="btn btn-outline-primary fw-semibold py-2 rounded-pill">
-                                <i class="bi bi-person-plus me-1"></i> {% trans "Create an Account" %}
+                                <i aria-hidden="true" data-lucide="user-round-plus" class="me-1 vasto-icon"></i> {% trans "Create an Account" %}
                             </a>
                         </div>
                         <div class="mt-3">
@@ -3312,7 +3325,7 @@
         <div id="fullscreenReelsOverlay" class="fullscreen-reels-modal d-none" aria-hidden="true" role="dialog" aria-label="{% trans 'Reels viewer' %}">
             <!-- Close Button (Top Left) -->
             <button type="button" class="close-fs-reels-btn" id="closeReelsOverlay" title="{% trans 'Back to feed' %}" aria-label="{% trans 'Close Reels' %}">
-                <i class="bi bi-x-lg close-reels-icon"></i>
+                <i aria-hidden="true" data-lucide="x" class="vasto-icon close-reels-icon"></i>
                 <span class="spinner-border spinner-border-sm close-reels-spinner d-none" aria-hidden="true"></span>
                 <span class="close-reels-progress-label d-none">{% trans "Closing…" %}</span>
             </button>
@@ -3323,7 +3336,7 @@
                 <div class="reel-desktop-stage position-relative">
                     <!-- Subtle Floating Shared-by Note Pill -->
                     <div id="fsReelSharedNote" class="reel-shared-note-pill d-none position-absolute top-0 start-50 translate-middle-x mt-3 z-3 px-3 py-1.5 rounded-pill shadow-sm d-flex align-items-center gap-1.5" style="background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.15); pointer-events: none; transition: opacity 0.3s ease;">
-                        <i class="bi bi-send-fill text-primary" style="font-size: 12px;"></i>
+                        <i aria-hidden="true" data-lucide="send" class="vasto-icon text-primary" style="font-size: 12px;"></i>
                         <span id="fsReelSharedNoteText" class="text-white small fw-medium" style="font-size: 12px; letter-spacing: 0.2px;"></span>
                     </div>
 
@@ -3334,7 +3347,7 @@
                                 id="reelCommentRailToggleBtn"
                                 title="{% trans 'Open Comments' %}"
                                 aria-label="{% trans 'Open Comments' %}">
-                            <i class="bi bi-layout-sidebar-reverse"></i>
+                            <i aria-hidden="true" data-lucide="panel-right" class="vasto-icon"></i>
                             <span class="small ms-1">{% trans "Comments" %}</span>
                         </button>
                     </div>
@@ -3352,21 +3365,21 @@
                       <div class="reel-desktop-actions-rail" id="reelDesktopActionsRail">
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn fs-like-proxy-btn" id="fsDesktopLikeBtn" title="{% trans 'Like' %}" aria-label="{% trans 'Like' %}">
-                                <i class="bi bi-heart"></i>
+                                <i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label" id="fsDesktopLikeCount">0</span>
                         </div>
 
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn" id="fsDesktopCommentBtn" title="{% trans 'Comments' %}" aria-label="{% trans 'Comments' %}">
-                                <i class="bi bi-chat-dots-fill"></i>
+                                <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label" id="fsDesktopCommentCount">0</span>
                         </div>
 
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn fs-repost-proxy-btn" id="fsDesktopRepostBtn" title="{% trans 'Repost' %}" aria-label="{% trans 'Repost' %}">
-                                <i class="bi bi-repeat"></i>
+                                <i aria-hidden="true" data-lucide="repeat-2" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label" id="fsDesktopRepostCount">0</span>
                             <span class="reel-desktop-action-label fs-repost-state-label d-none" id="fsDesktopRepostState">{% trans "Reposted" %}</span>
@@ -3374,21 +3387,21 @@
 
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn" id="fsDesktopBookmarkBtn" title="{% trans 'Save to Library' %}" aria-label="{% trans 'Save to Library' %}">
-                                <i class="bi bi-bookmark"></i>
+                                <i aria-hidden="true" data-lucide="bookmark" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label" id="fsDesktopBookmarkLabel">{% trans "Save" %}</span>
                         </div>
 
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn" id="fsDesktopShareBtn" data-bs-toggle="modal" data-bs-target="#globalShareModal" title="{% trans 'Share' %}" aria-label="{% trans 'Share' %}">
-                                <i class="bi bi-share-fill"></i>
+                                <i aria-hidden="true" data-lucide="share" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label">{% trans "Share" %}</span>
                         </div>
 
                         <div class="reel-desktop-action-unit text-center">
                             <button type="button" class="reel-desktop-action-btn reel-mute-btn" data-action="mute-toggle" title="{% trans 'Mute / Unmute' %}" aria-label="{% trans 'Toggle Mute' %}">
-                                <i class="bi bi-volume-up-fill"></i>
+                                <i aria-hidden="true" data-lucide="volume-2" class="vasto-icon"></i>
                             </button>
                             <span class="reel-desktop-action-label reel-mute-label">{% trans "Sound" %}</span>
                         </div>
@@ -3397,16 +3410,16 @@
                       <!-- Up/Down Navigation (stacked in the fixed tools column) -->
                       <div class="reel-desktop-nav-group d-none d-lg-flex">
                         <button type="button" class="reel-nav-btn reel-nav-prev" id="reelsNavPrev" title="{% trans 'Previous Reel' %}" aria-label="{% trans 'Previous Reel' %}">
-                            <i class="bi bi-chevron-up"></i>
+                            <i aria-hidden="true" data-lucide="chevron-up" class="vasto-icon"></i>
                         </button>
                         <button type="button" class="reel-nav-btn reel-nav-next" id="reelsNavNext" title="{% trans 'Next Reel' %}" aria-label="{% trans 'Next Reel' %}">
-                            <i class="bi bi-chevron-down"></i>
+                            <i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon"></i>
                         </button>
                       </div><!-- /.reel-desktop-nav-group -->
 
                       <!-- Keyboard shortcuts reference (? panel trigger) -->
                       <button type="button" class="reel-kb-help-btn" id="reelKbHelpBtn" title="{% trans 'Keyboard shortcuts' %}" aria-label="{% trans 'Keyboard shortcuts' %}">
-                          <i class="bi bi-keyboard"></i>
+                          <i aria-hidden="true" data-lucide="keyboard" class="vasto-icon"></i>
                       </button>
                     </div><!-- /.reel-desktop-tools -->
                 </div>
@@ -3437,10 +3450,10 @@
                             <div class="d-flex align-items-center gap-1 flex-shrink-0">
                                 <span id="fsRailFollowWrap"></span>
                                 <button type="button" class="btn btn-ghost btn-sm rounded-circle p-1 text-muted reel-options-btn" id="fsRailOptionsBtn" title="{% trans 'Options' %}" aria-label="{% trans 'Options' %}">
-                                    <i class="bi bi-three-dots fs-5"></i>
+                                    <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon fs-5"></i>
                                 </button>
                                 <button type="button" class="btn btn-ghost btn-sm rounded-circle p-1 text-muted" id="fsRailCloseBtn" title="{% trans 'Close comments rail' %}" aria-label="{% trans 'Close comments rail' %}">
-                                    <i class="bi bi-x-lg" style="font-size: 0.95rem;"></i>
+                                    <i aria-hidden="true" data-lucide="x" class="vasto-icon" style="font-size: 0.95rem;"></i>
                                 </button>
                             </div>
                         </div>
@@ -3450,7 +3463,7 @@
                             <div class="reel-rail-caption-text" id="fsRailCaption"></div>
                             <div class="mt-2" id="fsRailSoundWrap">
                                 <span class="badge bg-light text-dark rounded-pill px-2.5 py-1 small d-inline-flex align-items-center gap-1.5 border" style="font-size: 11px;">
-                                    <i class="bi bi-music-note-beamed text-primary"></i>
+                                    <i aria-hidden="true" data-lucide="music" class="vasto-icon text-primary"></i>
                                     <span class="text-truncate" style="max-width: 280px;" id="fsRailSoundText">{% trans "Original Audio" %}</span>
                                 </span>
                             </div>
@@ -3463,7 +3476,7 @@
                             {% trans "Comments" %} (<span id="fsRailCommentCount">0</span>)
                         </span>
                         <button type="button" class="btn btn-ghost btn-sm p-1 text-muted rounded-circle fs-rail-refresh-btn" id="fsRailRefreshBtn" title="{% trans 'Refresh comments' %}" aria-label="{% trans 'Refresh comments' %}">
-                            <i class="bi bi-arrow-clockwise fs-6"></i>
+                            <i aria-hidden="true" data-lucide="rotate-cw" class="vasto-icon fs-6"></i>
                         </button>
                     </div>
 
@@ -3526,7 +3539,7 @@
                                     <label class="btn border-0 p-0 text-muted position-absolute mb-0" 
                                            style="right: 44px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer;" 
                                            title="{% trans 'Attach photo as sticker' %}">
-                                        <i class="bi bi-camera fs-6"></i>
+                                        <i aria-hidden="true" data-lucide="camera" class="vasto-icon fs-6"></i>
                                         <input type="file" name="attachment_image" class="comment-photo-input d-none" accept="image/*">
                                     </label>
                                     <button type="button" 
@@ -3535,11 +3548,11 @@
                                             data-input="#fsRailCommentInput"
                                             style="right: 14px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;"
                                             title="{% trans 'Emoji, GIFs & Stickers' %}">
-                                        <i class="bi bi-emoji-smile fs-6"></i>
+                                        <i aria-hidden="true" data-lucide="smile" class="vasto-icon fs-6"></i>
                                     </button>
                                 </div>
                                 <button type="submit" class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 38px; height: 38px;" aria-label="{% trans 'Send' %}">
-                                    <i class="bi bi-send-fill" style="font-size: 13px;"></i>
+                                    <i aria-hidden="true" data-lucide="send" class="vasto-icon" style="font-size: 13px;"></i>
                                 </button>
                             </div>
                         </form>
@@ -3564,7 +3577,7 @@
                hx-sync="#page-content-target:replace"
                hx-trigger="click delay:10ms"
                aria-label="{% trans 'Home' %}">
-                <i class="bi bi-house-fill"></i>
+                <i aria-hidden="true" data-lucide="house" class="vasto-icon"></i>
                 <span>{% trans "Home" %}</span>
             </a>
             <a href="{% url 'groups:groups_dashboard' %}"
@@ -3579,7 +3592,7 @@
                hx-trigger="click delay:10ms"
                aria-label="{% trans 'Groups' %}">
                 <span style="position: relative; display: inline-block;">
-                    <i class="bi bi-people-fill"></i>
+                    <i aria-hidden="true" data-lucide="users" class="vasto-icon"></i>
                     <span class="nav-groups-dot" title="New group activity" style="{% if not has_unread_group_activity %}display: none;{% endif %}"></span>
                 </span>
                 <span>{% trans "Groups" %}</span>
@@ -3597,7 +3610,7 @@
                    hx-trigger="click delay:10ms"
                    aria-label="{% trans 'Chats' %}">
                     <span class="position-relative d-inline-block">
-                        <i class="bi bi-chat-dots-fill"></i>
+                        <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
                         {% if unread_messages_count > 0 %}
                             <span class="position-absolute badge rounded-pill bg-danger messages-badge" style="top: -2px; right: -6px; font-size: 0.65rem;">
                                 {{ unread_messages_count }}
@@ -3623,7 +3636,7 @@
                    hx-sync="#page-content-target:replace"
                    hx-trigger="click delay:10ms"
                    aria-label="{% trans 'Create Post' %}">
-                    <i class="bi bi-plus-circle-fill"></i>
+                    <i aria-hidden="true" data-lucide="circle-plus" class="vasto-icon"></i>
                     <span>{% trans "Post" %}</span>
                 </a>
                 <a href="{% url 'pwanimate:index' %}"
@@ -3647,7 +3660,7 @@
                     {% if request.user.profile_pic %}
                         <img src="{{ request.user.profile_pic.url }}" class="nav-profile-avatar" alt="{% trans 'Profile' %}">
                     {% else %}
-                        <i class="bi bi-person-circle"></i>
+                        <i aria-hidden="true" data-lucide="circle-user-round" class="vasto-icon"></i>
                     {% endif %}
                     <span>{% trans "Profile" %}</span>
                 </a>
@@ -3764,7 +3777,7 @@
             const thumbnail = btn.dataset.thumbnail || btn.getAttribute('data-thumbnail') || '';
 
             const origHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="bi bi-arrow-repeat spin-icon"></i>';
+            btn.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon spin-icon"></i>';
             btn.disabled = true;
 
             const triggerDirectBrowserDownload = () => {
@@ -3791,7 +3804,7 @@
                     if (metadata?.isNative && metadata.gallerySaved === false && typeof window.showFeedback === 'function') {
                         window.showFeedback('Saved for Offline Media, but the Gallery copy failed. Tap download again to retry.', 'danger');
                     }
-                    btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
+                    btn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i>';
                     setTimeout(() => {
                         btn.innerHTML = origHtml;
                         btn.disabled = false;
@@ -3806,7 +3819,7 @@
                         return;
                     }
                     triggerDirectBrowserDownload();
-                    btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
+                    btn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i>';
                     setTimeout(() => {
                         btn.innerHTML = origHtml;
                         btn.disabled = false;
@@ -3826,12 +3839,12 @@
                         btn.disabled = false;
                         if (typeof window.showFeedback === 'function') window.showFeedback('Allow storage access to save this media.', 'info');
                     } else {
-                        btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
+                        btn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i>';
                         setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 1800);
                     }
                 } else {
                     triggerDirectBrowserDownload();
-                    btn.innerHTML = '<i class="bi bi-check2 text-success"></i>';
+                    btn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success"></i>';
                     setTimeout(() => {
                         btn.innerHTML = origHtml;
                         btn.disabled = false;
@@ -4006,6 +4019,9 @@
             }
         });
     </script>
+    {# Canonical local runtime, outside overridable blocks; Spark scripts need it immediately. #}
+    <script src="{% static 'vendor/lucide/lucide.min.js' %}"></script>
+    <script src="{% static 'js/vasto-icons.js' %}"></script>
     {% block extra_js %}
 <script>
 // Auto-refresh functionality for user actions
@@ -4072,7 +4088,6 @@ window.addEventListener('appinstalled', (event) => {
     window.deferredPrompt = null;
 });
 
-
 // Handle offline/online events
 window.addEventListener('online', function() {
     console.log('App is now online');
@@ -4113,6 +4128,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
     }
 });
 </script>
+
 {% endblock %}
 </div>
 
@@ -4382,7 +4398,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
             <div style="position: relative; flex-shrink: 0;">
                 <img src="${escapeStr(avatar)}" alt="" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(37,99,235,0.2);" onerror="this.src='{% static 'images/web-app-manifest-192x192-rounded.png' %}'">
                 <span style="position: absolute; bottom: -2px; right: -2px; width: 18px; height: 18px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 10px; border: 2px solid var(--bg-card, #fff);">
-                    <i class="bi ${isGroup ? 'bi-people-fill' : 'bi-chat-dots-fill'}"></i>
+                    <i data-lucide="${isGroup ? 'users' : 'message-circle'}" class="vasto-icon vasto-icon--sm" aria-hidden="true"></i>
                 </span>
             </div>
             <div style="flex: 1; min-width: 0; overflow: hidden;">
@@ -4396,7 +4412,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
             </div>
             ${thumb ? `<img src="${escapeStr(thumb)}" alt="" style="width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0;">` : ''}
             <button type="button" class="chat-banner-close" aria-label="Close" style="background: transparent; border: none; color: var(--text-muted, #94a3b8); padding: 4px; line-height: 1; font-size: 1rem; flex-shrink: 0;">
-                <i class="bi bi-x-lg"></i>
+                <i data-lucide="x" class="vasto-icon vasto-icon--sm" aria-hidden="true"></i>
             </button>
         `;
 
@@ -4411,6 +4427,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
         });
 
         document.body.appendChild(banner);
+        if (window.VastoIcons) window.VastoIcons.render(banner);
         requestAnimationFrame(() => {
             banner.style.transform = 'translateY(0)';
             banner.style.opacity = '1';
@@ -4600,7 +4617,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 <img src="${thumbSrc}" alt="" style="width: 44px; height: 44px; border-radius: 10px !important; object-fit: cover; border: 1px solid var(--border, #e2e8f0);">
             </div>` : ''}
             <button type="button" class="toast-close-btn" style="background: none; border: none; color: var(--text-muted, #94a3b8); padding: 4px; font-size: 1.1rem; line-height: 1; cursor: pointer; flex-shrink: 0; border-radius: 6px;" aria-label="Close">
-                <i class="bi bi-x-lg"></i>
+                <i data-lucide="x" class="vasto-icon vasto-icon--sm" aria-hidden="true"></i>
             </button>
         `;
 
@@ -4620,6 +4637,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
         }
 
         document.body.appendChild(toast);
+        if (window.VastoIcons) window.VastoIcons.render(toast);
         setTimeout(dismissToast, 5000);
     }
 
@@ -5217,6 +5235,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                             const currentLeftRail = document.getElementById('left-nav-rail');
                             if (incomingLeftRail && currentLeftRail) {
                                 currentLeftRail.innerHTML = incomingLeftRail.innerHTML;
+                                if (window.VastoIcons) window.VastoIcons.render(currentLeftRail);
                             }
 
                             // Sync context-rail-target from the parsed full document
@@ -5224,6 +5243,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                             const currentContextRail = document.getElementById('context-rail-target');
                             if (incomingContextRail && currentContextRail) {
                                 currentContextRail.innerHTML = incomingContextRail.innerHTML;
+                                if (window.VastoIcons) window.VastoIcons.render(currentContextRail);
                             }
 
                             // Sync navbar from the parsed full document
@@ -5231,6 +5251,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                             const currentNavbar = document.getElementById('navbar-top');
                             if (incomingNavbar && currentNavbar) {
                                 currentNavbar.innerHTML = incomingNavbar.innerHTML;
+                                if (window.VastoIcons) window.VastoIcons.render(currentNavbar);
                             }
 
                             const targetPath = responseUrl || (evt.detail.requestConfig && evt.detail.requestConfig.path) || window.location.pathname;
@@ -5612,22 +5633,31 @@ window.addEventListener('beforeinstallprompt', (e) => {
     // Instant Optimistic Like Button Interaction
     (function() {
         function setButtonVisual(btn, isLiked, count, animate) {
-            const icon = btn.querySelector('i');
+            const icon = btn.querySelector('[data-lucide]');
             const isReel = btn.classList.contains('reel-action-btn');
+            const iconClasses = function(liked) {
+                const cls = ['vasto-icon'];
+                if (liked) cls.push('vasto-icon--filled', 'text-danger');
+                if (!isReel) cls.push('fs-5');
+                if (liked && animate) cls.push('heart-pop');
+                return cls.join(' ');
+            };
             if (isLiked) {
                 btn.classList.add('text-danger', 'liked');
                 if (isReel) { btn.classList.remove('text-white'); } else { btn.classList.remove('text-muted'); }
                 btn.setAttribute('aria-label', 'Unlike');
-                if (icon) icon.className = isReel
-                    ? 'bi bi-heart-fill text-danger'
-                    : 'bi bi-heart-fill text-danger fs-5' + (animate ? ' heart-pop' : '');
+                if (icon) {
+                    icon.className = iconClasses(true);
+                    if (window.VastoIcons) VastoIcons.setIcon(icon, 'heart');
+                }
             } else {
                 btn.classList.remove('text-danger', 'liked');
                 if (isReel) { btn.classList.add('text-white'); } else { btn.classList.add('text-muted'); }
                 btn.setAttribute('aria-label', 'Like');
-                if (icon) icon.className = isReel
-                    ? 'bi bi-heart'
-                    : 'bi bi-heart fs-5';
+                if (icon) {
+                    icon.className = iconClasses(false);
+                    if (window.VastoIcons) VastoIcons.setIcon(icon, 'heart');
+                }
             }
             if (count !== undefined && count !== null) {
                 const countEl = btn.querySelector('.like-count');
@@ -5870,17 +5900,17 @@ window.addEventListener('beforeinstallprompt', (e) => {
         function updateBookmarkVisual(isSaved) {
             var btn = document.getElementById('globalShareBookmarkBtn');
             if (btn) {
-                var icon = btn.querySelector('i');
+                var icon = btn.querySelector('[data-lucide]');
                 var label = btn.querySelector('.share-action-label');
                 if (isSaved) {
-                    if (icon) icon.className = 'bi bi-bookmark-fill fs-5 text-warning';
+                    if (icon) icon.className = 'vasto-icon vasto-icon--filled fs-5 text-warning';
                     if (label) {
                         label.textContent = 'Saved';
                         label.classList.add('text-warning', 'fw-semibold');
                         label.classList.remove('text-muted');
                     }
                 } else {
-                    if (icon) icon.className = 'bi bi-bookmark fs-5 text-dark';
+                    if (icon) icon.className = 'vasto-icon fs-5 text-dark';
                     if (label) {
                         label.textContent = 'Save';
                         label.classList.remove('text-warning', 'fw-semibold');
@@ -5891,9 +5921,9 @@ window.addEventListener('beforeinstallprompt', (e) => {
             var fsBookmarkBtn = document.getElementById('fsDesktopBookmarkBtn');
             if (fsBookmarkBtn) {
                 fsBookmarkBtn.classList.toggle('active', isSaved);
-                var fsIcon = fsBookmarkBtn.querySelector('i');
+                var fsIcon = fsBookmarkBtn.querySelector('[data-lucide]');
                 var fsLabel = document.getElementById('fsDesktopBookmarkLabel');
-                if (fsIcon) fsIcon.className = isSaved ? 'bi bi-bookmark-fill text-warning' : 'bi bi-bookmark';
+                if (fsIcon) fsIcon.className = isSaved ? 'vasto-icon vasto-icon--filled text-warning' : 'vasto-icon';
                 if (fsLabel) fsLabel.textContent = isSaved ? 'Saved' : 'Save';
             }
         }
@@ -5940,7 +5970,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 var key = isGroup ? ('group:' + target.id) : ('user:' + target.username);
                 var isSent = sentTargets.has(key);
                 var badgeHtml = isGroup ?
-                    '<div class="share-target-type-badge bg-success" title="Group"><i class="bi bi-people-fill"></i></div>' : '';
+                    '<div class="share-target-type-badge bg-success" title="Group"><i aria-hidden="true" data-lucide="users" class="vasto-icon"></i></div>' : '';
 
                 return '<div class="share-target-item" data-key="' + key + '" data-type="' + target.type + '" data-id="' + (target.id || '') + '" data-username="' + (target.username || '') + '">' +
                     '<div class="share-target-avatar-wrap">' +
@@ -5949,7 +5979,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     '</div>' +
                     '<div class="share-target-name" title="' + escapeHtml(target.name) + '">' + escapeHtml(target.name) + '</div>' +
                     '<button type="button" class="share-target-send-btn ' + (isSent ? 'sent' : '') + '" data-key="' + key + '" data-type="' + target.type + '" data-id="' + (target.id || '') + '" data-username="' + (target.username || '') + '" ' + (isSent ? 'disabled' : '') + '>' +
-                        (isSent ? '<i class="bi bi-check2"></i> Sent' : 'Send') +
+                        (isSent ? '<i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Sent' : 'Send') +
                     '</button>' +
                 '</div>';
             }).join('');
@@ -6056,7 +6086,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     var name = conversation._shareName;
                     return '<button type="button" class="btn btn-light text-start rounded-3 p-2 flex-shrink-0 share-message-conversation-btn" data-conversation-id="' +
                         escapeHtml(conversation.id) + '" style="min-width: 180px; max-width: 230px;">' +
-                        '<i class="bi bi-chat-dots text-primary me-2"></i><span class="small fw-semibold">' +
+                        '<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon text-primary me-2"></i><span class="small fw-semibold">' +
                         escapeHtml(name) + '</span></button>';
                 }).join('');
         }
@@ -6113,12 +6143,12 @@ window.addEventListener('beforeinstallprompt', (e) => {
             })
             .then(function () {
                 showFeedback('Post shared to messages!', 'success');
-                conversationBtn.innerHTML = '<i class="bi bi-check2 text-success me-1"></i> Sent';
+                conversationBtn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon text-success me-1"></i> Sent';
             })
             .catch(function (err) {
                 console.error('[Share Post Message Error]', err);
                 conversationBtn.disabled = false;
-                conversationBtn.innerHTML = '<i class="bi bi-chat-dots text-primary me-2"></i> Try again';
+                conversationBtn.innerHTML = '<i aria-hidden="true" data-lucide="message-circle" class="vasto-icon text-primary me-2"></i> Try again';
                 showFeedback(err.message || 'Unable to share post', 'danger');
             });
         });
@@ -6163,7 +6193,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     if (data && data.status === 'success') {
                         sentTargets.add(key);
                         sendBtn.classList.add('sent');
-                        sendBtn.innerHTML = '<i class="bi bi-check2"></i> Sent';
+                        sendBtn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Sent';
                         sendBtn.disabled = true;
                         showFeedback(data.message || '{% trans "App shared successfully!" %}', 'success');
                         if (window.Haptics && typeof window.Haptics.impactLight === 'function') {
@@ -6213,7 +6243,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 if (data && data.status === 'success') {
                     sentTargets.add(key);
                     sendBtn.classList.add('sent');
-                    sendBtn.innerHTML = '<i class="bi bi-check2"></i> Sent';
+                    sendBtn.innerHTML = '<i aria-hidden="true" data-lucide="check" class="vasto-icon"></i> Sent';
                     sendBtn.disabled = true;
                     showFeedback(data.message || 'Shared successfully!', 'success');
                     if (window.Haptics && typeof window.Haptics.impactLight === 'function') {
@@ -6315,14 +6345,14 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 if (copyBtn) {
                     copyBtn.onclick = function () {
                         var label = copyBtn.querySelector('.share-action-label');
-                        var icon = copyBtn.querySelector('i');
+                        var icon = copyBtn.querySelector('[data-lucide]');
                         var finish = function () {
                             if (label) label.textContent = '{% trans "Copied!" %}';
-                            if (icon) icon.className = 'bi bi-check2 fs-4 text-success';
+                            if (icon) { icon.className = 'vasto-icon fs-4 text-success'; if (window.VastoIcons) VastoIcons.setIcon(icon, 'check'); }
                             showFeedback('{% trans "Link copied to clipboard!" %}', 'success');
                             setTimeout(function () {
                                 if (label) label.textContent = '{% trans "Copy Link" %}';
-                                if (icon) icon.className = 'bi bi-link-45deg fs-4 text-dark';
+                                if (icon) { icon.className = 'vasto-icon fs-4 text-dark'; if (window.VastoIcons) VastoIcons.setIcon(icon, 'link'); }
                             }, 2000);
                         };
                         if (navigator.clipboard) {
@@ -6541,7 +6571,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                     repostBtn.classList.toggle('text-primary', reposted);
                 }
                 if (repostIcon) {
-                    repostIcon.className = reposted ? 'bi bi-repeat fs-5 text-primary' : 'bi bi-repeat fs-5 text-dark';
+                    repostIcon.className = reposted ? 'vasto-icon fs-5 text-primary' : 'vasto-icon fs-5 text-dark';
                 }
                 if (repostLabel) {
                     repostLabel.textContent = reposted ? '{% trans "Reposted" %}' : '{% trans "Repost" %}';
@@ -6698,14 +6728,14 @@ window.addEventListener('beforeinstallprompt', (e) => {
             if (copyBtn) {
                 copyBtn.onclick = function () {
                     var label = copyBtn.querySelector('.share-action-label');
-                    var icon = copyBtn.querySelector('i');
+                    var icon = copyBtn.querySelector('[data-lucide]');
                     var finish = function () {
                         if (label) label.textContent = 'Copied!';
-                        if (icon) icon.className = 'bi bi-check2 fs-4 text-success';
+                        if (icon) { icon.className = 'vasto-icon fs-4 text-success'; if (window.VastoIcons) VastoIcons.setIcon(icon, 'check'); }
                         showFeedback('Link copied to clipboard!', 'success');
                         setTimeout(function () {
                             if (label) label.textContent = 'Copy Link';
-                            if (icon) icon.className = 'bi bi-link-45deg fs-4 text-dark';
+                            if (icon) { icon.className = 'vasto-icon fs-4 text-dark'; if (window.VastoIcons) VastoIcons.setIcon(icon, 'link'); }
                         }, 2000);
                     };
                     if (navigator.clipboard) {
@@ -6852,7 +6882,17 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
             if (titleEl) titleEl.textContent = title;
             if (subEl) subEl.textContent = subtitle;
-            if (iconEl) iconEl.className = 'bi ' + iconClass + ' fs-2';
+            var guestIconNames = {
+                'bi-stars': 'sparkles', 'bi-heart-fill': 'heart',
+                'bi-chat-dots': 'message-circle', 'bi-chat-dots-fill': 'message-circle',
+                'bi-repeat': 'repeat-2', 'bi-bookmark-fill': 'bookmark',
+                'bi-download': 'download', 'bi-sliders': 'sliders-horizontal',
+                'bi-person-circle': 'circle-user-round', 'bi-compass-fill': 'compass',
+                'bi-person-plus': 'user-round-plus', 'bi-play-circle-fill': 'circle-play'
+            };
+            if (iconEl && window.VastoIcons) {
+                window.VastoIcons.setIcon(iconEl, guestIconNames[iconClass] || 'sparkles');
+            }
 
             var loginBase = '{% url "login" %}';
             var registerBase = '{% url "users:register" %}';

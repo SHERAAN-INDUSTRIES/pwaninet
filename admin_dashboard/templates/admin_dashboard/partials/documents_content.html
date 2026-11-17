@@ -1,0 +1,226 @@
+<main class="adw-page" data-adw-section="documents">
+
+  <header class="adw-page-head">
+    <div>
+      <div class="adw-eyebrow">Content operations</div>
+      <h1 class="adw-page-title">Documents</h1>
+      <p class="adw-page-sub">All site documents with Spark indexing state, chunk/model diagnostics, and engagement.</p>
+    </div>
+    <div class="adw-page-actions">
+      <a href="{% url 'admin_dashboard:documents' %}" class="adw-btn"
+         hx-get="{% url 'admin_dashboard:documents' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">
+        <i aria-hidden="true" data-lucide="rotate-cw" class="vasto-icon vasto-icon--sm"></i> Refresh
+      </a>
+    </div>
+  </header>
+
+  {% if flash %}
+  <div class="adw-flash is-{{ flash_level|default:'info' }}">
+    <i aria-hidden="true" data-lucide="{% if flash_level == 'success' %}circle-check-big{% elif flash_level == 'warning' %}triangle-alert{% else %}info{% endif %}" class="vasto-icon vasto-icon--sm"></i>
+    <div>{{ flash }}</div>
+  </div>
+  {% endif %}
+
+  <div class="adw-stat-grid">
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>All documents</span><i aria-hidden="true" data-lucide="files" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.all }}</div>
+      <div class="adw-stat-note">Across the site</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Fully indexed</span><i aria-hidden="true" data-lucide="circle-check" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.fully_indexed }}</div>
+      <div class="adw-stat-note">All chunks embedded & active</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Partially indexed</span><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.partially_indexed }}</div>
+      <div class="adw-stat-note">Pending, processing, or failed chunks</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Not started</span><i aria-hidden="true" data-lucide="circle-minus" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.not_started }}</div>
+      <div class="adw-stat-note">No chunks for latest version</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Total chunks</span><i aria-hidden="true" data-lucide="grid-3x3" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.total_chunks }}</div>
+      <div class="adw-stat-note">{% if summary.with_failures %}{{ summary.with_failures }} docs with failed chunks{% else %}No chunk failures in current view{% endif %}</div>
+    </section>
+    <section class="adw-stat-card">
+      <div class="adw-stat-top"><span>Engagement</span><i aria-hidden="true" data-lucide="chart-line" class="vasto-icon vasto-icon--sm"></i></div>
+      <div class="adw-stat-value">{{ summary.total_views }}<span class="adw-stat-denom"> / {{ summary.total_downloads }}</span></div>
+      <div class="adw-stat-note">Views / downloads (current scope)</div>
+    </section>
+  </div>
+
+  <div class="adw-tally-bar" role="tablist" aria-label="Indexing state">
+    {% for value,label,count in tabs %}
+    <a href="{% url 'admin_dashboard:documents' %}?tab={{ value }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}"
+       class="adw-chip {% if tab == value %}is-info{% else %}is-mute{% endif %}"
+       hx-get="{% url 'admin_dashboard:documents' %}?tab={{ value }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}"
+       hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">
+      {{ label }} <strong>{{ count }}</strong>
+    </a>
+    {% endfor %}
+  </div>
+
+  <section class="adw-panel">
+    <div class="adw-panel-head">
+      <div>
+        <h2 class="adw-panel-title">Document inventory</h2>
+        <div class="adw-panel-sub">Showing {{ rows|length }} of {{ page_obj.paginator.count }} matching documents · latest version indexing</div>
+      </div>
+      <i aria-hidden="true" data-lucide="file-text" class="adw-panel-icon vasto-icon vasto-icon--sm"></i>
+    </div>
+    <div class="adw-panel-body adw-panel-body-flush">
+      <form method="get" class="adw-filter-bar" action="{% url 'admin_dashboard:documents' %}"
+            hx-get="{% url 'admin_dashboard:documents' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <input type="text" name="q" value="{{ search }}" class="adw-input" placeholder="Search title, slug, uploader, ID, share ID…" aria-label="Search documents">
+        <select name="status" class="adw-input" aria-label="Document status">
+          <option value="">All statuses</option>
+          {% for value,label in status_choices %}
+          <option value="{{ value }}"{% if value == doc_status %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <select name="visibility" class="adw-input" aria-label="Visibility">
+          <option value="">All visibility</option>
+          {% for value,label in visibility_choices %}
+          <option value="{{ value }}"{% if value == visibility %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <select name="sort" class="adw-input" aria-label="Sort">
+          {% for value,label in sort_options %}
+          <option value="{{ value }}"{% if value == sort %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="adw-btn adw-btn-primary">Apply</button>
+        {% if search or doc_status or visibility or sort != 'newest' or tab != 'all' %}
+        <a href="{% url 'admin_dashboard:documents' %}" class="adw-btn"
+           hx-get="{% url 'admin_dashboard:documents' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">Reset</a>
+        {% endif %}
+      </form>
+
+      <div class="adw-table-wrap">
+        <table class="adw-table adw-table-docs">
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Uploader</th>
+              <th>Indexing</th>
+              <th>Chunks / Model</th>
+              <th class="adw-num">Views</th>
+              <th class="adw-num">Downloads</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td>
+                <div class="adw-cell-strong">
+                  <a href="{% url 'documents:document_detail' row.document.share_id %}" target="_blank" rel="noopener">{{ row.document.title }}</a>
+                </div>
+                <div class="adw-cell-sub">
+                  #{{ row.document.id }} · {{ row.document.get_status_display }} · {{ row.document.get_visibility_display }}
+                  {% if row.document.category %} · {{ row.document.category.name }}{% endif %}
+                </div>
+                <div class="adw-cell-sub">
+                  {% if row.latest_version_id %}Latest v{{ row.latest_version_id }}{% else %}No latest version{% endif %}
+                  · {{ row.document.created_at|date:"M d, Y" }}
+                </div>
+              </td>
+              <td>
+                <div class="adw-cell-strong">{{ row.document.uploaded_by.username }}</div>
+                <div class="adw-cell-sub">{{ row.document.uploaded_by.email|default:"" }}</div>
+              </td>
+              <td>
+                {% if row.index_state == 'fully_indexed' %}
+                  <span class="adw-chip is-ok"><i aria-hidden="true" data-lucide="circle-check-big" class="vasto-icon vasto-icon--sm"></i> Fully indexed</span>
+                {% elif row.index_state == 'partially_indexed' %}
+                  <span class="adw-chip is-warn"><i aria-hidden="true" data-lucide="hourglass" class="vasto-icon vasto-icon--sm"></i> Partially indexed</span>
+                {% else %}
+                  <span class="adw-chip is-mute"><i aria-hidden="true" data-lucide="circle-minus" class="vasto-icon vasto-icon--sm"></i> Not started</span>
+                {% endif %}
+                {% if row.chunks_failed %}<div class="adw-cell-sub" style="margin-top:4px"><span class="adw-chip is-off">{{ row.chunks_failed }} failed</span></div>{% endif %}
+              </td>
+              <td>
+                <div class="adw-cell-strong">{{ row.chunks_total }} chunks</div>
+                <div class="adw-cell-sub">
+                  active {{ row.chunks_active }} · done {{ row.chunks_completed }} · pending {{ row.chunks_pending }} · proc {{ row.chunks_processing }} · fail {{ row.chunks_failed }}
+                </div>
+                <div class="adw-cell-sub">
+                  {% if row.embedding_models %}
+                    Model: <code>{{ row.embedding_model }}</code>{% if row.embedding_models|length > 1 %} <span class="adw-text-muted">(+{{ row.embedding_models|length|add:"-1" }} more)</span>{% endif %}
+                  {% else %}
+                    <span class="adw-text-muted">No embedding model recorded</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="adw-num">{{ row.views_count }}</td>
+              <td class="adw-num">{{ row.downloads_count }}</td>
+              <td>
+                <div style="display:flex;flex-direction:column;gap:6px;min-width:150px">
+                  <form method="post" action="{% url 'admin_dashboard:reindex_document' row.document.id %}"
+                        hx-post="{% url 'admin_dashboard:reindex_document' row.document.id %}"
+                        hx-target="#page-content-target" hx-swap="innerHTML">
+                    {% csrf_token %}
+                    <input type="hidden" name="mode" value="ingest">
+                    <input type="hidden" name="return_query" value="{{ request.GET.urlencode }}">
+                    <button type="submit" class="adw-btn adw-btn-primary" style="width:100%" title="Re-extract, chunk and queue embeddings for latest version">
+                      <i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon vasto-icon--sm"></i> Re-index
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'admin_dashboard:reindex_document' row.document.id %}"
+                        hx-post="{% url 'admin_dashboard:reindex_document' row.document.id %}"
+                        hx-target="#page-content-target" hx-swap="innerHTML">
+                    {% csrf_token %}
+                    <input type="hidden" name="mode" value="embed">
+                    <input type="hidden" name="return_query" value="{{ request.GET.urlencode }}">
+                    <button type="submit" class="adw-btn" style="width:100%" title="Retry embeddings for existing chunks" {% if row.chunks_total == 0 %}disabled{% endif %}>
+                      <i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i> Embed only
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="adw-empty">
+                <i aria-hidden="true" data-lucide="files" class="vasto-icon vasto-icon--sm"></i>
+                <strong>No documents found</strong>
+                <span>Try adjusting filters or search.</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+      <div class="adw-pagination" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;flex-wrap:wrap">
+        <div class="adw-cell-sub">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          {% if page_obj.has_previous %}
+          <a class="adw-btn" href="{% url 'admin_dashboard:documents' %}?tab={{ tab }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}&page={{ page_obj.previous_page_number }}"
+             hx-get="{% url 'admin_dashboard:documents' %}?tab={{ tab }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}&page={{ page_obj.previous_page_number }}"
+             hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">Previous</a>
+          {% endif %}
+          {% if page_obj.has_next %}
+          <a class="adw-btn" href="{% url 'admin_dashboard:documents' %}?tab={{ tab }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}&page={{ page_obj.next_page_number }}"
+             hx-get="{% url 'admin_dashboard:documents' %}?tab={{ tab }}&q={{ search|urlencode }}&status={{ doc_status }}&visibility={{ visibility }}&sort={{ sort }}&page={{ page_obj.next_page_number }}"
+             hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true">Next</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <p class="adw-panel-note">
+        <i aria-hidden="true" data-lucide="info" class="vasto-icon vasto-icon--sm"></i>
+        “Fully indexed” means all chunks for the latest version are embedding-complete and active. “Partially indexed” includes extracted text with pending/failed embeddings. “Not started” means no chunks exist for the latest version. Re-index runs ingestion (extract/chunk) and queues embeddings; “Embed only” retries embeddings for existing chunks.
+      </p>
+    </div>
+  </section>
+
+</main>

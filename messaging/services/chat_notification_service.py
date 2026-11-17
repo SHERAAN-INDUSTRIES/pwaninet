@@ -124,7 +124,7 @@ class ChatNotificationService:
             'clean_text': str,     # Text without emoji prefix (for icon-rendered DOM)
             'push_text': str,      # Push / banner body text
             'type': str,           # 'text'|'image'|'video'|'audio'|'document'|'sticker'|'gif'|'link'|'deleted'|'encrypted'
-            'icon': str | None,    # Bootstrap icon class for sidebar
+            'icon': str | None,    # Lucide icon name for sidebar
             'thumbnail_url': str | None,  # Media preview thumbnail URL if applicable
         }
         """
@@ -145,7 +145,7 @@ class ChatNotificationService:
                 'clean_text': 'This message was deleted',
                 'push_text': '🚫 This message was deleted',
                 'type': 'deleted',
-                'icon': 'bi-slash-circle',
+                'icon': 'circle-slash',
                 'thumbnail_url': None,
             }
 
@@ -160,7 +160,7 @@ class ChatNotificationService:
                 'clean_text': 'Encrypted message',
                 'push_text': '🔒 New message',
                 'type': 'encrypted',
-                'icon': 'bi-lock-fill',
+                'icon': 'lock',
                 'thumbnail_url': None,
             }
 
@@ -203,7 +203,7 @@ class ChatNotificationService:
                 'clean_text': 'Sticker',
                 'push_text': '😊 Sticker',
                 'type': 'sticker',
-                'icon': 'bi-emoji-smile',
+                'icon': 'smile',
                 'thumbnail_url': thumbnail_url,
             }
         elif msg_type == 'gif' or att_type == 'gif' or getattr(message, 'link_type', '') == 'gif':
@@ -213,7 +213,7 @@ class ChatNotificationService:
                 'clean_text': 'GIF',
                 'push_text': '🎬 GIF',
                 'type': 'gif',
-                'icon': 'bi-filetype-gif',
+                'icon': 'clapperboard',
                 'thumbnail_url': thumbnail_url,
             }
 
@@ -226,7 +226,7 @@ class ChatNotificationService:
                 'clean_text': label,
                 'push_text': f"🎤 {label}",
                 'type': 'audio',
-                'icon': 'bi-mic-fill',
+                'icon': 'mic',
                 'thumbnail_url': None,
             }
 
@@ -240,7 +240,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"🎵 {clean_label}",
                 'type': 'audio',
-                'icon': 'bi-music-note-beamed',
+                'icon': 'music',
                 'thumbnail_url': None,
             }
 
@@ -279,7 +279,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"{emoji_prefix} {clean_label}",
                 'type': 'image' if img_count >= vid_count else 'video',
-                'icon': 'bi-images',
+                'icon': 'images',
                 'thumbnail_url': thumbnail_url,
             }
 
@@ -299,7 +299,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"📷 {clean_label}",
                 'type': 'image',
-                'icon': 'bi-camera-fill',
+                'icon': 'camera',
                 'thumbnail_url': thumbnail_url,
             }
 
@@ -311,7 +311,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"🎥 {clean_label}",
                 'type': 'video',
-                'icon': 'bi-camera-video-fill',
+                'icon': 'video',
                 'thumbnail_url': None,
             }
 
@@ -325,7 +325,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"📄 {clean_label}",
                 'type': 'document',
-                'icon': 'bi-file-earmark-text-fill',
+                'icon': 'file-text',
                 'thumbnail_url': None,
             }
 
@@ -362,7 +362,7 @@ class ChatNotificationService:
                 'clean_text': clean_label,
                 'push_text': f"🔗 {clean_label}",
                 'type': 'link',
-                'icon': 'bi-link-45deg',
+                'icon': 'link',
                 'thumbnail_url': thumbnail_url,
             }
 
@@ -721,7 +721,7 @@ class ChatNotificationService:
                         'banner_title': banner_title,
                         'banner_body': banner_body,
                         'preview_type': 'reaction',
-                        'preview_icon': 'bi-heart-fill',
+                        'preview_icon': 'heart',
                         'thumbnail_url': msg_preview['thumbnail_url'],
                         'sender_name': reactor.username,
                         'sender_display_name': reactor_display_name,
@@ -809,7 +809,7 @@ class ChatNotificationService:
                         'message_preview': '🚫 You deleted this message' if is_sender else '🚫 This message was deleted',
                         'clean_preview': 'You deleted this message' if is_sender else 'This message was deleted',
                         'preview_type': 'deleted',
-                        'preview_icon': 'bi-slash-circle',
+                        'preview_icon': 'circle-slash',
                         'sender_id': actor.id if actor else message.sender_id,
                         'is_sender': is_sender,
                         'should_alert': False,
@@ -1007,7 +1007,7 @@ class ChatNotificationService:
                         'banner_title': banner_title,
                         'banner_body': banner_body,
                         'preview_type': 'text',
-                        'preview_icon': 'bi-people-fill',
+                        'preview_icon': 'users',
                         'sender_name': getattr(actor, 'username', 'System'),
                         'sender_display_name': actor_display,
                         'sender_avatar': actor_avatar,

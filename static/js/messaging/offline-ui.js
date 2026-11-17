@@ -227,7 +227,7 @@ class OfflineUI {
             if (!item.querySelector('.conversation-offline-indicator')) {
                 const indicator = document.createElement('span');
                 indicator.className = 'conversation-offline-indicator';
-                indicator.innerHTML = '<i class="bi bi-wifi-off"></i> Offline';
+                indicator.innerHTML = '<i aria-hidden="true" data-lucide="wifi-off" class="vasto-icon"></i> Offline';
                 item.appendChild(indicator);
             }
         });
@@ -245,7 +245,7 @@ class OfflineUI {
         if (!messageInput.querySelector('.offline-input-indicator')) {
             const indicator = document.createElement('div');
             indicator.className = 'offline-input-indicator';
-            indicator.innerHTML = '<i class="bi bi-wifi-off"></i> Messages will be sent when connection returns';
+            indicator.innerHTML = '<i aria-hidden="true" data-lucide="wifi-off" class="vasto-icon"></i> Messages will be sent when connection returns';
             
             // Insert before the input area
             const inputArea = messageInput.querySelector('.message-input-area');
@@ -307,7 +307,7 @@ class OfflineUI {
             </div>
             <div class="message-meta">
                 <span class="pending-indicator">
-                    <i class="bi bi-clock"></i> Sending when connection returns...
+                    <i aria-hidden="true" data-lucide="clock" class="vasto-icon"></i> Sending when connection returns...
                 </span>
             </div>
         `;
@@ -349,7 +349,7 @@ class OfflineUI {
             
             const timeElement = pendingElement.querySelector('.message-time .pending-indicator');
             if (timeElement) {
-                timeElement.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sending...';
+                timeElement.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon"></i> Sending...';
             }
         }
     }
@@ -365,14 +365,14 @@ class OfflineUI {
         syncStatus.className = `sync-status active ${status}`;
         
         if (status === 'syncing') {
-            syncStatus.innerHTML = '<i class="bi bi-arrow-repeat"></i> Syncing...';
+            syncStatus.innerHTML = '<i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon"></i> Syncing...';
         } else if (status === 'success') {
-            syncStatus.innerHTML = '<i class="bi bi-check-circle"></i> Synced';
+            syncStatus.innerHTML = '<i aria-hidden="true" data-lucide="circle-check" class="vasto-icon"></i> Synced';
             setTimeout(() => {
                 syncStatus.classList.remove('active');
             }, 3000);
         } else if (status === 'error') {
-            syncStatus.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Sync failed';
+            syncStatus.innerHTML = '<i aria-hidden="true" data-lucide="triangle-alert" class="vasto-icon"></i> Sync failed';
             setTimeout(() => {
                 syncStatus.classList.remove('active');
             }, 5000);
@@ -396,7 +396,7 @@ class OfflineUI {
         const offlineMessage = document.createElement('div');
         offlineMessage.className = 'offline-message-list';
         offlineMessage.innerHTML = `
-            <i class="bi bi-wifi-off"></i>
+            <i aria-hidden="true" data-lucide="wifi-off" class="vasto-icon"></i>
             <div>You're offline. Showing saved messages.</div>
             <div style="font-size: 12px; margin-top: 4px; opacity: 0.7;">
                 Messages will sync when connection returns

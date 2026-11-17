@@ -1,0 +1,9 @@
+{% extends 'admin_dashboard/base_workspace.html' %}
+
+{% block title %}Admin manager · Admin — vasto{% endblock %}
+
+{% block workspace_content %}
+<div class="admin-workspace" id="admin-workspace" data-admin-title="{{ page_title }}">
+  {% include content_partial %}
+</div>
+{% endblock %}

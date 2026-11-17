@@ -380,7 +380,7 @@ class StudyAgent:
                 executed = True
                 if timing is not None:
                     timing.count('tool_executions')
-                action_event_id = f'tool-{len(observed)+1}'
+                action_event_id = ('export-' + args['format'] if name == 'generate_document' and args.get('format') in {'pdf','docx','doc','pptx'} else f'tool-{len(observed)+1}')
                 emit(on_progress,'tool',LABELS.get(name,'Checking the requested information'),event_id=action_event_id,tool=name)
                 try:
                     if name == 'retrieve_documents':
@@ -449,6 +449,8 @@ class StudyAgent:
                         validated = allowed[name].validate_parameters(**args)
                         if name in {'propose_personal_memory', 'send_notification'}:
                             validated['source_message_id'] = request.user_message_id
+                        if name == 'generate_document':
+                            validated['request_message_id'] = request.user_message_id
                         if name in WRITE_TOOLS:
                             validated['execution_key'] = hashlib.sha256(f'{request.user.pk}:{request.user_message_id}:{name}:{str(args.get("title", "")).strip().casefold()}'.encode()).hexdigest()
                         if name in {'send_message','follow_user'}:
@@ -469,7 +471,7 @@ class StudyAgent:
                         outcome['awaiting_review'] = True
                 emit(on_progress,'tool',
                     (LABELS.get(name,'Requested check') + (' — complete' if result.success else ' — could not complete')),
-                    event_id=action_event_id,tool=name,status='completed' if result.success else 'failed', **outcome)
+                    event_id=action_event_id,tool=name,status=('waiting' if name == 'generate_document' and result.success and isinstance(result.data, dict) and result.data.get('status') == 'awaiting_completed_content' else 'completed' if result.success else 'failed'), **outcome)
                 if result.success and isinstance(result.data,dict) and isinstance(result.data.get('action'),dict):
                     action = result.data['action']
                     if action.get('status') == 'pending':

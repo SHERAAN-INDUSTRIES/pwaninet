@@ -334,11 +334,11 @@
      hx-push-url="true"
      hx-history="true"
      aria-label="Close fullscreen view">
-    <i class="bi bi-x-lg"></i>
+    <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
   </a>
 
   <button class="download-btn{% if not post.allow_downloads %} disabled opacity-50{% endif %}" {% if not post.allow_downloads %}disabled aria-disabled="true"{% endif %} data-download-allowed="{{ post.allow_downloads|yesno:'true,false' }}" data-image-url="{% if post.allow_downloads %}{% protected_download_url post 'image' post_image.id %}{% endif %}" data-filename="{{ post_image.image.name|default:'image.jpg' }}" data-post.share_id="{{ post.share_id }}" data-media-id="{{ post_image.id }}" aria-label="Download image">
-    <i class="bi bi-download"></i>
+    <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i>
   </button>
 
   {% if has_prev %}
@@ -349,7 +349,7 @@
      hx-push-url="true"
      hx-history="true"
      aria-label="Previous image">
-    <i class="bi bi-chevron-left"></i>
+    <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon"></i>
   </a>
   {% endif %}
 
@@ -363,7 +363,7 @@
      hx-push-url="true"
      hx-history="true"
      aria-label="Next image">
-    <i class="bi bi-chevron-right"></i>
+    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon"></i>
   </a>
   {% endif %}
 
@@ -396,26 +396,26 @@
   <div class="bottom-action-bar">
     <div class="action-buttons">
       <button class="action-btn like-btn {% if is_liked %}liked{% endif %}" data-image-id="{{ post_image.id }}" data-post.share_id="{{ post.share_id }}" aria-label="Like image">
-        <i class="bi bi-heart{% if is_liked %}-fill{% endif %}"></i>
+        <i aria-hidden="true" data-lucide="heart" class="vasto-icon{% if is_liked %} vasto-icon--filled{% endif %}"></i>
         <span class="like-count">{{ total_likes }}</span>
       </button>
       <button class="action-btn comment-btn" data-image-id="{{ post_image.id }}" data-post.share_id="{{ post.share_id }}" aria-label="Comment on image">
-        <i class="bi bi-chat"></i>
+        <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i>
       </button>
     </div>
     <div class="three-dot-menu">
       <button class="action-btn menu-btn" aria-label="More options">
-        <i class="bi bi-three-dots"></i>
+        <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon"></i>
       </button>
       <div class="menu-dropdown">
         <a href="#" class="menu-item hide-btn" data-action="hide-post" data-post-id="{{ post.share_id }}">
-          <i class="bi bi-eye-slash"></i> Hide
+          <i aria-hidden="true" data-lucide="eye-off" class="vasto-icon"></i> Hide
         </a>
         <a href="#" class="menu-item menu-download-trigger{% if not post.allow_downloads %} disabled opacity-50{% endif %}" {% if not post.allow_downloads %}aria-disabled="true" tabindex="-1"{% endif %} data-download-allowed="{{ post.allow_downloads|yesno:'true,false' }}" data-image-url="{% if post.allow_downloads %}{% protected_download_url post 'image' post_image.id %}{% endif %}" data-filename="{{ post_image.image.name|default:'image.jpg' }}" data-post.share_id="{{ post.share_id }}" data-media-id="{{ post_image.id }}">
-          <i class="bi bi-download"></i> Download
+          <i aria-hidden="true" data-lucide="download" class="vasto-icon"></i> Download
         </a>
         <a href="#" class="menu-item danger report-btn" data-bs-toggle="modal" data-bs-target="#globalReportModal" data-post-id="{{ post.share_id }}">
-          <i class="bi bi-flag"></i> Report
+          <i aria-hidden="true" data-lucide="flag" class="vasto-icon"></i> Report
         </a>
       </div>
     </div>
@@ -554,9 +554,8 @@
           if (response.ok) {
             const data = await response.json();
             this.classList.toggle('liked');
-            const icon = this.querySelector('i');
-            icon.classList.toggle('bi-heart');
-            icon.classList.toggle('bi-heart-fill');
+            const icon = this.querySelector('[data-lucide]');
+            if (icon) icon.classList.toggle('vasto-icon--filled');
             const countSpan = this.querySelector('.like-count');
             countSpan.textContent = data.likes_count;
           } else if (response.status === 403) {
@@ -651,11 +650,11 @@
                   ` : ''}
                   <div class="comment-actions">
                     <button class="comment-action" data-action="like" data-comment-id="${comment.id}" aria-label="Like comment">
-                      <i class="bi bi-heart"></i>
+                      <i aria-hidden="true" data-lucide="heart" class="vasto-icon"></i>
                       <span>0</span>
                     </button>
                     <button class="comment-action" data-action="reply" data-comment-id="${comment.id}" aria-label="Reply to comment">
-                      <i class="bi bi-chat-dots"></i> Reply
+                      <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon"></i> Reply
                     </button>
                   </div>
                 </div>

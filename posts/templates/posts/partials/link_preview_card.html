@@ -17,7 +17,7 @@
             
             {% if preview.media_type == 'video' or 'youtube' in preview.domain or 'youtu.be' in preview.domain or 'tiktok' in preview.domain or 'vimeo' in preview.domain %}
             <div class="link-preview-play-badge">
-                <i class="bi bi-play-fill"></i>
+                <i aria-hidden="true" data-lucide="play" class="vasto-icon"></i>
             </div>
             {% endif %}
 
@@ -33,7 +33,7 @@
                 {% elif 'twitter' in preview.domain or 'x.com' in preview.domain %}
                     <span class="badge-source badge-x"><i class="bi bi-twitter-x me-1"></i>X</span>
                 {% else %}
-                    <span class="badge-source"><i class="bi bi-globe me-1"></i>{{ preview.domain|default:'Web' }}</span>
+                    <span class="badge-source"><i aria-hidden="true" data-lucide="globe" class="vasto-icon me-1"></i>{{ preview.domain|default:'Web' }}</span>
                 {% endif %}
             </div>
         </div>
@@ -55,13 +55,13 @@
                     {% elif 'twitter' in preview.domain or 'x.com' in preview.domain %}
                         <i class="bi bi-twitter-x text-dark"></i>
                     {% else %}
-                        <i class="bi bi-globe text-muted"></i>
+                        <i aria-hidden="true" data-lucide="globe" class="vasto-icon text-muted"></i>
                     {% endif %}
                     <span class="link-preview-domain text-uppercase fw-semibold small text-truncate">
                         {{ preview.site_name|default:preview.domain }}
                     </span>
                 </div>
-                <i class="bi bi-box-arrow-up-right text-muted small flex-shrink-0 ms-2"></i>
+                <i aria-hidden="true" data-lucide="external-link" class="vasto-icon text-muted small flex-shrink-0 ms-2"></i>
             </div>
 
             {% if preview.title %}

@@ -6562,11 +6562,41 @@
             this.scrollToBottom();
         }
 
+        renderGeneratedDocuments(row, documents = [], errors = []) {
+            if (!row) return;
+            row.querySelector('.spark-generated-documents')?.remove();
+            if (!documents.length && !errors.length) return;
+            const box = document.createElement('div');
+            box.className = 'spark-generated-documents d-flex flex-wrap gap-2 my-2';
+            for (const file of documents) {
+                if (!['pdf','docx','doc','pptx'].includes(file.format)) continue;
+                let url;
+                try { url = new URL(file.download_url, window.location.origin); } catch (_) { continue; }
+                if (url.origin !== window.location.origin || !/^\/documents\/document\/[0-9a-f-]+\/download\/$/i.test(url.pathname)) continue;
+                const link = document.createElement('a');
+                link.className = 'btn btn-sm btn-outline-primary text-wrap text-break mw-100';
+                link.href = url.href;
+                link.setAttribute('download', '');
+                link.textContent = `Download ${file.format.toUpperCase()} · ${file.title || 'Document'}`;
+                box.appendChild(link);
+            }
+            for (const failure of errors) {
+                if (!['pdf','docx','doc','pptx'].includes(failure.format)) continue;
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-sm btn-outline-danger pwanimate-resource-download';
+                button.dataset.format = failure.format;
+                button.textContent = `${failure.format.toUpperCase()} failed · Retry export`;
+                box.appendChild(button);
+            }
+            (row.querySelector('.pwanimate-assistant-bubble') || row).appendChild(box);
+        }
+
         async downloadGeneratedResource(button) {
             const row = button.closest('.pwanimate-message-row');
             const messageId = row && row.dataset.messageId;
             const fileFormat = button.dataset.format;
-            if (!messageId || !['pdf', 'docx'].includes(fileFormat)) return;
+            if (!messageId || !['pdf', 'docx', 'doc', 'pptx'].includes(fileFormat)) return;
 
             const originalMarkup = button.innerHTML;
             const menu = button.closest('.pwanimate-resource-export-menu');
@@ -6907,6 +6937,7 @@
                 // or approval prompt is not a normal answer bubble.
                 this._showAcademicPreflight?.({conversation_id:data.conversation_id, actions:data.academic_actions || []});
                 const assistantRow = this.appendAssistantMessage(awaitingInput && !data.metadata?.teaching ? '' : data.answer, data.sources, data.citations, data.fallback_info, data.quota_info, data.people, data.message_id, data.people_html, data.pending_actions || [], data.follow_ups || [], data.academic_actions || []);
+                this.renderGeneratedDocuments?.(assistantRow, data.metadata?.generated_documents || [], data.metadata?.export_errors || []);
                 this.renderTeachingMode?.(assistantRow, data.metadata?.teaching);
                 this.adoptActivity(assistantRow, data.activity || [], Boolean(data.metadata?.awaiting_approval || data.metadata?.awaiting_clarification));
                 const disclaimer = this.transcript.querySelector('#pwanimate-chat-disclaimer');
@@ -7138,6 +7169,7 @@
                         // first appears; it must not summon the trail by itself.
                         this.ensureActivityTrail()?.add(payload);
                     }
+                    if (payload?.run_id && payload.status === 'running' && payload.tool === 'generate_document') this.activeRunId = payload.run_id;
                     if (payload && payload.run_id && payload.status === 'waiting'
                             && (payload.kind === 'clarification' || payload.kind === 'approval')) {
                         // A durable run just paused: the composer can now answer
@@ -7468,6 +7500,7 @@
         }
 
         async _resumeChatPayload(payload, priorTrail, eventId = null) {
+            if (typeof this.getContextResourcesForRequest === 'function') payload = {...payload, context_resources: this.getContextResourcesForRequest()};
             if (this.isGenerating) throw new Error('Spark is already processing a response.');
             const runId = payload.resume_run_id;
             const conversationId = this.conversationId;
@@ -7529,6 +7562,7 @@
                 } else {
                     this._clearRunState();
                     const row = this.appendAssistantMessage(data.answer,data.sources,data.citations,null,data.quota_info,[],data.message_id, '', [], data.follow_ups || []);
+                    this.renderGeneratedDocuments?.(row, data.metadata?.generated_documents || [], data.metadata?.export_errors || []);
                     this.renderTeachingMode?.(row, data.metadata?.teaching);
                     this.adoptActivity(row,data.activity || [],false);
                     const trailEl = this.currentActivityTrail && this.currentActivityTrail.element;
@@ -7844,6 +7878,8 @@
                             <ul class="dropdown-menu dropdown-menu-end pwanimate-resource-export-menu">
                                 <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pdf"><i data-lucide="file-text" class="me-2"></i>Download PDF</button></li>
                                 <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="docx"><i data-lucide="file-text" class="me-2"></i>Download Word document</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="doc"><i data-lucide="file-text" class="me-2"></i>Download legacy Word (.doc)</button></li>
+                                <li><button type="button" class="dropdown-item pwanimate-resource-download" data-format="pptx"><i data-lucide="presentation" class="me-2"></i>Download PowerPoint</button></li>
                             </ul>
                         </div>
                         <button type="button" class="btn pwanimate-action-btn pwanimate-feedback-btn" data-feedback="helpful" title="This helped" aria-label="This helped">
@@ -8327,9 +8363,11 @@
                 this.activeStudySession = null;
                 this.studySessionId = null;
                 this.studyModeActive = false;
-                this.pendingInteraction = null;
-                this.activeRunId = null;
-                this.setWaitingForInput(false);
+                if (!(this.waitingForInput && this.pendingInteraction)) {
+                    this.pendingInteraction = null;
+                    this.activeRunId = null;
+                    this.setWaitingForInput(false);
+                }
                 this.syncStudyModeUI();
             }
             this.workspace.querySelectorAll('[data-study-handoff]').forEach(n=>n.remove());
@@ -8369,12 +8407,31 @@
                     panel.appendChild(button);this.transcript.appendChild(panel);
                 }
                 const changed=this.studySessionId!==context.session_id;
-                if (changed || (context.status!=='active' && this.waitingForInput) ||
-                    ((this.pendingInteraction?.interaction_id || null)!==(context.pending_interaction?.interaction_id || null))) {
+                const localPi=this.pendingInteraction;
+                const localPiId=localPi?.interaction_id || null;
+                const contextPi=context.pending_interaction || null;
+                const contextPiId=contextPi?.interaction_id || null;
+                const samePendingRun=!changed
+                    && localPi
+                    && context.pending_run_id
+                    && String(context.pending_run_id)===String(localPi.run_id);
+                const interactionMismatch=localPiId!==contextPiId;
+                const preserveLocalClarification=this.waitingForInput
+                    && localPiId
+                    && samePendingRun
+                    && context.status==='active'
+                    && !contextPi
+                    && interactionMismatch;
+                if ((changed || (context.status!=='active' && this.waitingForInput) || interactionMismatch)
+                    && !preserveLocalClarification) {
                     // Detach UI only; the parked question remains pending server-side.
                     this.pendingInteraction=null;
                     this.activeRunId=context.pending_run_id || null;
                     this.setWaitingForInput(context.status==='active' && Boolean(context.pending_interaction),context.pending_interaction,context.pending_run_id);
+                } else if (preserveLocalClarification && context.pending_run_id) {
+                    // Keep the current clarification UI when study context omits it;
+                    // a stale/missing snapshot must not make an unanswered question vanish.
+                    this.activeRunId=context.pending_run_id;
                 }
                 this.studySessionId=context.session_id;
                 if (sessionDetail && isCurrent()) {

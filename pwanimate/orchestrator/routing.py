@@ -24,6 +24,9 @@ _OPERATION = re.compile(r"\b(?:and\s+(?:then\s+)?(?:explain|teach|search|resume|
 
 def is_platform_action(text):
     """Execution hint only; tools still validate source, consent and approval."""
+    from pwanimate.services.document_exports import requested_formats
+    if requested_formats(text):
+        return True
     if re.search(r"```|\b(?:how to|how do|how can|don't|do not|document says|pretend|example transcript)\b", text, re.I):
         return False
     return bool(re.search(r'\b(?:send|message|text|follow|notify|remind|save|create|build|draft|set|add|update|schedule|reschedule|change|move|shift|remove|delete|cancel|complete|finish|mark)\b', text, re.I)

@@ -44,12 +44,12 @@
         toast.className = `alert alert-${type === 'error' ? 'danger' : (type === 'success' ? 'success' : 'primary')} shadow-sm border-0 py-2 px-3 m-0 d-flex align-items-center gap-2 fade show`;
         toast.style.cssText = 'pointer-events: auto; border-radius: 12px; font-size: 0.88rem; min-width: 260px; max-width: 360px;';
         
-        let icon = 'bi-info-circle-fill';
-        if (type === 'success') icon = 'bi-check-circle-fill';
-        if (type === 'error') icon = 'bi-exclamation-triangle-fill';
+        let icon = 'info';
+        if (type === 'success') icon = 'circle-check-big';
+        if (type === 'error') icon = 'triangle-alert';
 
         toast.innerHTML = `
-            <i class="bi ${icon} fs-5"></i>
+            <i aria-hidden="true" data-lucide="${icon}" class="vasto-icon fs-5"></i>
             <div class="flex-grow-1">${message}</div>
             <button type="button" class="btn-close ms-auto" style="font-size: 0.7rem;"></button>
         `;
@@ -115,11 +115,16 @@
             if (isPinned) {
                 if (!pinIcon) {
                     pinIcon = document.createElement('i');
-                    pinIcon.className = 'bi bi-pin-angle-fill text-primary ms-1 chat-pin-icon';
+                    pinIcon.setAttribute('aria-hidden', 'true');
+                    pinIcon.setAttribute('data-lucide', 'pin');
+                    pinIcon.className = 'vasto-icon vasto-icon--filled text-primary ms-1 chat-pin-icon';
                     pinIcon.title = 'Pinned';
                     pinIcon.style.fontSize = '0.78rem';
                     const targetContainer = item.querySelector('.whatsapp-chat-name, .chat-name, .chat-top-line');
-                    if (targetContainer) targetContainer.appendChild(pinIcon);
+                    if (targetContainer) {
+                        targetContainer.appendChild(pinIcon);
+                        if (window.VastoIcons) VastoIcons.render(pinIcon);
+                    }
                 }
             } else {
                 if (pinIcon) pinIcon.remove();
@@ -129,7 +134,7 @@
             const pinBtn = item.querySelector('.pin-toggle-btn');
             if (pinBtn) {
                 pinBtn.dataset.action = isPinned ? 'unpin' : 'pin';
-                pinBtn.innerHTML = `<i class="bi bi-pin-angle${isPinned ? '-fill' : ''} me-2 text-primary"></i> ${isPinned ? 'Unpin chat' : 'Pin chat'}`;
+                pinBtn.innerHTML = `<i aria-hidden="true" data-lucide="pin" class="vasto-icon${isPinned ? ' vasto-icon--filled' : ''} me-2 text-primary"></i> ${isPinned ? 'Unpin chat' : 'Pin chat'}`;
             }
 
             // Immediately re-order the conversation within its parent list
@@ -177,34 +182,35 @@
         const rawPreview = data.message_preview || '';
         const cleanText = data.clean_preview || rawPreview.replace(/^[🎤📷🎥📄🔗😊🎬🚫🔒↪️]+\s*/, '').trim() || 'New message';
 
+        const iconHtml = (name, cls) => `<i aria-hidden="true" data-lucide="${name}" class="vasto-icon ${cls}"></i>`;
         if (pType === 'deleted') {
-            return `<i class="bi bi-slash-circle text-muted me-1"></i> <em>${escapeHtml(cleanText)}</em>`;
+            return `${iconHtml('circle-slash', 'text-muted me-1')} <em>${escapeHtml(cleanText)}</em>`;
         }
         if (pType === 'audio' || rawPreview.includes('🎤') || rawPreview.includes('🎵')) {
-            const iconClass = data.preview_icon || 'bi-mic-fill';
-            return `<i class="bi ${iconClass} text-primary me-1"></i> ${escapeHtml(cleanText)}`;
+            const iconClass = data.preview_icon || 'mic';
+            return `${iconHtml(iconClass, 'text-primary me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'image' || rawPreview.includes('📷')) {
-            const iconClass = data.preview_icon || 'bi-camera-fill';
-            return `<i class="bi ${iconClass} text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            const iconClass = data.preview_icon || 'camera';
+            return `${iconHtml(iconClass, 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'video' || rawPreview.includes('🎥')) {
-            return `<i class="bi bi-camera-video-fill text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('video', 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'document' || rawPreview.includes('📄')) {
-            return `<i class="bi bi-file-earmark-text-fill text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('file-text', 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'link' || rawPreview.includes('🔗')) {
-            return `<i class="bi bi-link-45deg text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('link', 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'sticker' || rawPreview.includes('😊')) {
-            return `<i class="bi bi-emoji-smile text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('smile', 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'gif' || rawPreview.includes('🎬')) {
-            return `<i class="bi bi-filetype-gif text-muted me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('clapperboard', 'text-muted me-1')} ${escapeHtml(cleanText)}`;
         }
         if (pType === 'reaction') {
-            return `<i class="bi bi-heart-fill text-danger me-1"></i> ${escapeHtml(cleanText)}`;
+            return `${iconHtml('heart', 'vasto-icon--filled text-danger me-1')} ${escapeHtml(cleanText)}`;
         }
         return escapeHtml(rawPreview || cleanText);
     }
@@ -239,7 +245,7 @@
                    hx-indicator="#chatSwitchProgress">
                     <div class="position-relative flex-shrink-0">
                         ${isGroup
-                            ? `<div class="chat-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle" style="width: 44px; height: 44px;"><i class="bi bi-people-fill fs-5"></i></div>`
+                            ? `<div class="chat-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle" style="width: 44px; height: 44px;"><i aria-hidden="true" data-lucide="users" class="vasto-icon fs-5"></i></div>`
                             : `<img src="${escapeHtml(convAvatar)}" class="chat-avatar rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" alt="${escapeHtml(convName)}" onerror="this.src='/static/images/web-app-manifest-192x192-rounded.png'">`
                         }
                     </div>
@@ -276,7 +282,7 @@
             wrapper.innerHTML = `
                 <a href="${escapeHtml(targetUrl)}" class="chat-row" data-conversation-id="${escapeHtml(convId)}" data-is-pinned="false">
                     ${isGroup
-                        ? `<div class="chat-icon"><i class="bi bi-people-fill"></i></div>`
+                        ? `<div class="chat-icon"><i aria-hidden="true" data-lucide="users" class="vasto-icon"></i></div>`
                         : `<div class="position-relative d-inline-block flex-shrink-0">
                              <img src="${escapeHtml(convAvatar)}" class="chat-avatar" alt="${escapeHtml(convName)}" onerror="this.src='/static/images/web-app-manifest-192x192-rounded.png'">
                            </div>`
@@ -439,13 +445,13 @@
 
         menu.innerHTML = `
             <a href="${href}" class="dropdown-item py-2 px-3 small d-flex align-items-center gap-2">
-                <i class="bi bi-box-arrow-up-right text-muted"></i> Open chat
+                <i aria-hidden="true" data-lucide="external-link" class="vasto-icon text-muted"></i> Open chat
             </a>
             <button type="button" class="dropdown-item py-2 px-3 small d-flex align-items-center gap-2 context-pin-btn">
-                <i class="bi bi-pin-angle${isPinned ? '-fill' : ''} text-primary"></i> ${isPinned ? 'Unpin chat' : 'Pin to top'}
+                <i aria-hidden="true" data-lucide="pin" class="vasto-icon${isPinned ? ' vasto-icon--filled' : ''} text-primary"></i> ${isPinned ? 'Unpin chat' : 'Pin to top'}
             </button>
             <button type="button" class="dropdown-item py-2 px-3 small d-flex align-items-center gap-2 context-read-btn">
-                <i class="bi bi-check2-all text-info"></i> Mark as read
+                <i aria-hidden="true" data-lucide="check-check" class="vasto-icon text-info"></i> Mark as read
             </button>
         `;
 
@@ -789,7 +795,7 @@
             console.error('[MEDIA_RAIL] Failed to load tab ' + type + ':', err);
             pane.innerHTML = `
                 <div class="text-center py-5 text-muted small">
-                    <i class="bi bi-exclamation-circle text-warning fs-3 d-block mb-2"></i>
+                    <i aria-hidden="true" data-lucide="circle-alert" class="vasto-icon text-warning fs-3 d-block mb-2"></i>
                     Failed to load ${type}. <br>
                     <button class="btn btn-sm btn-outline-primary mt-2 rounded-pill px-3" onclick="window.loadMediaTab('${type}', true)">Retry</button>
                 </div>`;

@@ -1,6 +1,7 @@
+<div class="adw-legacy-wrap">
 <div class="page-header px-4 py-3 border-bottom d-flex justify-content-between align-items-center">
   <div>
-    <a href="{% url 'admin_dashboard:dashboard_home' %}" hx-get="{% url 'admin_dashboard:dashboard_home' %}" hx-target="#page-content-target" hx-push-url="true" class="text-decoration-none small text-muted mb-2 d-inline-block"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+    <a href="{% url 'admin_dashboard:dashboard_home' %}" hx-get="{% url 'admin_dashboard:dashboard_home' %}" hx-target="#page-content-target" hx-push-url="true" class="text-decoration-none small text-muted mb-2 d-inline-block"><i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon vasto-icon--sm"></i> Back to Dashboard</a>
     <h1 class="page-title fs-3 mb-0">Feedback Mailbox</h1>
   </div>
   <div class="dropdown">
@@ -41,9 +42,10 @@
     </a>
     {% empty %}
     <div class="text-center py-5 text-muted">
-      <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+      <i aria-hidden="true" data-lucide="inbox" class="fs-1 d-block mb-3 vasto-icon vasto-icon--lg"></i>
       <p>No feedback tickets found.</p>
     </div>
     {% endfor %}
   </div>
+</div>
 </div>

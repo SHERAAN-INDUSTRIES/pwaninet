@@ -101,13 +101,14 @@ export function toggleOlderNotifications() {
   
   if (olderSection.style.display === 'none') {
     olderSection.style.display = 'block';
-    viewMoreBtn.innerHTML = '<i class="bi bi-chevron-up"></i> View less';
+    viewMoreBtn.innerHTML = '<i aria-hidden="true" data-lucide="chevron-up" class="vasto-icon"></i> View less';
     viewMoreBtn.classList.add('expanded');
   } else {
     olderSection.style.display = 'none';
-    viewMoreBtn.innerHTML = '<i class="bi bi-chevron-down"></i> View more';
+    viewMoreBtn.innerHTML = '<i aria-hidden="true" data-lucide="chevron-down" class="vasto-icon"></i> View more';
     viewMoreBtn.classList.remove('expanded');
   }
+  if (window.VastoIcons) window.VastoIcons.render(viewMoreBtn);
 }
 
 /**

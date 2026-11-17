@@ -106,6 +106,7 @@ class EventTypes(Enum):
     CORE_BACKUP_COMPLETED = "core.backup.completed"
     ADMIN_FEEDBACK_REPLIED = "admin.feedback.replied"
     ADMIN_FEEDBACK_SUBMITTED = "admin.feedback.submitted"
+    ADMIN_MODEL_TOGGLED = "admin.model.toggled"
     
     # Security Events
     SECURITY_LOGIN_DETECTED = "security.login.detected"
@@ -216,6 +217,8 @@ class EventActions(Enum):
     REPORTED = "reported"
     TRUSTED = "trusted"
     BLOCKED = "blocked"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
     
     @classmethod
     def get_all_actions(cls):

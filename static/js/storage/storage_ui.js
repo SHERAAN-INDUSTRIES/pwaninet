@@ -89,7 +89,7 @@ class StorageUI {
                     <div class="storage-item d-flex justify-content-between align-items-center py-3 border-bottom">
                         <div class="d-flex align-items-center gap-3">
                             <div class="storage-icon bg-primary bg-opacity-10 p-2 rounded-2">
-                                <i class="bi bi-download text-primary fs-5"></i>
+                                <i aria-hidden="true" data-lucide="download" class="vasto-icon text-primary fs-5"></i>
                             </div>
                             <div>
                                 <div class="fw-bold">Downloads</div>
@@ -105,7 +105,7 @@ class StorageUI {
                     <div class="storage-item d-flex justify-content-between align-items-center py-3 border-bottom">
                         <div class="d-flex align-items-center gap-3">
                             <div class="storage-icon bg-info bg-opacity-10 p-2 rounded-2">
-                                <i class="bi bi-hdd text-info fs-5"></i>
+                                <i aria-hidden="true" data-lucide="hard-drive" class="vasto-icon text-info fs-5"></i>
                             </div>
                             <div>
                                 <div class="fw-bold">Cache</div>
@@ -121,7 +121,7 @@ class StorageUI {
                     <div class="storage-item d-flex justify-content-between align-items-center py-3 border-bottom">
                         <div class="d-flex align-items-center gap-3">
                             <div class="storage-icon bg-warning bg-opacity-10 p-2 rounded-2">
-                                <i class="bi bi-clock-history text-warning fs-5"></i>
+                                <i aria-hidden="true" data-lucide="history" class="vasto-icon text-warning fs-5"></i>
                             </div>
                             <div>
                                 <div class="fw-bold">Temporary Data</div>
@@ -137,7 +137,7 @@ class StorageUI {
                     <div class="storage-item d-flex justify-content-between align-items-center py-3">
                         <div class="d-flex align-items-center gap-3">
                             <div class="storage-icon bg-success bg-opacity-10 p-2 rounded-2">
-                                <i class="bi bi-wifi-off text-success fs-5"></i>
+                                <i aria-hidden="true" data-lucide="wifi-off" class="vasto-icon text-success fs-5"></i>
                             </div>
                             <div>
                                 <div class="fw-bold">Offline Content</div>
@@ -165,7 +165,7 @@ class StorageUI {
                 <div class="cache-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="cache-icon bg-primary bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-image text-primary fs-5"></i>
+                            <i aria-hidden="true" data-lucide="image" class="vasto-icon text-primary fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Image Cache</div>
@@ -180,7 +180,7 @@ class StorageUI {
                 <div class="cache-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="cache-icon bg-info bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-camera-video text-info fs-5"></i>
+                            <i aria-hidden="true" data-lucide="video" class="vasto-icon text-info fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Video Cache</div>
@@ -195,7 +195,7 @@ class StorageUI {
                 <div class="cache-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="cache-icon bg-secondary bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-globe text-secondary fs-5"></i>
+                            <i aria-hidden="true" data-lucide="globe" class="vasto-icon text-secondary fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">API Cache</div>
@@ -210,7 +210,7 @@ class StorageUI {
                 <div class="cache-item d-flex justify-content-between align-items-center py-3">
                     <div class="d-flex align-items-center gap-3">
                         <div class="cache-icon bg-danger bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-trash text-danger fs-5"></i>
+                            <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon text-danger fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Clear All Cache</div>
@@ -236,7 +236,7 @@ class StorageUI {
                 <div class="temp-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="temp-icon bg-primary bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-upload text-primary fs-5"></i>
+                            <i aria-hidden="true" data-lucide="upload" class="vasto-icon text-primary fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Upload Queue</div>
@@ -251,7 +251,7 @@ class StorageUI {
                 <div class="temp-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="temp-icon bg-info bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-pencil text-info fs-5"></i>
+                            <i aria-hidden="true" data-lucide="pencil" class="vasto-icon text-info fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Drafts</div>
@@ -266,7 +266,7 @@ class StorageUI {
                 <div class="temp-item d-flex justify-content-between align-items-center py-3 border-bottom">
                     <div class="d-flex align-items-center gap-3">
                         <div class="temp-icon bg-warning bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-arrow-repeat text-warning fs-5"></i>
+                            <i aria-hidden="true" data-lucide="refresh-cw" class="vasto-icon text-warning fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Sync Queue</div>
@@ -281,7 +281,7 @@ class StorageUI {
                 <div class="temp-item d-flex justify-content-between align-items-center py-3">
                     <div class="d-flex align-items-center gap-3">
                         <div class="temp-icon bg-danger bg-opacity-10 p-2 rounded-2">
-                            <i class="bi bi-trash text-danger fs-5"></i>
+                            <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon text-danger fs-5"></i>
                         </div>
                         <div>
                             <div class="fw-bold">Clear All Temporary Data</div>
@@ -307,12 +307,12 @@ class StorageUI {
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="mb-0">Your Downloads</h6>
                     <a href="/users/settings/storage/downloads/" class="btn btn-primary btn-sm">
-                        <i class="bi bi-folder2-open me-1"></i> View All
+                        <i aria-hidden="true" data-lucide="folder-open" class="vasto-icon me-1"></i> View All
                     </a>
                 </div>
                 <div id="recent-downloads" class="recent-downloads">
                     <div class="text-center text-muted py-4">
-                        <i class="bi bi-download fs-1 mb-2 d-block"></i>
+                        <i aria-hidden="true" data-lucide="download" class="vasto-icon fs-1 mb-2 d-block"></i>
                         <small>No downloads yet</small>
                     </div>
                 </div>
@@ -447,7 +447,7 @@ class StorageUI {
         if (recent.length === 0) {
             container.innerHTML = `
                 <div class="text-center text-muted py-4">
-                    <i class="bi bi-download fs-1 mb-2 d-block"></i>
+                    <i aria-hidden="true" data-lucide="download" class="vasto-icon fs-1 mb-2 d-block"></i>
                     <small>No downloads yet</small>
                 </div>
             `;
@@ -469,7 +469,7 @@ class StorageUI {
             <div class="download-item d-flex align-items-center gap-3 py-2 border-bottom" data-id="${download.id}">
                 <div class="download-thumbnail flex-shrink-0">
                     <div class="bg-light rounded-2 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                        <i class="${icon} text-muted fs-4"></i>
+                        <i aria-hidden="true" data-lucide="${icon}" class="vasto-icon vasto-icon--lg text-muted"></i>
                     </div>
                 </div>
                 <div class="flex-grow-1 min-width-0">
@@ -478,23 +478,23 @@ class StorageUI {
                 </div>
                 <div class="dropdown">
                     <button class="btn btn-sm border-0 text-muted" data-bs-toggle="dropdown">
-                        <i class="bi bi-three-dots"></i>
+                        <i aria-hidden="true" data-lucide="ellipsis" class="vasto-icon"></i>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li>
                             <button class="dropdown-item" onclick="window.storageUI.openDownload('${download.id}')">
-                                <i class="bi bi-box-arrow-up-right me-2"></i> Open
+                                <i aria-hidden="true" data-lucide="external-link" class="vasto-icon me-2"></i> Open
                             </button>
                         </li>
                         <li>
                             <button class="dropdown-item" onclick="window.storageUI.shareDownload('${download.id}')">
-                                <i class="bi bi-share me-2"></i> Share
+                                <i aria-hidden="true" data-lucide="share" class="vasto-icon me-2"></i> Share
                             </button>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <button class="dropdown-item text-danger" onclick="window.storageUI.deleteDownload('${download.id}')">
-                                <i class="bi bi-trash me-2"></i> Delete
+                                <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon me-2"></i> Delete
                             </button>
                         </li>
                     </ul>
@@ -508,12 +508,12 @@ class StorageUI {
      */
     getCategoryIcon(type) {
         const icons = {
-            image: 'bi bi-image',
-            video: 'bi bi-camera-video',
-            document: 'bi bi-file-earmark',
-            audio: 'bi bi-music-note'
+            image: 'image',
+            video: 'video',
+            document: 'file',
+            audio: 'music'
         };
-        return icons[type] || 'bi bi-file';
+        return icons[type] || 'file';
     }
 
     /**

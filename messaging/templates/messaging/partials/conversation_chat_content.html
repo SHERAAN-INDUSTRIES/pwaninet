@@ -17,7 +17,7 @@
           <img src="{{ conversation.group.get_photo_url }}" class="chat-avatar rounded-circle border" style="width: 40px; height: 40px; object-fit: cover;" alt="{{ conversation.name }}">
           {% elif conversation.type == 'group' %}
           <div class="chat-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle" style="width: 40px; height: 40px;">
-            <i class="bi bi-people-fill fs-5"></i>
+            <i aria-hidden="true" data-lucide="users" class="vasto-icon fs-5"></i>
           </div>
           {% else %}
           {% for member in conversation.members.all %}
@@ -27,7 +27,7 @@
             <img src="{{ member.user.profile_pic.url }}" class="chat-avatar rounded-circle border" style="width: 40px; height: 40px; object-fit: cover;" alt="{{ member.user.username }}">
             {% else %}
             <div class="chat-avatar bg-secondary text-white d-flex align-items-center justify-content-center rounded-circle" style="width: 40px; height: 40px;">
-              <i class="bi bi-person-fill fs-5"></i>
+              <i aria-hidden="true" data-lucide="user-round" class="vasto-icon fs-5"></i>
             </div>
             {% endif %}
           </div>
@@ -66,7 +66,7 @@
                 data-call-name="{% if member.user.first_name %}{{ member.user.first_name }}{% if member.user.second_name %} {{ member.user.second_name }}{% elif member.user.last_name %} {{ member.user.last_name }}{% endif %}{% else %}{{ member.user.username }}{% endif %}"
                 data-call-avatar="{% if member.user.profile_pic %}{{ member.user.profile_pic.url }}{% endif %}"
                 aria-label="Call {% if member.user.first_name %}{{ member.user.first_name }}{% if member.user.second_name %} {{ member.user.second_name }}{% elif member.user.last_name %} {{ member.user.last_name }}{% endif %}{% else %}{{ member.user.username }}{% endif %}" title="Voice call">
-          <i class="bi bi-telephone" aria-hidden="true"></i>
+          <i aria-hidden="true" data-lucide="phone" class="vasto-icon" aria-hidden="true"></i>
         </button>
         {% endif %}{% endfor %}
         {% endif %}
@@ -80,7 +80,7 @@
                 title="Media, Links & Docs"
                 aria-label="View Media"
                 style="font-size: 0.8rem; border-color: var(--border); color: var(--text-secondary); height: 32px;">
-          <i class="bi bi-images text-primary"></i>
+          <i aria-hidden="true" data-lucide="images" class="vasto-icon text-primary"></i>
           <span class="fw-medium">Media</span>
         </button>
 
@@ -91,7 +91,7 @@
                 title="Media, Links & Docs"
                 aria-label="View Media"
                 style="font-size: 0.95rem; border-color: var(--border); color: var(--text-secondary); width: 34px; height: 34px;">
-          <i class="bi bi-images text-primary"></i>
+          <i aria-hidden="true" data-lucide="images" class="vasto-icon text-primary"></i>
         </button>
 
         <!-- 3-Dots Menu Dropdown -->
@@ -102,17 +102,17 @@
                   style="color: var(--text-primary); width: 36px; height: 36px;"
                   aria-label="Chat options"
                   id="chatHeaderOptionsBtn">
-            <i class="bi bi-three-dots-vertical" style="font-size: 1.25rem;"></i>
+            <i aria-hidden="true" data-lucide="ellipsis-vertical" class="vasto-icon" style="font-size: 1.25rem;"></i>
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow border py-1 small" style="z-index: 1070; min-width: 190px;">
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="viewMediaBtn"><i class="bi bi-images text-primary"></i> View Media</a></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="enableNotificationsBtn"><i class="bi bi-bell text-warning"></i> Turn on Notifications</a></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="muteBtn"><i class="bi bi-bell-slash text-secondary"></i> Mute Notifications</a></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="starBtn"><i class="bi bi-star text-warning"></i> Starred Messages</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="viewMediaBtn"><i aria-hidden="true" data-lucide="images" class="vasto-icon text-primary"></i> View Media</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="enableNotificationsBtn"><i aria-hidden="true" data-lucide="bell" class="vasto-icon text-warning"></i> Turn on Notifications</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="muteBtn"><i aria-hidden="true" data-lucide="bell-off" class="vasto-icon text-secondary"></i> Mute Notifications</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="starBtn"><i aria-hidden="true" data-lucide="star" class="vasto-icon text-warning"></i> Starred Messages</a></li>
             <li><hr class="dropdown-divider my-1"></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="themeBtn" data-bs-no-dropdown="true"><i class="bi bi-palette text-info"></i> Chat Theme</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3" href="#" id="themeBtn" data-bs-no-dropdown="true"><i aria-hidden="true" data-lucide="palette" class="vasto-icon text-info"></i> Chat Theme</a></li>
             <li><hr class="dropdown-divider my-1"></li>
-            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 text-danger" href="#" id="leaveBtn"><i class="bi bi-box-arrow-right"></i> Leave Chat</a></li>
+            <li><a class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 text-danger" href="#" id="leaveBtn"><i aria-hidden="true" data-lucide="log-out" class="vasto-icon"></i> Leave Chat</a></li>
           </ul>
         </div>
       </div>
@@ -129,12 +129,12 @@
     <div class="pwanimate-empty-state messaging-empty-state my-auto" id="messagingEmptyState">
       {% if conversation.type == 'group' %}
         <div class="pwanimate-hero-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle shadow-sm mx-auto mb-3" style="width: 84px; height: 84px;">
-          <i class="bi bi-people-fill" style="font-size: 2.5rem;"></i>
+          <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="font-size: 2.5rem;"></i>
         </div>
         <h2 class="pwanimate-empty-title fw-bold mb-1" style="font-size: 1.35rem;">{{ conversation.name|default:"Group Chat" }}</h2>
         <p class="pwanimate-empty-greeting text-muted mb-2">{{ conversation.members.count }} member{{ conversation.members.count|pluralize }} in this group</p>
         <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-          <i class="bi bi-shield-lock-fill text-primary"></i> Chat with your group members
+          <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon text-primary"></i> Chat with your group members
         </div>
         <p class="pwanimate-empty-question text-muted small mb-3">Send a message to break the ice!</p>
       {% else %}
@@ -144,7 +144,7 @@
               <img src="{{ target_user.profile_pic.url }}" class="rounded-circle shadow-sm" style="width: 84px; height: 84px; object-fit: cover; border: 3px solid var(--border);" alt="{{ target_user.username }}" loading="lazy">
             {% else %}
               <div class="bg-secondary text-white d-flex align-items-center justify-content-center rounded-circle shadow-sm" style="width: 84px; height: 84px;">
-                <i class="bi bi-person-fill" style="font-size: 2.75rem;"></i>
+                <i aria-hidden="true" data-lucide="user-round" class="vasto-icon" style="font-size: 2.75rem;"></i>
               </div>
             {% endif %}
             {% if target_user and target_user.is_online %}
@@ -159,23 +159,23 @@
           <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap">
             <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 fw-medium" style="font-size: 0.78rem;">
               {% if partner_relationship == 'Classmate' %}
-                <i class="bi bi-mortarboard-fill me-1"></i>Classmate
+                <i aria-hidden="true" data-lucide="graduation-cap" class="vasto-icon me-1"></i>Classmate
               {% elif partner_relationship == 'Mutual Follower' %}
-                <i class="bi bi-arrow-left-right me-1"></i>Mutual Follower
+                <i aria-hidden="true" data-lucide="arrow-left-right" class="vasto-icon me-1"></i>Mutual Follower
               {% else %}
-                <i class="bi bi-globe-americas me-1"></i>Connected on vasto
+                <i aria-hidden="true" data-lucide="globe" class="vasto-icon me-1"></i>Connected on vasto
               {% endif %}
             </span>
             {% if target_user %}
             <a href="{% url 'users:profile' target_user.username %}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 d-inline-flex align-items-center gap-1" style="font-size: 0.78rem; border-color: var(--border);">
-              <i class="bi bi-person"></i> View Profile
+              <i aria-hidden="true" data-lucide="user" class="vasto-icon"></i> View Profile
             </a>
             {% endif %}
           </div>
 
           <!-- Privacy Pill -->
           <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-            <i class="bi bi-shield-lock-fill text-primary"></i> Direct & secure chat
+            <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon text-primary"></i> Direct & secure chat
           </div>
           <p class="pwanimate-empty-question text-muted small mb-3">Say hello and start the conversation!</p>
         {% endwith %}
@@ -260,12 +260,12 @@
     <div class="pwanimate-empty-state messaging-empty-state my-auto" id="messagingEmptyState">
       {% if conversation.type == 'group' %}
         <div class="pwanimate-hero-avatar bg-primary text-white d-flex align-items-center justify-content-center rounded-circle shadow-sm mx-auto mb-3" style="width: 84px; height: 84px;">
-          <i class="bi bi-people-fill" style="font-size: 2.5rem;"></i>
+          <i aria-hidden="true" data-lucide="users" class="vasto-icon" style="font-size: 2.5rem;"></i>
         </div>
         <h2 class="pwanimate-empty-title fw-bold mb-1" style="font-size: 1.35rem;">{{ conversation.name|default:"Group Chat" }}</h2>
         <p class="pwanimate-empty-greeting text-muted mb-2">{{ conversation.members.count }} member{{ conversation.members.count|pluralize }} in this group</p>
         <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-          <i class="bi bi-shield-lock-fill text-primary"></i> Chat with your group members
+          <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon text-primary"></i> Chat with your group members
         </div>
         <p class="pwanimate-empty-question text-muted small mb-3">Send a message to break the ice!</p>
       {% else %}
@@ -275,7 +275,7 @@
               <img src="{{ target_user.profile_pic.url }}" class="rounded-circle shadow-sm" style="width: 84px; height: 84px; object-fit: cover; border: 3px solid var(--border);" alt="{{ target_user.username }}">
             {% else %}
               <div class="bg-secondary text-white d-flex align-items-center justify-content-center rounded-circle shadow-sm" style="width: 84px; height: 84px;">
-                <i class="bi bi-person-fill" style="font-size: 2.75rem;"></i>
+                <i aria-hidden="true" data-lucide="user-round" class="vasto-icon" style="font-size: 2.75rem;"></i>
               </div>
             {% endif %}
             {% if target_user and target_user.is_online %}
@@ -287,21 +287,21 @@
           <div class="d-flex align-items-center justify-content-center gap-2 mb-2 flex-wrap">
             <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 fw-medium" style="font-size: 0.78rem;">
               {% if partner_relationship == 'Classmate' %}
-                <i class="bi bi-mortarboard-fill me-1"></i>Classmate
+                <i aria-hidden="true" data-lucide="graduation-cap" class="vasto-icon me-1"></i>Classmate
               {% elif partner_relationship == 'Mutual Follower' %}
-                <i class="bi bi-arrow-left-right me-1"></i>Mutual Follower
+                <i aria-hidden="true" data-lucide="arrow-left-right" class="vasto-icon me-1"></i>Mutual Follower
               {% else %}
-                <i class="bi bi-globe-americas me-1"></i>Connected on vasto
+                <i aria-hidden="true" data-lucide="globe" class="vasto-icon me-1"></i>Connected on vasto
               {% endif %}
             </span>
             {% if target_user %}
             <a href="{% url 'users:profile' target_user.username %}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 d-inline-flex align-items-center gap-1" style="font-size: 0.78rem; border-color: var(--border);">
-              <i class="bi bi-person"></i> View Profile
+              <i aria-hidden="true" data-lucide="user" class="vasto-icon"></i> View Profile
             </a>
             {% endif %}
           </div>
           <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-3" style="font-size: 0.76rem;">
-            <i class="bi bi-shield-lock-fill text-primary"></i> Direct & secure chat
+            <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon text-primary"></i> Direct & secure chat
           </div>
           <p class="pwanimate-empty-question text-muted small mb-3">Say hello and start the conversation!</p>
         {% endwith %}
@@ -323,7 +323,7 @@
           style="display: none !important;"
           title="Scroll to bottom"
           aria-label="Scroll to bottom">
-    <i class="bi bi-chevron-double-down"></i>
+    <i aria-hidden="true" data-lucide="chevrons-down" class="vasto-icon"></i>
     <span class="chat-scroll-to-bottom-badge d-none" id="chatScrollToBottomBadge">0</span>
   </button>
 
@@ -345,7 +345,7 @@
       <!-- Edit Preview Banner -->
       <div class="edit-preview-bar d-none" id="editPreviewBar">
         <div class="edit-preview-content flex-grow-1 overflow-hidden" style="text-overflow: ellipsis; white-space: nowrap;">
-          <div class="edit-preview-title fw-bold text-warning" id="editTitle" style="font-size: 0.82rem; color: #ca8a04 !important;"><i class="bi bi-pencil me-1"></i>Editing message</div>
+          <div class="edit-preview-title fw-bold text-warning" id="editTitle" style="font-size: 0.82rem; color: #ca8a04 !important;"><i aria-hidden="true" data-lucide="pencil" class="vasto-icon me-1"></i>Editing message</div>
           <div class="edit-preview-text text-truncate text-muted" id="editTextSnippet" style="font-size: 0.8rem;"></div>
         </div>
         <button type="button" class="btn-close btn-sm ms-2" id="cancelEditBtn" aria-label="Cancel edit" style="font-size: 0.7rem;"></button>
@@ -353,7 +353,7 @@
       <!-- Live Voice Capture & VN Preview Strip (PwaniMate layout) -->
       <div class="pwanimate-voice-capture d-none" id="messagingVoiceCapture" role="region" aria-label="Voice recording">
         <button type="button" class="pwanimate-voice-cancel" id="voiceCancelBtn" aria-label="Discard voice message" title="Discard">
-          <i class="bi bi-x-lg" aria-hidden="true"></i>
+          <i aria-hidden="true" data-lucide="x" class="vasto-icon" aria-hidden="true"></i>
         </button>
 
         <div class="pwanimate-voice-waveform" id="voiceWaveform" aria-hidden="true">
@@ -367,17 +367,17 @@
         <div class="messaging-voice-controls d-flex align-items-center gap-2">
           <!-- Stop Button (Locked Recording State) -->
           <button type="button" class="pwanimate-voice-stop d-none" id="voiceStopBtn" aria-label="Stop recording" title="Stop recording">
-            <i class="bi bi-stop-fill" aria-hidden="true"></i>
+            <i aria-hidden="true" data-lucide="square" class="vasto-icon" aria-hidden="true"></i>
           </button>
 
           <!-- Play/Pause Button (VN Preview State - next to stop button) -->
           <button type="button" class="pwanimate-voice-play d-none" id="voicePlayBtn" aria-label="Play recording preview" title="Play">
-            <i class="bi bi-play-fill" id="voicePlayIcon" aria-hidden="true"></i>
+            <i aria-hidden="true" data-lucide="play" class="vasto-icon" id="voicePlayIcon" aria-hidden="true"></i>
           </button>
 
           <!-- Send Button (In Preview State or Locked Recording State) -->
           <button type="button" class="pwanimate-voice-send d-none" id="voiceSendBtn" aria-label="Send voice message" title="Send">
-            <i class="bi bi-arrow-up" aria-hidden="true"></i>
+            <i aria-hidden="true" data-lucide="arrow-up" class="vasto-icon" aria-hidden="true"></i>
             <span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
           </button>
         </div>
@@ -402,7 +402,7 @@
                     id="attachBtn"
                     title="Add attachment"
                     aria-label="Add attachment">
-              <i class="bi bi-paperclip"></i>
+              <i aria-hidden="true" data-lucide="paperclip" class="vasto-icon"></i>
             </button>
             <!-- Emoji Picker Trigger (Universal Comments Media Picker) -->
             <button type="button"
@@ -412,7 +412,7 @@
                     data-input="#messageInput"
                     title="Emoji, GIFs & Stickers"
                     aria-label="Insert emoji">
-              <i class="bi bi-emoji-smile"></i>
+              <i aria-hidden="true" data-lucide="smile" class="vasto-icon"></i>
             </button>
           </div>
 
@@ -424,7 +424,7 @@
                     title="Voice message"
                     aria-label="Voice message">
               <span class="mic-icon-wrapper d-inline-flex align-items-center justify-content-center" id="micIconWrapper">
-                <i class="bi bi-mic-fill" style="font-size: 1.15rem;"></i>
+                <i aria-hidden="true" data-lucide="mic" class="vasto-icon" style="font-size: 1.15rem;"></i>
               </span>
               <svg class="pwanimate-send-icon d-none" id="sendIconWrapper" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="12" y1="19" x2="12" y2="5"></line>
@@ -437,8 +437,8 @@
     </form>
     <!-- Swipe up to lock badge -->
     <div class="messaging-voice-lock-badge d-none" id="voiceLockBadge" aria-hidden="true">
-      <i class="bi bi-chevron-up bounce-chevron"></i>
-      <i class="bi bi-lock-fill"></i>
+      <i aria-hidden="true" data-lucide="chevron-up" class="vasto-icon bounce-chevron"></i>
+      <i aria-hidden="true" data-lucide="lock" class="vasto-icon"></i>
     </div>
   </div>
   </div>
@@ -449,7 +449,7 @@
     <div class="chat-theme-panel-header d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
       <div class="d-flex align-items-center gap-2">
         <button type="button" class="btn btn-link p-0 text-body d-flex align-items-center justify-content-center" id="closeThemePanelBtn" aria-label="Back to chat" style="width: 36px; height: 36px; border-radius: 50%;">
-          <i class="bi bi-arrow-left fs-5"></i>
+          <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon fs-5"></i>
         </button>
         <div>
           <h5 class="mb-0 fw-bold" style="font-size: 1.05rem;">Chat Theme & Wallpaper</h5>
@@ -473,12 +473,12 @@
           </div>
           <div class="demo-bubble sent" id="previewSentBubble">
             <span>Awesome! Solid colors and crisp contrast look great.</span>
-            <span class="preview-bubble-time">10:43 AM <i class="bi bi-check2-all text-info"></i></span>
+            <span class="preview-bubble-time">10:43 AM <i aria-hidden="true" data-lucide="check-check" class="vasto-icon text-info"></i></span>
           </div>
         </div>
         <div class="theme-preview-composer" id="themePreviewComposer">
           <span class="preview-composer-text" id="previewComposerText">Message...</span>
-          <i class="bi bi-send-fill text-primary" id="previewComposerIcon"></i>
+          <i aria-hidden="true" data-lucide="send" class="vasto-icon text-primary" id="previewComposerIcon"></i>
         </div>
       </div>
     </div>
@@ -607,10 +607,10 @@
           <div class="d-flex align-items-center gap-3 flex-wrap">
             <input type="file" id="wallpaperImageInput" accept="image/*" style="display: none;">
             <button type="button" class="btn btn-outline-primary rounded-pill px-4" id="uploadWallpaperBtn">
-              <i class="bi bi-image me-1"></i> Upload Image
+              <i aria-hidden="true" data-lucide="image" class="vasto-icon me-1"></i> Upload Image
             </button>
             <button type="button" class="btn btn-outline-danger rounded-pill px-3 d-none" id="removeWallpaperBtn">
-              <i class="bi bi-trash"></i> Remove
+              <i aria-hidden="true" data-lucide="trash-2" class="vasto-icon"></i> Remove
             </button>
             <span class="text-muted small">Max 5MB (JPG, PNG, WebP)</span>
           </div>
@@ -717,13 +717,13 @@
   <div class="d-flex flex-column align-items-center justify-content-center h-100 p-4 text-center my-auto messaging-empty-selection">
     <div class="pwanimate-empty-state messaging-empty-state">
       <div class="pwanimate-hero-avatar d-flex align-items-center justify-content-center rounded-circle shadow mx-auto mb-3" style="width: 88px; height: 88px; background-color: var(--brand, #0084ff); color: #ffffff;">
-        <i class="bi bi-chat-dots-fill" style="font-size: 2.75rem;"></i>
+        <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon" style="font-size: 2.75rem;"></i>
       </div>
       <h2 class="pwanimate-empty-title fw-bold" style="font-size: 1.7rem; letter-spacing: -0.5px; margin-bottom: 0.4rem;">vasto Chat</h2>
       <p class="pwanimate-empty-greeting text-muted mb-3" style="max-width: 440px; font-size: 0.96rem; line-height: 1.55;">Connect with your friends, circles, communities, and colleagues across the university.</p>
 
       <div class="d-inline-flex align-items-center gap-2 py-1 px-3 rounded-pill bg-body-tertiary border text-muted small mb-4" style="font-size: 0.78rem;">
-        <i class="bi bi-shield-lock-fill" style="color: var(--brand, #0084ff);"></i>
+        <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon" style="color: var(--brand, #0084ff);"></i>
         <span>Direct & secure peer-to-peer university messaging</span>
       </div>
 
@@ -733,7 +733,7 @@
                 style="background-color: var(--brand, #0084ff); border-color: var(--brand, #0084ff);"
                 data-bs-toggle="modal"
                 data-bs-target="#newConversationModal">
-          <i class="bi bi-chat-plus"></i>
+          <i aria-hidden="true" data-lucide="message-circle-plus" class="vasto-icon"></i>
           <span>Start new chat</span>
         </button>
       </div>

@@ -64,7 +64,7 @@ def build_notifications_context(user, mark_read=False, notification_type=None, i
 
 def build_unread_notification_html(user):
     count = get_cached_unread_count(user)
-    html = '<span style="position: relative; display: inline-block;"><i class="bi bi-bell-fill"></i>'
+    html = '<span style="position: relative; display: inline-block;"><i aria-hidden="true" data-lucide="bell" class="vasto-icon"></i>'
     if count > 0:
         html += f'''\n            <span class="position-absolute badge rounded-pill bg-danger border border-light"\n                style="font-size: 0.65rem; padding: 0.3em 0.45em; min-width: 18px; text-align: center; top: -4px; right: -6px; z-index: 10;">\n                {count}\n                <span class="visually-hidden">unread messages</span>\n            </span>'''
     html += '</span><span style="font-size: 0.55rem; font-weight: 600; white-space: nowrap;">Notifications</span>'

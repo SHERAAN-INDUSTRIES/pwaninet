@@ -37,6 +37,14 @@ class MessageSerializer(serializers.ModelSerializer):
     activity = serializers.SerializerMethodField()
     follow_ups = serializers.SerializerMethodField()
     academic_actions = serializers.SerializerMethodField()
+    generated_documents = serializers.SerializerMethodField()
+    export_errors = serializers.SerializerMethodField()
+
+    def get_export_errors(self, obj):
+        return self.context.get('export_errors_map', {}).get(obj.pk, [])
+
+    def get_generated_documents(self, obj):
+        return self.context.get('generated_documents_map', {}).get(obj.pk, [])
 
     def get_teaching(self, obj):
         from pwanimate.services.teaching_output import persisted_teaching
@@ -82,6 +90,8 @@ class MessageSerializer(serializers.ModelSerializer):
             "attachments",
             "follow_ups",
             "academic_actions",
+            "generated_documents",
+            "export_errors",
             "created_at",
         ]
         read_only_fields = fields
@@ -147,6 +157,11 @@ class ConversationDetailSerializer(serializers.ModelSerializer):
                         break
         context = dict(self.context)
         context['academic_actions_map'] = academic_map
+        from pwanimate.services.document_exports import saved_resources
+        ids = [m.pk for m in messages if m.role == 'assistant']
+        context['generated_documents_map'] = saved_resources(obj.user, ids)
+        from pwanimate.services.document_exports import saved_export_errors
+        context['export_errors_map'] = saved_export_errors(obj.user, ids, context['generated_documents_map'])
         return MessageSerializer(messages, many=True, context=context).data
     study_session = serializers.SerializerMethodField()
 

@@ -7,7 +7,7 @@ build against it.
 
 import logging
 
-from django.db import IntegrityError, transaction
+from django.db import DataError, IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, permissions, status
@@ -29,10 +29,23 @@ logger = logging.getLogger(__name__)
 
 
 def _r2_key(user, client_upload_id, filename):
+    import os
+    import re
+
     from django.conf import settings
+
     dev_prefix = getattr(settings, "R2_DEV_PREFIX", "")
-    safe_name = (filename or "upload").replace("/", "_")[-180:]
-    base_key = f"media/uploads/staging/{user.id}/{client_upload_id}/{safe_name}"
+    base = str(filename or "upload").replace("\x00", "").replace("/", "_").replace("\\", "_").strip()
+    base = re.sub(r"[\r\n\t]", " ", base).strip(" .") or "upload"
+    root, ext = os.path.splitext(base)
+    max_name = 180
+    if len(ext) > max_name - 1:
+        ext = ext[: max_name - 1]
+    allowed_root = max(1, max_name - len(ext))
+    if len(base) > max_name:
+        root = (root[:allowed_root].rstrip(" .") or "upload")
+        base = f"{root}{ext}"
+    base_key = f"media/uploads/staging/{user.id}/{client_upload_id}/{base}"
     return f"{dev_prefix}/{base_key}" if dev_prefix else base_key
 
 
@@ -405,6 +418,7 @@ class UploadCompleteView(APIView):
                     change_notes=metadata.get("change_notes") or "",
                 )
         except DocumentUploadError as exc:
+            logger.warning("Invalid document upload %s: %s", record.id, exc)
             record.transition_to("failed", error_code="INVALID_DOCUMENT", error_message=str(exc))
             record.save()
             UploadEvent.objects.create(
@@ -417,6 +431,7 @@ class UploadCompleteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except PermissionError as exc:
+            logger.warning("Forbidden document upload completion %s: %s", record.id, exc)
             record.transition_to("failed", error_code="FORBIDDEN", error_message=str(exc))
             record.save()
             r2.delete_object(client, bucket, session.r2_key)
@@ -424,13 +439,34 @@ class UploadCompleteView(APIView):
                 {"error_code": "FORBIDDEN", "detail": str(exc)},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        except (DataError, IntegrityError) as exc:
+            logger.exception("Database error creating document for upload %s", record.id)
+            # The surrounding transaction may be unusable after a DB error; roll
+            # back and let the client retry after the fix without persisting a
+            # misleading failed state tied to a broken statement.
+            transaction.set_rollback(True)
+            return Response(
+                {
+                    "error_code": "DOCUMENT_FAILED",
+                    "detail": "Could not save the document. Please try again. If it keeps failing, rename the file to a shorter name and retry.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         except Exception as exc:
-            logger.error("Failed to create document for upload %s: %s", record.id, exc, exc_info=True)
-            record.transition_to("failed", error_code="DOCUMENT_FAILED", error_message=str(exc))
-            record.save()
+            logger.exception("Failed to create document for upload %s", record.id)
+            record.transition_to("failed", error_code="DOCUMENT_FAILED", error_message=str(exc)[:500])
+            try:
+                record.save()
+                UploadEvent.objects.create(
+                    record=record, event_type=UploadEvent.EventType.FAILED,
+                    detail={"reason": "document_failed"},
+                )
+            except Exception:
+                logger.exception("Could not persist failure state for upload %s", record.id)
+                transaction.set_rollback(True)
             r2.delete_object(client, bucket, session.r2_key)
             return Response(
-                {"error_code": "DOCUMENT_FAILED", "detail": "Could not create the document."},
+                {"error_code": "DOCUMENT_FAILED", "detail": "Could not create the document. Please try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -470,8 +506,11 @@ class UploadCompleteView(APIView):
         bucket = r2.get_bucket()
         client = r2.get_r2_client()
 
+        from documents.services.direct_upload_service import safe_storage_basename
+
+        safe_name = safe_storage_basename(record.filename)
         storage_path = self._available_storage_path(
-            f"timetables/images/{timezone.now():%Y/%m}/{record.filename}"
+            f"timetables/images/{timezone.now():%Y/%m}/{safe_name}"
         )
         final_key = self._public_object_key(storage_path)
         try:

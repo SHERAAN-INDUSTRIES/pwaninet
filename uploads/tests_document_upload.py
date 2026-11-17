@@ -329,3 +329,74 @@ class TimetableUploadEngineTest(TestCase):
 
         record = UploadRecord.objects.get(id=upload_id)
         self.assertEqual(record.status, "completed")
+
+
+@override_settings(USE_S3=True, AWS_STORAGE_BUCKET_NAME="test-bucket")
+class DocumentUploadFilenameSafetyTest(TestCase):
+    def setUp(self):
+        self.user = make_user("longname_user")
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _category_id(self):
+        from documents.models import Category
+        category, _ = Category.objects.get_or_create(
+            code="other", defaults={"name": "Other", "is_active": True},
+        )
+        return str(category.pk)
+
+    def _complete_single_put(self, filename, file_size=358 * 1024):
+        payload = {
+            "client_upload_id": str(uuid.uuid4()),
+            "filename": filename,
+            "mime_type": "application/pdf",
+            "file_size": file_size,
+            "kind": "document",
+        }
+        created = self.client.post("/api/uploads/", payload, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        upload_id = created.data["id"]
+        r2mock = mock_r2()
+        with patch("documents.tasks.processing.process_document.delay"):
+            with self.captureOnCommitCallbacks(execute=True):
+                with patch("uploads.views.r2.get_r2_client", return_value=r2mock):
+                    self.client.post(f"/api/uploads/{upload_id}/authorize/", {}, format="json")
+                    response = self.client.post(
+                        f"/api/uploads/{upload_id}/complete/",
+                        {
+                            "parts": [{"part_number": 1, "etag": "aaa"}],
+                            "document": {"category": self._category_id()},
+                        },
+                        format="json",
+                    )
+        return response, UploadRecord.objects.get(id=upload_id)
+
+    def test_long_academic_filename_uploads_successfully(self):
+        filename = (
+            "SMA B261 PROBABILITY AND STATISTICS I ASSIGNMENT 1 - "
+            "SECOND SEMESTER 2025/2026 ACADEMIC YEAR FINAL SUBMISSION.pdf"
+        )
+        self.assertGreater(len(filename), 100)
+        response, record = self._complete_single_put(filename)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(record.status, "completed")
+        document = Document.objects.get(id=response.data["document_id"])
+        doc_file = document.latest_version.files.first()
+        self.assertIn("SMA B261 PROBABILITY AND STATISTICS I ASSIG", doc_file.original_filename)
+        self.assertTrue(doc_file.original_filename.endswith(".pdf"))
+        self.assertEqual(doc_file.extension, "pdf")
+        self.assertTrue(doc_file.storage_path.startswith("documents/"))
+        self.assertTrue(doc_file.storage_path.endswith(".pdf"))
+        self.assertLessEqual(len(doc_file.file.name), 1024)
+        self.assertLessEqual(len(doc_file.storage_path), 1000)
+
+    def test_unicode_spaces_and_special_characters_are_handled(self):
+        filename = "Análisis estadístico – asignación №1 (versión final) [2026].pdf"
+        response, record = self._complete_single_put(filename)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(record.status, "completed")
+        document = Document.objects.get(id=response.data["document_id"])
+        doc_file = document.latest_version.files.first()
+        self.assertEqual(doc_file.extension, "pdf")
+        self.assertTrue(doc_file.file.name)
+        self.assertLessEqual(len(doc_file.file.name), 1024)

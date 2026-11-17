@@ -1,0 +1,24 @@
+/* Shared controls opt in; no rules target Spark icons or unrelated SVGs. */
+.vasto-icon {
+  --vasto-icon-size: 20px;
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+  stroke: currentColor;
+}
+/* Override Spark's page-wide 1em sizing only for opted-in shell controls. */
+:root svg.vasto-icon[data-lucide], :root i.vasto-icon[data-lucide] {
+  width: var(--vasto-icon-size);
+  height: var(--vasto-icon-size);
+}
+.vasto-icon--sm { --vasto-icon-size: 16px; }
+.vasto-icon--lg { --vasto-icon-size: 24px; }
+/* Keep the existing rail's icon slot and mobile tab geometry. */
+.vasto-icon.left-rail-icon,
+.mobile-bottom-nav .nav-chip .vasto-icon { --vasto-icon-size: 24px; }
+
+/* Icons migrated from Bootstrap icon fonts often carry an inline font-size.
+   Map it onto --vasto-icon-size so SVGs scale exactly like the old glyphs. */
+body :is(i, svg).vasto-icon[style*="font-size"] {
+  --vasto-icon-size: 1em;
+}

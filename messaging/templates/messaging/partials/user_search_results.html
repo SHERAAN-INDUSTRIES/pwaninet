@@ -4,7 +4,7 @@
     <img src="{{ user.profile_pic.url }}" class="rounded-circle border" style="width: 44px; height: 44px; object-fit: cover;" alt="{{ user.username }}">
   {% else %}
     <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
-      <i class="bi bi-person-fill fs-5"></i>
+      <i aria-hidden="true" data-lucide="user-round" class="vasto-icon fs-5"></i>
     </div>
   {% endif %}
   <div class="flex-grow-1 overflow-hidden" style="min-width: 0;">
@@ -12,12 +12,12 @@
     <small class="text-muted text-truncate d-block" style="font-size: 0.8rem;">@{{ user.username }}</small>
   </div>
   <button type="button" class="btn btn-sm btn-primary rounded-pill start-conversation flex-shrink-0 px-3" data-user-id="{{ user.id }}">
-    <i class="bi bi-chat-dots me-1"></i> Start chat
+    <i aria-hidden="true" data-lucide="message-circle" class="vasto-icon me-1"></i> Start chat
   </button>
 </div>
 {% empty %}
 <div class="list-group-item border-0 text-center py-4" style="background: transparent; color: var(--text-secondary);">
-  <i class="bi bi-search fs-3 d-block mb-2 opacity-50"></i>
+  <i aria-hidden="true" data-lucide="search" class="vasto-icon fs-3 d-block mb-2 opacity-50"></i>
   No friends found matching your search.
 </div>
 {% endfor %}

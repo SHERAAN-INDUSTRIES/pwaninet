@@ -191,7 +191,14 @@ class PwanimateUIView(View):
                 )
                 messages = list(active_conversation.messages.exclude(task__in=['agent_interim','academic_execution','academic_authorization']).order_by("created_at"))
                 from pwanimate.orchestrator.activity import public_events
+                from pwanimate.services.document_exports import saved_resources
+                ids = [m.pk for m in messages if m.role == 'assistant']
+                exports = saved_resources(request.user, ids)
+                from pwanimate.services.document_exports import saved_export_errors
+                export_errors = saved_export_errors(request.user, ids, exports)
                 for message in messages:
+                    message.generated_documents = exports.get(message.pk, [])
+                    message.export_errors = export_errors.get(message.pk, [])
                     message.activity = public_events(message.activity)
             except PwanimateConversation.DoesNotExist:
                 raise Http404("Conversation not found.")

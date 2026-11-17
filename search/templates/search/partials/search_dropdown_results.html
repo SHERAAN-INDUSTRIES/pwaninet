@@ -5,7 +5,7 @@
     <!-- People Preview -->
     {% if results.people %}
       <div class="px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">
-        <i class="bi bi-people me-1"></i> People
+        <i aria-hidden="true" data-lucide="users" class="me-1 vasto-icon vasto-icon--sm"></i> People
       </div>
       {% for u in results.people %}
         <a href="{{ u.detail_url }}"
@@ -20,9 +20,9 @@
             <div class="fw-bold small text-truncate d-flex align-items-center gap-1">
               {{ u.title }}
               {% if u.global_role == 'VERIFIED' %}
-                <i class="bi bi-patch-check-fill text-primary" style="font-size: 0.75rem;"></i>
+                <i aria-hidden="true" data-lucide="badge-check" class="text-primary vasto-icon vasto-icon--sm" style="font-size: 0.75rem;"></i>
               {% elif u.global_role == 'PRESIDENT' or u.global_role == 'DELEGATE' %}
-                <i class="bi bi-star-fill text-warning" style="font-size: 0.75rem;"></i>
+                <i aria-hidden="true" data-lucide="star" class="text-warning vasto-icon vasto-icon--sm vasto-icon--filled" style="font-size: 0.75rem;"></i>
               {% endif %}
             </div>
             <div class="text-muted text-truncate" style="font-size: 0.75rem;">
@@ -36,7 +36,7 @@
     <!-- Documents Preview -->
     {% if results.documents %}
       <div class="px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">
-        <i class="bi bi-file-earmark-text me-1"></i> Documents
+        <i aria-hidden="true" data-lucide="file-text" class="me-1 vasto-icon vasto-icon--sm"></i> Documents
       </div>
       {% for doc in results.documents %}
         <a href="{{ doc.detail_url }}"
@@ -63,7 +63,7 @@
     <!-- Posts Preview -->
     {% if results.posts %}
       <div class="px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">
-        <i class="bi bi-chat-square-text me-1"></i> Posts
+        <i aria-hidden="true" data-lucide="message-square-text" class="me-1 vasto-icon vasto-icon--sm"></i> Posts
       </div>
       {% for p in results.posts %}
         <a href="{{ p.detail_url }}"
@@ -82,7 +82,7 @@
           </div>
           {% if p.has_video %}
             <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size: 0.65rem;">
-              <i class="bi bi-play-circle me-1"></i>Video
+              <i aria-hidden="true" data-lucide="circle-play" class="me-1 vasto-icon vasto-icon--sm"></i>Video
             </span>
           {% endif %}
         </a>
@@ -92,7 +92,7 @@
     <!-- Groups Preview -->
     {% if results.groups %}
       <div class="px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">
-        <i class="bi bi-shield me-1"></i> Groups
+        <i aria-hidden="true" data-lucide="shield" class="me-1 vasto-icon vasto-icon--sm"></i> Groups
       </div>
       {% for g in results.groups %}
         <a href="{{ g.detail_url }}"
@@ -107,7 +107,7 @@
             <div class="fw-bold small text-truncate d-flex align-items-center gap-1">
               {{ g.title }}
               {% if g.is_official %}
-                <i class="bi bi-patch-check-fill text-primary" style="font-size: 0.75rem;"></i>
+                <i aria-hidden="true" data-lucide="badge-check" class="text-primary vasto-icon vasto-icon--sm" style="font-size: 0.75rem;"></i>
               {% endif %}
             </div>
             <div class="text-muted text-truncate" style="font-size: 0.75rem;">{{ g.subtitle }}</div>
@@ -131,7 +131,7 @@
 
 {% else %}
   <div class="p-4 text-center text-muted">
-    <i class="bi bi-search fs-4 d-block mb-1"></i>
+    <i aria-hidden="true" data-lucide="search" class="fs-4 d-block mb-1 vasto-icon vasto-icon--lg"></i>
     <span style="font-size: 0.85rem;">No results found for "{{ query }}"</span>
   </div>
 {% endif %}

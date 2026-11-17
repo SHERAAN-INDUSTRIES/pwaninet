@@ -914,7 +914,7 @@
   <div class="page-header">
     <div>
       <div class="page-eyebrow">
-        <i class="bi bi-plus-circle-fill"></i> {% trans "New Post" %}
+        <i aria-hidden="true" data-lucide="circle-plus" class="vasto-icon"></i> {% trans "New Post" %}
       </div>
       <h1 class="page-title">{% trans "Create a Post" %}</h1>
     </div>
@@ -951,7 +951,7 @@
               </div>
               {% if selected_group %}
               <div class="posting-target-badge">
-                <i class="bi bi-people-fill"></i>
+                <i aria-hidden="true" data-lucide="users" class="vasto-icon"></i>
                 <span>{% trans "Posting in" %} <strong>{{ selected_group.name }}</strong></span>
               </div>
               {% endif %}
@@ -986,14 +986,14 @@
                   <!-- Media items will be added here dynamically -->
                 </div>
                 <button class="media-nav-btn media-nav-prev" id="mediaPrev" style="display: none;">
-                  <i class="bi bi-chevron-left"></i>
+                  <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon"></i>
                 </button>
                 <button class="media-nav-btn media-nav-next" id="mediaNext" style="display: none;">
-                  <i class="bi bi-chevron-right"></i>
+                  <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon"></i>
                 </button>
                 <div class="media-indicators" id="mediaIndicators"></div>
                 <button class="media-remove-btn" id="mediaRemove">
-                  <i class="bi bi-x"></i>
+                  <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
                 </button>
               </div>
             </div>
@@ -1028,7 +1028,7 @@
                 <div class="style-swatch bg-magic-sparkles" data-value="bg-magic-sparkles" title="Magic Sparkles"></div>
                 <div class="style-swatch bg-username-pattern" data-value="bg-username-pattern" title="Signature">
                   <span class="custom-indicator" id="customIndicator" style="display: none;">
-                    <i class="bi bi-pencil-fill"></i>
+                    <i aria-hidden="true" data-lucide="pencil" class="vasto-icon"></i>
                   </span>
                 </div>
                 <div class="style-swatch bg-geometric-dots" data-value="bg-geometric-dots" title="Geometric Dots"></div>
@@ -1065,25 +1065,25 @@
             <div class="compose-toolbar">
               <div class="toolbar-left d-flex align-items-center">
                 <button type="button" class="toolbar-btn" id="toggleSector" title="Target Group">
-                  <i class="bi bi-geo-alt-fill"></i>
+                  <i aria-hidden="true" data-lucide="map-pin" class="vasto-icon"></i>
                   <span class="toolbar-btn-label">Group</span>
                 </button>
                 <button type="button" class="toolbar-btn" id="toggleTag" title="Tag People">
-                  <i class="bi bi-tag-fill"></i>
+                  <i aria-hidden="true" data-lucide="tag" class="vasto-icon"></i>
                   <span class="toolbar-btn-label">Tag</span>
                 </button>
                 <button type="button" class="toolbar-btn" id="toggleAttachment" title="Attach File">
-                  <i class="bi bi-paperclip"></i>
+                  <i aria-hidden="true" data-lucide="paperclip" class="vasto-icon"></i>
                   <span class="toolbar-btn-label">Attach</span>
                 </button>
                 <a href="{% url 'uploads_page:upload-manager' %}" class="toolbar-btn" title="My Uploads" data-bypass-htmx="true" hx-boost="false">
-                  <i class="bi bi-cloud-arrow-up-fill"></i>
+                  <i aria-hidden="true" data-lucide="cloud-upload" class="vasto-icon"></i>
                   <span class="toolbar-btn-label">Uploads</span>
                 </a>
                 <div class="form-check ms-3 mb-0 d-flex align-items-center d-none" id="signatureToggleContainer">
                   <input class="form-check-input mt-0 me-2" type="checkbox" id="signatureCheckbox">
                   <label class="form-check-label text-muted small" for="signatureCheckbox" style="cursor: pointer; white-space: nowrap;">
-                    <i class="bi bi-pen"></i> Add Signature
+                    <i aria-hidden="true" data-lucide="pen-line" class="vasto-icon"></i> Add Signature
                   </label>
                 </div>
               </div>
@@ -1091,7 +1091,7 @@
               <div class="d-flex align-items-center gap-3">
                 <span id="charCount">0 / 2500</span>
                 <button type="button" class="btn-deploy" id="deployBtn" disabled>
-                  <i class="bi bi-send-fill"></i> {% trans "Post" %}
+                  <i aria-hidden="true" data-lucide="send" class="vasto-icon"></i> {% trans "Post" %}
                 </button>
               </div>
             </div>
@@ -1110,31 +1110,31 @@
       <div class="attachment-modal-header">
         <h3 class="attachment-modal-title">{% trans "Add attachment" %}</h3>
         <button class="attachment-modal-close" id="closeAttachmentModal" type="button" aria-label="Close">
-          <i class="bi bi-x-lg"></i>
+          <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
         </button>
       </div>
       <div class="attachment-options">
         <div class="attachment-option" id="attachCamera">
           <div class="attachment-icon-circle">
-            <i class="bi bi-camera-fill"></i>
+            <i aria-hidden="true" data-lucide="camera" class="vasto-icon"></i>
           </div>
           <span>{% trans "Camera" %}</span>
         </div>
         <div class="attachment-option" id="attachImages">
           <div class="attachment-icon-circle">
-            <i class="bi bi-image-fill"></i>
+            <i aria-hidden="true" data-lucide="image" class="vasto-icon"></i>
           </div>
           <span>{% trans "Photos" %}</span>
         </div>
         <div class="attachment-option" id="attachVideo">
           <div class="attachment-icon-circle">
-            <i class="bi bi-play-btn-fill"></i>
+            <i aria-hidden="true" data-lucide="circle-play" class="vasto-icon"></i>
           </div>
           <span>{% trans "Video" %}</span>
         </div>
         <div class="attachment-option" id="attachDocs">
           <div class="attachment-icon-circle">
-            <i class="bi bi-file-earmark-text-fill"></i>
+            <i aria-hidden="true" data-lucide="file-text" class="vasto-icon"></i>
           </div>
           <span>{% trans "Docs" %}</span>
         </div>
@@ -1146,7 +1146,7 @@
   <div class="attachment-modal" id="tagModal">
     <div class="attachment-modal-content">
       <button class="attachment-modal-close" id="closeTagModal">
-        <i class="bi bi-x"></i>
+        <i aria-hidden="true" data-lucide="x" class="vasto-icon"></i>
       </button>
       <h3 class="attachment-modal-title">Tag People</h3>
       <div id="tagModalContent">
@@ -1160,7 +1160,7 @@
 
   <div class="storage-link-container">
     <a href="{% url 'posts:storage_manager' %}" class="storage-link">
-      <i class="bi bi-database"></i> View Storage Usage
+      <i aria-hidden="true" data-lucide="database" class="vasto-icon"></i> View Storage Usage
     </a>
   </div>
 
@@ -1627,7 +1627,7 @@ function initCreatePostComposer() {
             } else if (media.type === 'docs') {
                 item.innerHTML = `
                     <div style="display: flex; align-items: center; justify-content: center; height: 100%; background: var(--brand-light);">
-                        <i class="bi bi-file-earmark-pdf" style="font-size: 4rem; color: var(--brand);"></i>
+                        <i aria-hidden="true" data-lucide="file-text" class="vasto-icon" style="font-size: 4rem; color: var(--brand);"></i>
                     </div>
                 `;
             }

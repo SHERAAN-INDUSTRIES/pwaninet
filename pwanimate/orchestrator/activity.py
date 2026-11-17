@@ -16,6 +16,7 @@ LABELS = {
  'send_notification':'Creating your notification',
  'propose_personal_memory':'Preparing a preference for your review',
  'recall_memory':'Reviewing your saved study history',
+ 'generate_document':'Creating your downloadable file',
  'add_study_block':'Adding your study session', 'update_study_block':'Updating your study session',
  'remove_study_block':'Removing your study session', 'complete_study_block':'Recording your completed session',
 }
@@ -23,7 +24,8 @@ STAGES = {'thinking':'Looking at your request', 'searching_web':'Searching the w
  'reading_sources':'Reading the sources', 'devouring_context':'Reading the selected material',
  'searching_posts':'Searching campus posts', 'searching_documents':'Searching document content',
  'teaching_check':'Preparing your lesson', 'writing_answer':'Putting the answer together',
- 'reading_document_page':"Checking the page you're reading"}
+ 'reading_document_page':"Checking the page you're reading",
+ 'summarizing_document':'Summarizing the selected document'}
 
 # Canonical semantic activity types. The frontend resolves its Lucide icon
 # from `activity_type`; `status` carries the outcome separately, so an
@@ -45,6 +47,7 @@ _TOOL_ACTIVITY_TYPES = {
     'academic_lookup': 'document_read',
     'document_detail': 'document_read',
     'recall_memory': 'document_read',
+    'generate_document': 'document_read',
     'student_timetable': 'document_read',
     'content_search': 'content_search',
 }
@@ -58,6 +61,7 @@ _STAGE_ACTIVITY_TYPES = {
     'teaching_check': 'thinking',
     'writing_answer': 'response_draft',
     'reading_document_page': 'document_read',
+    'summarizing_document': 'document_read',
 }
 
 
@@ -75,6 +79,7 @@ TOOL_PURPOSES = {
     'follow_user': 'I’m preparing a follow request for your approval before it can be applied.',
     'propose_personal_memory': 'I’m preparing the stated preference for your review; it is not approved memory yet.',
     'recall_memory': 'I’m checking your approved memories and recorded academic activity across conversations.',
+    'generate_document': 'I’m rendering the completed content into a private downloadable file. A link appears only after it is saved.',
     'send_notification': 'I’m creating the immediate in-app notification you requested; this does not schedule a phone alert.',
     'create_reminder': 'I’m using the requested reminder details; creating it does not establish delivery on your phone.',
     'create_study_plan': 'I’m saving the study plan you requested so it can be available later.',
@@ -92,6 +97,7 @@ STAGE_SUMMARIES = {
     'searching_documents': TOOL_PURPOSES['retrieve_documents'],
     'writing_answer': 'I’m putting the available evidence into a direct answer and noting any checks that could not complete.',
     'teaching_check': 'I’m checking your study session and lesson state so the next step continues from where you left off.',
+    'summarizing_document': 'I’m covering the available extracted source text in bounded sections, keeping source identity and coverage.',
     'reading_document_page': 'I’m reviewing the authorized page evidence for your document question.',
 }
 
@@ -105,6 +111,8 @@ def execution_summary(value):
     kind, status = value.get('kind'), value.get('status')
     if kind == 'stage':
         stage = str(value.get('id', '')).removeprefix('stage-')
+        if stage == 'summarizing_document' and _public_count(value.get('completed_sections')) is not None:
+            return f"Summarized {value['completed_sections']} of {value.get('total_sections', 0)} source sections."
         return STAGE_SUMMARIES.get('thinking' if stage == 'request' else stage, '')
     if kind == 'tool':
         if status == 'failed':
@@ -182,6 +190,10 @@ def public_event(value):
         if stage == 'request': stage = 'thinking'
         if stage not in STAGES: return None
         clean.update(id='request' if value.get('id') == 'request' else 'stage-' + stage, text=STAGES[stage])
+        if stage == 'summarizing_document':
+            for key in ('completed_sections', 'total_sections'):
+                count = _public_count(value.get(key))
+                if count is not None: clean[key] = count
     elif kind == 'tool':
         tool = value.get('tool') if isinstance(value.get('tool'), str) else None
         clean['tool'] = tool if tool in LABELS else 'other'

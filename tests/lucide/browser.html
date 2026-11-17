@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>WP1 regression tests</title>
+<div id="scope"><i data-lucide="search" aria-label="Find" role="img" tabindex="0" title="Search" class="custom"></i></div>
+<div id="outside"><i data-lucide="brain"></i></div>
+<script src="../../static/vendor/lucide/lucide.min.js"></script>
+<script src="../../static/js/vasto-icons.js"></script>
+<script>
+const results=[];
+function test(name, fn) {try {fn();results.push('PASS '+name)} catch(e) {results.push('FAIL '+name+': '+e.message)}}
+function check(value) {if(!value) throw Error('assertion failed')}
+const scope=document.querySelector('#scope'), outside=document.querySelector('#outside');
+test('public API and local vendor',()=>{for(const k of ['render','setIcon','observe','disconnect','init']) check(typeof VastoIcons[k]==='function');check(VastoIcons.ready())});
+test('scoped render and accessibility',()=>{VastoIcons.render(scope);check(outside.firstElementChild.tagName==='I');const s=scope.firstElementChild;check(s.tagName==='svg'&&s.getAttribute('aria-label')==='Find'&&s.getAttribute('role')==='img'&&s.getAttribute('tabindex')==='0'&&s.getAttribute('title')==='Search'&&s.classList.contains('custom'))});
+test('idempotency preserves SVG identity and listeners',()=>{const s=scope.firstElementChild;let calls=0;s.addEventListener('click',()=>calls++);VastoIcons.render(scope);VastoIcons.init();VastoIcons.init();check(scope.firstElementChild===s);s.dispatchEvent(new Event('click'));check(calls===1)});
+test('setIcon returns actual rendered replacement',()=>{const s=VastoIcons.setIcon(scope.firstElementChild,'circle-check');check(s===scope.firstElementChild&&s.tagName==='svg'&&s.getAttribute('aria-label')==='Find')});
+test('unknown names and invalid selectors',()=>{const s=scope.firstElementChild;check(VastoIcons.setIcon(s,'no-such-icon')===false);check(scope.firstElementChild===s);check(VastoIcons.render('[')===0);const i=document.createElement('i');i.dataset.lucide='no-such-icon';scope.append(i);VastoIcons.render(scope);check(i.isConnected);i.remove()});
+test('missing library safely degrades and disconnects',()=>{const l=window.lucide;VastoIcons.observe(scope);window.lucide=null;check(VastoIcons.render(scope)===0);check(VastoIcons.setIcon(scope.firstElementChild,'search')===false);check(VastoIcons.disconnect(scope));window.lucide=l});
+test('native htmx afterSwap includes target itself',()=>{const i=document.createElement('i');i.dataset.lucide='wrench';scope.append(i);i.dispatchEvent(new CustomEvent('htmx:afterSwap',{bubbles:true,detail:{target:i}}));check(scope.lastElementChild.tagName==='svg')});
+test('theme inheritance light and dark',()=>{for(const color of ['rgb(20, 30, 40)','rgb(230, 240, 250)']){scope.style.color=color;check(getComputedStyle(scope.firstElementChild).stroke===color)}});
+VastoIcons.observe(scope);VastoIcons.observe(scope);const dynamic=document.createElement('i');dynamic.dataset.lucide='globe';scope.append(dynamic);
+setTimeout(()=>{
+ test('dynamic insertion and disconnect',()=>{check(scope.lastElementChild.tagName==='svg');check(VastoIcons.disconnect(scope));check(!VastoIcons.disconnect(scope))});
+ const s=document.createElement('script');s.src='../../static/js/pwanimate/spark-icons.js';s.onload=()=>{
+ test('Spark mapping and setIcon compatibility',()=>{check(sparkIconSpec('bi bi-check2').name==='check');const n=sparkSetIcon(scope.firstElementChild,'brain');check(n.tagName==='svg'&&n.getAttribute('aria-label')==='Find');check(sparkIconSpec('globe').name==='globe')});
+ const node=scope.firstElementChild;
+ sparkRenderIcons(scope);sparkRenderIcons(scope);
+ test('Spark rendering retains SVG identity',()=>check(scope.firstElementChild===node));
+ const i=document.createElement('i');i.dataset.lucide='sparkles';scope.append(i);
+ setTimeout(()=>{
+ test('Spark observer handles dynamically inserted message',()=>check(scope.lastElementChild.tagName==='svg'));
+ const stable=scope.lastElementChild;
+ setTimeout(()=>{test('Spark observer settles without SVG replacement loop',()=>check(scope.lastElementChild===stable));const pre=document.createElement('pre');pre.id='results';pre.textContent=results.join('\n');document.body.append(pre)},100);
+ },100);
+ };document.body.append(s);
+},50);
+</script>

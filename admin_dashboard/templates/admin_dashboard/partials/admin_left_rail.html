@@ -1,0 +1,153 @@
+{% comment %}
+  Admin left rail — the workspace's navigation owner.
+
+  Every entry is a real link (works without JS, middle-clickable) that HTMX
+  routes into #page-content-target with URL push, and every workspace view
+  re-sends this rail out-of-band so the active state and badges are always
+  current. A 56px strip mirrors the Spark/student-dashboard collapse.
+{% endcomment %}
+{% url 'admin_dashboard:dashboard_home' as url_overview %}
+{% url 'admin_dashboard:documents' as url_documents %}
+{% url 'admin_dashboard:ai_providers' as url_providers %}
+{% url 'admin_dashboard:ai_models' as url_models %}
+{% url 'admin_dashboard:ai_usage' as url_usage %}
+{% url 'admin_dashboard:feedback_inbox' as url_inbox %}
+
+<div class="adw-rail" id="adwRail">
+  <div class="adw-rail-head">
+    <a href="{% url 'posts:home' %}" class="adw-back" data-bypass-htmx="true" hx-boost="false" title="Back to vasto">
+      <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon vasto-icon--sm"></i><span>vasto</span>
+    </a>
+    <button type="button" class="adw-collapse-btn" onclick="adwToggleLeft()" title="Collapse navigation" aria-label="Collapse navigation">
+      <i aria-hidden="true" data-lucide="chevron-left" class="vasto-icon vasto-icon--sm"></i>
+    </button>
+  </div>
+
+  <div class="adw-rail-actions">
+    <a href="{{ url_inbox }}"
+       class="adw-action-primary"
+       hx-get="{{ url_inbox }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true"
+       title="Feedback inbox">
+      <i aria-hidden="true" data-lucide="inbox" class="vasto-icon vasto-icon--sm"></i><span>Inbox</span>
+      {% if ops.unread_feedback %}<span class="adw-count">{{ ops.unread_feedback }}</span>{% endif %}
+    </a>
+    <a href="{% url 'admin:index' %}" class="adw-action-outline" data-bypass-htmx="true" hx-boost="false" title="Django Admin (break-glass)">
+      <i aria-hidden="true" data-lucide="database" class="vasto-icon vasto-icon--sm"></i>
+    </a>
+  </div>
+
+  <div class="adw-rail-label">Command center</div>
+  <nav class="adw-nav" aria-label="Admin sections">
+    <a href="{{ url_overview }}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'dashboard_home' %} active{% endif %}"
+       hx-get="{{ url_overview }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="gauge" class="vasto-icon vasto-icon--sm"></i><span>Overview</span>
+    </a>
+    <a href="{{ url_documents }}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'documents' %} active{% endif %}"
+       hx-get="{{ url_documents }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="file-text" class="vasto-icon vasto-icon--sm"></i><span>Documents</span>
+    </a>
+    <a href="{{ url_providers }}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'ai_providers' %} active{% endif %}"
+       hx-get="{{ url_providers }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="network" class="vasto-icon vasto-icon--sm"></i><span>AI providers</span>
+      {% if ops.provider_alerts %}<span class="adw-dot adw-dot-warn" title="{{ ops.provider_alerts }} provider alerts"></span>{% endif %}
+    </a>
+    <a href="{{ url_models }}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'ai_models' %} active{% endif %}"
+       hx-get="{{ url_models }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i><span>Models</span>
+      {% if ops.model_counts.rate_limited %}<span class="adw-dot adw-dot-warn" title="Rate limited"></span>{% endif %}
+      {% if ops.model_counts.disabled %}<span class="adw-dot adw-dot-off" title="Disabled"></span>{% endif %}
+    </a>
+    <a href="{{ url_usage }}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'ai_usage' %} active{% endif %}"
+       hx-get="{{ url_usage }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="chart-column" class="vasto-icon vasto-icon--sm"></i><span>Token usage</span>
+    </a>
+    <a href="{{ url_inbox }}"
+       class="adw-nav-link{% if request.resolver_match.url_name in "feedback_inbox feedback_detail submit_feedback" %} active{% endif %}"
+       hx-get="{{ url_inbox }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon vasto-icon--sm"></i><span>Feedback</span>
+      {% if ops.unread_feedback %}<span class="adw-count">{{ ops.unread_feedback }}</span>{% endif %}
+    </a>
+  </nav>
+
+  <div class="adw-rail-label">Governance</div>
+  <nav class="adw-nav" aria-label="Governance">
+    <a href="{% url 'admin_dashboard:user_logins' %}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'user_logins' %} active{% endif %}"
+       hx-get="{% url 'admin_dashboard:user_logins' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i><span>User logins</span>
+    </a>
+    <a href="{% url 'admin_dashboard:admin_manager' %}"
+       class="adw-nav-link{% if request.resolver_match.url_name == 'admin_manager' %} active{% endif %}"
+       hx-get="{% url 'admin_dashboard:admin_manager' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" hx-history="true">
+      <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon vasto-icon--sm"></i><span>Admin manager</span>
+    </a>
+  </nav>
+
+  <div class="adw-rail-label">Site</div>
+  <nav class="adw-nav" aria-label="Site links">
+    <a href="{% url 'admin:index' %}" class="adw-nav-link" data-bypass-htmx="true" hx-boost="false">
+      <i aria-hidden="true" data-lucide="database" class="vasto-icon vasto-icon--sm"></i><span>Django Admin</span>
+    </a>
+    <a href="{% url 'posts:home' %}" class="adw-nav-link" data-bypass-htmx="true" hx-boost="false">
+      <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon vasto-icon--sm"></i><span>Back to site</span>
+    </a>
+  </nav>
+
+  <div class="adw-rail-foot" title="{{ request.user.email|default:request.user.username }}">
+    <span class="adw-rail-foot-avatar">
+      {% if request.user.profile_pic %}<img src="{{ request.user.profile_pic.url }}" alt="">{% else %}<i aria-hidden="true" data-lucide="user-round" class="vasto-icon vasto-icon--sm"></i>{% endif %}
+    </span>
+    <span class="adw-rail-foot-text">
+      <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+      <small>{{ request.user.email|default:"staff" }}</small>
+    </span>
+  </div>
+</div>
+
+{# ── Collapsed 56px strip (Spark style) ── #}
+<div class="adw-rail-strip" aria-hidden="true">
+  <button type="button" class="adw-strip-btn" onclick="adwToggleLeft()" title="Expand navigation" aria-label="Expand navigation">
+    <i aria-hidden="true" data-lucide="chevron-right" class="vasto-icon vasto-icon--sm"></i>
+  </button>
+  <a href="{{ url_overview }}" class="adw-strip-btn{% if request.resolver_match.url_name == 'dashboard_home' %} is-active{% endif %}"
+     hx-get="{{ url_overview }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Overview">
+    <i aria-hidden="true" data-lucide="gauge" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{{ url_documents }}" class="adw-strip-btn{% if request.resolver_match.url_name == 'documents' %} is-active{% endif %}"
+     hx-get="{{ url_documents }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Documents">
+    <i aria-hidden="true" data-lucide="file-text" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{{ url_providers }}" class="adw-strip-btn{% if request.resolver_match.url_name == 'ai_providers' %} is-active{% endif %}"
+     hx-get="{{ url_providers }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="AI providers">
+    <i aria-hidden="true" data-lucide="network" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{{ url_models }}" class="adw-strip-btn{% if request.resolver_match.url_name == 'ai_models' %} is-active{% endif %}"
+     hx-get="{{ url_models }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Models">
+    <i aria-hidden="true" data-lucide="cpu" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{{ url_usage }}" class="adw-strip-btn{% if request.resolver_match.url_name == 'ai_usage' %} is-active{% endif %}"
+     hx-get="{{ url_usage }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Token usage">
+    <i aria-hidden="true" data-lucide="chart-column" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{{ url_inbox }}" class="adw-strip-btn{% if request.resolver_match.url_name in "feedback_inbox feedback_detail submit_feedback" %} is-active{% endif %}"
+     hx-get="{{ url_inbox }}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Feedback">
+    <i aria-hidden="true" data-lucide="message-square-text" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{% url 'admin_dashboard:user_logins' %}" class="adw-strip-btn{% if request.resolver_match.url_name == 'user_logins' %} is-active{% endif %}"
+     hx-get="{% url 'admin_dashboard:user_logins' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="User logins">
+    <i aria-hidden="true" data-lucide="key-round" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <a href="{% url 'admin_dashboard:admin_manager' %}" class="adw-strip-btn{% if request.resolver_match.url_name == 'admin_manager' %} is-active{% endif %}"
+     hx-get="{% url 'admin_dashboard:admin_manager' %}" hx-target="#page-content-target" hx-swap="innerHTML" hx-push-url="true" title="Admin manager">
+    <i aria-hidden="true" data-lucide="shield-lock" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+  <span class="adw-strip-spacer"></span>
+  <a href="{% url 'posts:home' %}" class="adw-strip-btn" data-bypass-htmx="true" hx-boost="false" title="Back to site">
+    <i aria-hidden="true" data-lucide="arrow-left" class="vasto-icon vasto-icon--sm"></i>
+  </a>
+</div>

@@ -495,13 +495,36 @@ class PwanimateChatView(AcademicSessionWriteGuard, APIView):
         if not casual_greeting and canonical_context.session and canonical_context.session.status!='active' and (is_study_cmd or data.get('study_mode') is True or requested_study_session):
             return Response({'error':'Explicitly resume the selected session before studying.', 'study_context':canonical_context.payload()},status=409)
         from pwanimate.services.unit_learning import UnitLearningService
-        from pwanimate.models import SparkAgentRun, SparkTeachingState
+        from pwanimate.models import SparkAgentRun, SparkTeachingState, SparkAgentInteraction
+        from pwanimate.services.agent_runs import AgentRunService
+        from pwanimate.services import agent_journal
+        from django.utils import timezone
         pending_query=SparkAgentRun.objects.filter(user=request.user,user_message__conversation=conversation,status__in=['waiting','running','queued'])
         # Parked controllers retain their questions without blocking selection.
         parked_runs=SparkTeachingState.objects.filter(active_run__in=pending_query).exclude(session=canonical_context.session).values_list('active_run_id',flat=True)
         pending_tasks=list(pending_query.exclude(pk__in=parked_runs)[:2])
         if pending_tasks and not casual_greeting and not UnitLearningService.detect(request.user,study_remainder if is_study_cmd else message)['history_query']:
-            return Response({'error':'Finish or cancel the current task before starting another.', 'study_context':canonical_context.payload()},status=409)
+            # Phase C/D: a run paused for clarification holds no worker (WAITING
+            # is a paused, not executing, state), so a fresh student turn is an
+            # explicit new task and supersedes the parked question safely instead
+            # of leaving the student trapped behind the new-task guard. Abandoning
+            # the parked clarification retires its pending interaction on the same
+            # run row; approvals and executing attempts keep the strict refusal.
+            superseded = False
+            for task in pending_tasks:
+                if task.status != SparkAgentRun.STATUS_WAITING or task.wait_reason != SparkAgentRun.WAIT_CLARIFICATION:
+                    continue
+                with transaction.atomic():
+                    locked = SparkAgentRun.objects.select_for_update().get(pk=task.pk)
+                    if locked.status != SparkAgentRun.STATUS_WAITING or locked.wait_reason != SparkAgentRun.WAIT_CLARIFICATION:
+                        continue
+                    AgentRunService.transition(locked, SparkAgentRun.STATUS_CANCELLED)
+                    SparkAgentInteraction.objects.filter(run=locked, status=SparkAgentInteraction.STATUS_PENDING).update(
+                        status=SparkAgentInteraction.STATUS_CANCELLED, resolved_at=timezone.now())
+                    agent_journal.append(locked, 'run_cancelled', {'run_id': str(locked.pk), 'reason': 'superseded'})
+                superseded = True
+            if not superseded:
+                return Response({'error':'Finish or cancel the current task before starting another.', 'study_context':canonical_context.payload()},status=409)
         requested_units={m['unit_id'] for m in UnitLearningService.detect(request.user,study_remainder if is_study_cmd else message)['matches']}
         if len(requested_units)>1 or (requested_units and canonical_context.session and canonical_context.session.learning_record_id and canonical_context.session.unit_id not in requested_units):
             return Response({'error':'Choose one academic unit and its session, or open a new study conversation.', 'study_context':canonical_context.payload()},status=409)
@@ -849,6 +872,28 @@ class PwanimateChatView(AcademicSessionWriteGuard, APIView):
             )
             timing.mark("context_ready")
             orchestrator = self.get_orchestrator()
+            from pwanimate.services.document_exports import requested_formats
+            if (requested_formats(clean_query) and not pending
+                    and not (academic_context and academic_context[0].get('clarification_required'))):
+                from pwanimate.services.agent_runs import AgentRunService
+                from pwanimate.services import agent_execution, agent_journal
+                from pwanimate.api.agent_runs import _terminal_payload
+                run, started = AgentRunService.start_document(orchestration_req)
+                if not started:
+                    if run.status in {'running', 'queued'}:
+                        return Response({'run': AgentRunService.serialize(run), 'run_id': str(run.pk),
+                            'answer': 'This document request is already running.', 'metadata': {'awaiting_input': False}}, status=202)
+                    return Response(_terminal_payload(run))
+                agent_journal.append(run, 'run_execution_started', {'attempt_id': run.attempt_id})
+                progress_callback(event('tool', '', event_id='document-start', tool='generate_document', run_id=str(run.pk)))
+                try:
+                    payload = agent_execution.execute_claimed(run, progress=progress_callback, token_callback=token_callback)
+                    payload['user_message_id'] = user_msg.pk
+                    return Response(payload)
+                except Exception as exc:
+                    agent_execution.mark_failed(run, exc)
+                    return Response({'error': 'Document generation could not finish. Completed sections are saved for a controlled retry.',
+                        'run_id': str(run.pk)}, status=503)
             # External LLM generation occurs outside database transactions.
             # token_callback (when provided) receives visible text deltas as
             # the LLM streams — the SSE layer turns them into chunk events.
@@ -1169,7 +1214,7 @@ class PwanimateGeneratedResourceView(APIView):
         )
         raw_format = request.data.get("format")
         if not isinstance(raw_format, str):
-            return Response({"error": "Choose PDF or Word format."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Choose PDF, DOCX, DOC or PPTX format."}, status=status.HTTP_400_BAD_REQUEST)
         file_format = raw_format.strip().lower()
         try:
             from pwanimate.services.generated_documents import create_generated_resource
