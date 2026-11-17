@@ -334,13 +334,6 @@ export class VoiceModalController {
       this.showLockedState();
     });
 
-    _setPlayIcon(name) {
-      if (!this.voicePlayIcon) return;
-      if (window.VastoIcons) { VastoIcons.setIcon(this.voicePlayIcon, name); return; }
-      this.voicePlayIcon.setAttribute('data-lucide', name);
-      this.voicePlayIcon.classList.add('vasto-icon');
-    }
-
     eventBus.on(EVENTS.VOICE_TIMER_UPDATE, (duration) => {
       if (!voiceService.isPlaying && this.voiceTimer) {
         this.voiceTimer.textContent = this._formatTime(duration);
@@ -378,6 +371,13 @@ export class VoiceModalController {
       this.showHint(msg);
       this.resetToIdle();
     });
+  }
+
+  _setPlayIcon(name) {
+    if (!this.voicePlayIcon) return;
+    if (window.VastoIcons) { VastoIcons.setIcon(this.voicePlayIcon, name); return; }
+    this.voicePlayIcon.setAttribute('data-lucide', name);
+    this.voicePlayIcon.classList.add('vasto-icon');
   }
 
   /**
